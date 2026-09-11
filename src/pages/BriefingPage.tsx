@@ -3,6 +3,7 @@ import { Header } from '../components/Header';
 
 type BriefingPageProps = {
   openChat: () => void;
+  displayName?: string;
 };
 
 function Stat({ n, t }: { n: string; t: string }) {
@@ -14,11 +15,13 @@ function Stat({ n, t }: { n: string; t: string }) {
   );
 }
 
-export function BriefingPage({ openChat }: BriefingPageProps) {
+export function BriefingPage({ openChat, displayName }: BriefingPageProps) {
+  const firstName = (displayName || 'Nexus Nutzer').trim().split(/\s+/)[0].toUpperCase();
+
   return (
     <section className="page">
       <Header
-        kicker="GUTEN ABEND, SAMET"
+        kicker={`GUTEN ABEND, ${firstName}`}
         title="Dein AI Briefing"
         sub="Nexus verbindet Nachrichten, Kunden, Aufgaben und Entscheidungen."
       />
