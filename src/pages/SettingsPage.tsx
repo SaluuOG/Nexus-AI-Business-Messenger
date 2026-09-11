@@ -2,6 +2,8 @@ import {
   Building2,
   CheckCircle2,
   LockKeyhole,
+  LogOut,
+  ServerCog,
   ShieldCheck,
   UserPlus,
   Users,
@@ -12,9 +14,18 @@ import type { IdentityMode } from '../types';
 type SettingsPageProps = {
   identity: IdentityMode;
   setIdentity: (identity: IdentityMode) => void;
+  backendConfigured: boolean;
+  accountEmail?: string;
+  onSignOut?: () => void;
 };
 
-export function SettingsPage({ identity, setIdentity }: SettingsPageProps) {
+export function SettingsPage({
+  identity,
+  setIdentity,
+  backendConfigured,
+  accountEmail,
+  onSignOut,
+}: SettingsPageProps) {
   return (
     <section className="page">
       <Header
@@ -33,7 +44,7 @@ export function SettingsPage({ identity, setIdentity }: SettingsPageProps) {
             <Users />
             <span>
               <b>Privat</b>
-              <small>Samet · @samet</small>
+              <small>Persönliche Identität</small>
             </span>
           </button>
           <button
@@ -43,13 +54,32 @@ export function SettingsPage({ identity, setIdentity }: SettingsPageProps) {
             <Building2 />
             <span>
               <b>Business</b>
-              <small>WebWorkBalance · @webworkbalance</small>
+              <small>Geschäftliche Identität</small>
             </span>
           </button>
         </div>
       </div>
 
       <div className="settings-grid">
+        <div className="panel">
+          <ServerCog />
+          <h3>Account & Backend</h3>
+          <p>
+            {backendConfigured
+              ? `Supabase Auth ist verbunden${accountEmail ? ` · ${accountEmail}` : ''}.`
+              : 'Nexus läuft aktuell im Demo-Modus. Die Supabase-Anbindung ist im Code vorbereitet.'}
+          </p>
+          <span className={backendConfigured ? 'ok' : 'setup-status'}>
+            <CheckCircle2 size={15} />
+            {backendConfigured ? 'Authentifizierung aktiv' : 'Wartet auf Supabase-Projektdaten'}
+          </span>
+          {onSignOut && (
+            <button className="secondary signout" onClick={onSignOut}>
+              <LogOut size={15} /> Abmelden
+            </button>
+          )}
+        </div>
+
         <div className="panel">
           <ShieldCheck />
           <h3>Workspace & Rollen</h3>
@@ -63,11 +93,11 @@ export function SettingsPage({ identity, setIdentity }: SettingsPageProps) {
           <LockKeyhole />
           <h3>Sicherheit & Geräte</h3>
           <p>
-            Passwort, Sessions, 2FA und spätere Schlüsselverwaltung sind architektonisch
-            vorgesehen.
+            Sessions werden künftig über Supabase Auth verwaltet. 2FA und Geräteverwaltung
+            bauen wir darauf auf.
           </p>
           <span className="ok">
-            <CheckCircle2 size={15} /> Frontend speichert keine echten Secrets
+            <CheckCircle2 size={15} /> Keine privaten Server-Secrets im Frontend
           </span>
         </div>
       </div>
