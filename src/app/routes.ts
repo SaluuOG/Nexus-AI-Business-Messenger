@@ -1,4 +1,5 @@
 export const routes = {
+  auth: '/auth',
   briefing: '/app/briefing',
   chats: '/app/chats',
   contacts: '/app/contacts',
