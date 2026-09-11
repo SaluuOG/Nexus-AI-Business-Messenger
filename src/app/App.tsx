@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { useAuth } from '../features/auth/AuthProvider';
-import { openDirectConversation } from '../features/data/chatData';
+import { openDirectConversation, touchUserPresence } from '../features/data/chatData';
 import {
   acceptWorkspaceInvitation,
   createBusinessProfile,
@@ -84,6 +84,23 @@ function AppShell() {
     })();
     return () => { active = false; };
   }, [auth.configured, auth.user?.id]);
+
+  useEffect(() => {
+    if (!auth.user?.id) return;
+
+    const heartbeat = () => void touchUserPresence();
+    heartbeat();
+    const interval = window.setInterval(heartbeat, 30000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') heartbeat();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [auth.user?.id]);
 
   const currentWorkspaceRole = memberships.find((membership) => membership.workspace_id === selectedWorkspaceId)?.role;
 
