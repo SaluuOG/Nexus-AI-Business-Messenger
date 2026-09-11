@@ -74,6 +74,19 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Löschen einer gesendeten Datei-Nachricht erfolgreich getestet
 - PNG-Bildversand erfolgreich getestet: Bild wird direkt im Chat gerendert und lässt sich vergrößert öffnen
 
+### Phase 2.4 — Sprachnachrichten ✅
+- Migrationen `0009_voice_messages.sql` und `0010_fix_voice_message_rpc_mime.sql` aktiv
+- Mikrofonaufnahme direkt im Messenger mit Browser-Mikrofonberechtigung
+- laufender Aufnahme-Timer sowie Stoppen und Abbrechen der Aufnahme
+- Audio-Vorschau vor dem Versand
+- Sprachnachrichten werden über den bestehenden privaten Supabase-Storage gespeichert
+- Audio-MIME-Typen werden im Storage, Frontend und serverseitigen Versand-RPC unterstützt
+- Audio-Player direkt in der Chat-Nachricht
+- Sprachnachrichten können wie andere eigene Nachrichten gelöscht werden
+- bestehende RLS-/Storage-Regeln beschränken Zugriff weiterhin auf berechtigte Chat-Teilnehmer
+- Produktionsbuild und GitHub-Pages-Deployment erfolgreich
+- Zwei-Account-Livetest Samet ↔ Darlyn erfolgreich: Aufnahme, Vorschau, Versand, Empfang und Wiedergabe funktionieren in beide Richtungen
+
 ## Routen
 - `#/app/briefing`
 - `#/app/chats`
