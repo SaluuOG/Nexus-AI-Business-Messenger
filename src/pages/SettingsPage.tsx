@@ -8,34 +8,57 @@ import {
   ShieldCheck,
   UserPlus,
   Users,
+  X,
 } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { routes } from '../app/routes';
 import { Header } from '../components/Header';
+import { WorkspaceTeamPanel } from '../components/WorkspaceTeamPanel';
 import type {
   NexusBusinessProfile,
   NexusProfile,
   NexusWorkspace,
+  NexusWorkspaceInvitation,
+  NexusWorkspaceMember,
   WorkspaceRole,
 } from '../features/data/nexusData';
 import type { IdentityMode } from '../types';
 
 type ProfilePatch = Partial<Pick<NexusProfile, 'full_name' | 'username' | 'bio'>>;
+type ManageableRole = Exclude<WorkspaceRole, 'owner'>;
 
 type SettingsPageProps = {
   identity: IdentityMode;
   setIdentity: (identity: IdentityMode) => void;
   backendConfigured: boolean;
   accountEmail?: string;
+  currentUserId?: string;
   profile: NexusProfile | null;
   businessProfiles: NexusBusinessProfile[];
   workspaces: NexusWorkspace[];
   selectedWorkspaceId: string | null;
   currentWorkspaceRole?: WorkspaceRole;
+  workspaceMembers: NexusWorkspaceMember[];
+  workspaceInvitations: NexusWorkspaceInvitation[];
+  teamLoading: boolean;
+  teamError?: string | null;
   dataLoading: boolean;
   dataError?: string | null;
   onSaveProfile: (patch: ProfilePatch) => Promise<{ error: string | null }>;
   onCreateWorkspace: (name: string) => Promise<{ error: string | null }>;
   onCreateBusinessProfile: (name: string, handle: string) => Promise<{ error: string | null }>;
+  onInviteWorkspaceMember: (email: string, role: ManageableRole) => Promise<{ error: string | null }>;
+  onUpdateWorkspaceMemberRole: (
+    userId: string,
+    role: ManageableRole,
+  ) => Promise<{ error: string | null }>;
+  onRemoveWorkspaceMember: (userId: string) => Promise<{ error: string | null }>;
+  onRevokeWorkspaceInvitation: (invitationId: string) => Promise<{ error: string | null }>;
+  onRefreshWorkspaceTeam: () => Promise<void>;
+  onAcceptWorkspaceInvitation: (
+    token: string,
+  ) => Promise<{ error: string | null; workspaceName?: string }>;
   onSignOut?: () => void;
 };
 
@@ -51,18 +74,31 @@ export function SettingsPage({
   setIdentity,
   backendConfigured,
   accountEmail,
+  currentUserId,
   profile,
   businessProfiles,
   workspaces,
   selectedWorkspaceId,
   currentWorkspaceRole,
+  workspaceMembers,
+  workspaceInvitations,
+  teamLoading,
+  teamError,
   dataLoading,
   dataError,
   onSaveProfile,
   onCreateWorkspace,
   onCreateBusinessProfile,
+  onInviteWorkspaceMember,
+  onUpdateWorkspaceMemberRole,
+  onRemoveWorkspaceMember,
+  onRevokeWorkspaceInvitation,
+  onRefreshWorkspaceTeam,
+  onAcceptWorkspaceInvitation,
   onSignOut,
 }: SettingsPageProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
@@ -72,9 +108,13 @@ export function SettingsPage({
   const [profileSaving, setProfileSaving] = useState(false);
   const [workspaceSaving, setWorkspaceSaving] = useState(false);
   const [businessSaving, setBusinessSaving] = useState(false);
+  const [inviteAccepting, setInviteAccepting] = useState(false);
   const [profileFeedback, setProfileFeedback] = useState<string | null>(null);
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null);
   const [businessFeedback, setBusinessFeedback] = useState<string | null>(null);
+  const [inviteFeedback, setInviteFeedback] = useState<string | null>(null);
+
+  const inviteToken = new URLSearchParams(location.search).get('invite');
 
   useEffect(() => {
     setFullName(profile?.full_name ?? '');
@@ -82,7 +122,7 @@ export function SettingsPage({
     setBio(profile?.bio ?? '');
   }, [profile]);
 
-  const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId);
+  const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null;
   const businessProfile = businessProfiles[0] ?? null;
 
   const submitProfile = async (event: FormEvent) => {
@@ -123,15 +163,66 @@ export function SettingsPage({
     setBusinessSaving(false);
   };
 
+  const acceptInvite = async () => {
+    if (!inviteToken) return;
+    setInviteAccepting(true);
+    setInviteFeedback(null);
+    const result = await onAcceptWorkspaceInvitation(inviteToken);
+    setInviteAccepting(false);
+
+    if (result.error) {
+      setInviteFeedback(result.error);
+      return;
+    }
+
+    localStorage.removeItem('nexus_pending_invite');
+    setInviteFeedback(
+      result.workspaceName
+        ? `Einladung angenommen. Du bist jetzt Mitglied von ${result.workspaceName}.`
+        : 'Einladung angenommen.',
+    );
+    navigate(routes.settings, { replace: true });
+  };
+
+  const dismissInvite = () => {
+    localStorage.removeItem('nexus_pending_invite');
+    setInviteFeedback(null);
+    navigate(routes.settings, { replace: true });
+  };
+
   return (
     <section className="page">
       <Header
         kicker="ACCOUNT"
         title="Einstellungen"
-        sub="Echte Profile, Workspaces, Rollen und Supabase-Sicherheitsgrundlage."
+        sub="Echte Profile, Workspaces, Teamrollen und Supabase-Sicherheitsgrundlage."
       />
 
       {dataError && <div className="data-alert">Backend: {dataError}</div>}
+
+      {(inviteToken || inviteFeedback) && (
+        <div className="panel invite-accept-card">
+          <div>
+            <UserPlus />
+            <span>
+              <b>Workspace-Einladung</b>
+              <small>
+                {inviteFeedback ?? 'Du hast einen Nexus-Einladungslink geöffnet. Nimm die Einladung mit deinem angemeldeten Account an.'}
+              </small>
+            </span>
+          </div>
+          {inviteToken && !inviteFeedback && (
+            <div className="invite-accept-actions">
+              <button className="primary" onClick={() => void acceptInvite()} disabled={inviteAccepting}>
+                {inviteAccepting ? 'Wird angenommen…' : 'Einladung annehmen'}
+              </button>
+              <button className="icon-button" type="button" onClick={dismissInvite} title="Einladung schließen">
+                <X size={16} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="panel">
         <h3>Deine Identität</h3>
@@ -212,7 +303,7 @@ export function SettingsPage({
 
         <div className="panel">
           <ShieldCheck />
-          <h3>Workspace & Rollen</h3>
+          <h3>Workspace</h3>
           <p>
             {selectedWorkspace
               ? `${selectedWorkspace.name} · ${currentWorkspaceRole ? roleLabel[currentWorkspaceRole] : 'Mitglied'}`
@@ -234,9 +325,6 @@ export function SettingsPage({
             </button>
             {workspaceFeedback && <small className="form-feedback">{workspaceFeedback}</small>}
           </form>
-          <button className="secondary" disabled title="Einladungen folgen im nächsten Rollen-Schritt">
-            <UserPlus size={15} /> Mitglied einladen
-          </button>
         </div>
 
         <div className="panel">
@@ -258,14 +346,29 @@ export function SettingsPage({
           )}
         </div>
 
-        <div className="panel">
+        <WorkspaceTeamPanel
+          workspace={selectedWorkspace}
+          currentRole={currentWorkspaceRole}
+          currentUserId={currentUserId}
+          members={workspaceMembers}
+          invitations={workspaceInvitations}
+          loading={teamLoading}
+          error={teamError}
+          onInvite={onInviteWorkspaceMember}
+          onUpdateRole={onUpdateWorkspaceMemberRole}
+          onRemoveMember={onRemoveWorkspaceMember}
+          onRevokeInvitation={onRevokeWorkspaceInvitation}
+          onRefresh={onRefreshWorkspaceTeam}
+        />
+
+        <div className="panel security-panel">
           <LockKeyhole />
           <h3>Sicherheit & Geräte</h3>
           <p>
-            Row Level Security schützt Profile, Business-Identitäten, Workspaces und Rollen auf Datenbankebene.
+            Row Level Security schützt Profile und Workspace-Daten. Teamänderungen laufen über geschützte Datenbankfunktionen, damit Admins niemals den Owner überschreiben können.
           </p>
           <span className="ok">
-            <CheckCircle2 size={15} /> RLS aktiv · keine privaten Server-Secrets im Frontend
+            <CheckCircle2 size={15} /> RLS aktiv · Owner-Rolle geschützt
           </span>
         </div>
       </div>
