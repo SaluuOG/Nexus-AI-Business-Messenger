@@ -52,7 +52,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - RLS und Security-Definer-RPCs schützen Presence-, Typing- und Message-Aktionen
 - Zwei-Account-Livetest erfolgreich: Online/Presence, „schreibt gerade…“, Gelesen/Doppelhaken, Antworten, Bearbeiten und Löschen funktionieren in beide Richtungen
 
-### Phase 2.3 — Medien, Dateien & Anhänge 🚧
+### Phase 2.3 — Medien, Dateien & Anhänge ✅
 - Migrationen `0007_chat_attachments.sql` und `0008_fix_attachment_cleanup.sql` aktiv
 - privater Supabase-Storage-Bucket `nexus-chat-attachments`
 - Anhänge sind serverseitig an Chat, Nachricht und Uploader gebunden
@@ -70,7 +70,9 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Löschen eigener Anhang-Nachrichten entfernt Storage-Objekt und Metadaten
 - Chatliste zeigt für reine Anhänge `📷 Bild` oder `📎 Datei`
 - Produktionsbuild und GitHub-Pages-Deployment erfolgreich
-- Zwei-Account-Livetest für Bild-/Dateiversand vor Abschluss
+- Zwei-Account-Livetest erfolgreich: Datei-Upload/Versand/Empfang funktioniert in beide Richtungen
+- Löschen einer gesendeten Datei-Nachricht erfolgreich getestet
+- PNG-Bildversand erfolgreich getestet: Bild wird direkt im Chat gerendert und lässt sich vergrößert öffnen
 
 ## Routen
 - `#/app/briefing`
