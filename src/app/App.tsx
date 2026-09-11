@@ -32,6 +32,7 @@ import { BriefingPage } from '../pages/BriefingPage';
 import { BusinessPage } from '../pages/BusinessPage';
 import { ChatsPage } from '../pages/ChatsPage';
 import { ContactsPage } from '../pages/ContactsPage';
+import { GroupChatsPage } from '../pages/GroupChatsPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import type { IdentityMode } from '../types';
 import { routes } from './routes';
@@ -179,6 +180,7 @@ function AppShell() {
       <Route path="/" element={<Navigate to={routes.briefing} replace />} />
       <Route path={routes.briefing} element={<BriefingPage openChat={() => navigate(routes.chats)} displayName={accountName} />} />
       <Route path={routes.chats} element={<ChatsPage currentUserId={auth.user?.id} requestedConversationId={requestedConversationId} onRequestedConversationHandled={() => setRequestedConversationId(null)} />} />
+      <Route path={routes.groups} element={<GroupChatsPage currentUserId={auth.user?.id} />} />
       <Route path={routes.contacts} element={<ContactsPage onStartChat={startContactChat} />} />
       <Route path={routes.business} element={<BusinessPage />} /><Route path={routes.ai} element={<AIPage />} />
       <Route path={routes.settings} element={<SettingsPage identity={identity} setIdentity={setIdentity} backendConfigured={auth.configured} accountEmail={auth.user?.email} currentUserId={auth.user?.id} profile={profile} businessProfiles={businessProfiles} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} currentWorkspaceRole={currentWorkspaceRole} workspaceMembers={workspaceMembers} workspaceInvitations={workspaceInvitations} teamLoading={teamLoading} teamError={teamError} dataLoading={dataLoading} dataError={dataError} onSaveProfile={saveProfile} onCreateWorkspace={addWorkspace} onCreateBusinessProfile={addBusinessProfile} onInviteWorkspaceMember={inviteWorkspaceMember} onUpdateWorkspaceMemberRole={changeWorkspaceMemberRole} onRemoveWorkspaceMember={deleteWorkspaceMember} onRevokeWorkspaceInvitation={revokeInvitation} onRefreshWorkspaceTeam={refreshWorkspaceTeam} onAcceptWorkspaceInvitation={acceptInvitation} onSignOut={auth.configured ? signOut : undefined} />} />
