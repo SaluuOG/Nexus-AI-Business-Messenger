@@ -12,7 +12,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - AI-Assistent
 - Responsive Desktop-/Mobile-Struktur
 
-### Phase 1 — Accounts & Identität ✅ Prototyp
+### Phase 1 — Accounts & Identität
 - Login- und Registrierungsflow
 - Private und geschäftliche Identität
 - Profilinformationen
@@ -23,7 +23,24 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Rollen: Owner / Admin / Member / Guest
 - Sicherheits- und Geräteansicht
 
-> Aktuell ist Phase 1 ein Frontend-Prototyp mit Testdaten. Echte Authentifizierung, Datenbank, Sessions und Verschlüsselung folgen schrittweise.
+### Phase 1B.1 — Codebasis professionalisiert ✅
+- App in Pages, Components, Daten, Types und App-Shell aufgeteilt
+- zentrale Zustände aus der alten Monolith-Datei herausgelöst
+
+### Phase 1B.2 — Routing ✅
+- eigenes Routing für Briefing, Chats, Kontakte, Business, AI und Einstellungen
+- direkte Links und Reloads funktionieren zuverlässig auf GitHub Pages
+- GitHub-Pages-kompatibles Hash-Routing
+
+Routen:
+- `#/app/briefing`
+- `#/app/chats`
+- `#/app/contacts`
+- `#/app/business`
+- `#/app/ai`
+- `#/app/settings`
+
+> Aktuell arbeitet die App noch mit Testdaten. Echte Authentifizierung, Datenbank, Sessions und Verschlüsselung folgen schrittweise.
 
 ## Lokal starten
 
@@ -40,7 +57,7 @@ npm run build
 
 ## Nächster Entwicklungsschritt
 
-Phase 1B: echtes Auth-Backend, Datenbank, Sessions, Profile, Workspaces und Rollen. Danach Phase 2: Realtime-Messenger.
+Phase 1B.3: Supabase-Grundlage und echte Authentifizierung vorbereiten. Danach Datenbankschema, Profile, Workspaces und Rollen.
 
 ## Sicherheit
 
