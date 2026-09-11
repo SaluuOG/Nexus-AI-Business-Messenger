@@ -87,9 +87,24 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Produktionsbuild und GitHub-Pages-Deployment erfolgreich
 - Zwei-Account-Livetest Samet ↔ Darlyn erfolgreich: Aufnahme, Vorschau, Versand, Empfang und Wiedergabe funktionieren in beide Richtungen
 
+### Phase 2.5 — Gruppen & Team-Messenger 🚧
+- Migration `0011_group_chats_foundation.sql` aktiv
+- sichere Gruppen-Grundstruktur mit `group_conversations`, `group_members`, `group_messages` und `group_reads`
+- RLS auf allen Gruppentabellen
+- Gruppen können nur mit bestätigten Nexus-Kontakten erstellt werden
+- Rollen-Grundlage: Owner, Admin und Mitglied
+- Gruppen erstellen und mehrere Kontakte auswählen
+- Gruppenliste mit Mitgliederzahl, letzter Nachricht und Ungelesen-Zähler
+- echte Gruppen-Nachrichten mit Supabase Realtime
+- Antworten, Bearbeiten und Löschen eigener Gruppen-Nachrichten
+- Mitgliederübersicht direkt im Gruppenchat
+- Backend-RPCs für Umbenennen, Mitglieder hinzufügen/entfernen, Rollen ändern und Gruppe verlassen vorbereitet
+- Produktionsbuild erfolgreich; Zwei-Account-Livetest steht noch aus
+
 ## Routen
 - `#/app/briefing`
 - `#/app/chats`
+- `#/app/groups`
 - `#/app/contacts`
 - `#/app/business`
 - `#/app/ai`
@@ -107,4 +122,4 @@ npm run build
 ```
 
 ## Sicherheit
-Nexus verwendet Supabase Row Level Security und Security-Definer-RPCs für sensible Datenoperationen. Private Server-Schlüssel gehören nicht ins Frontend. Kontakte und direkte Chats sind auf authentifizierte Nutzer und bestätigte Beziehungen begrenzt. Das Nutzerverzeichnis gibt keine E-Mail-Adressen aus. Eine spätere Ende-zu-Ende-Verschlüsselung wird mit etablierter Kryptografie separat entworfen; die aktuellen Messenger-Phasen sind noch keine E2E-Verschlüsselung.
+Nexus verwendet Supabase Row Level Security und Security-Definer-RPCs für sensible Datenoperationen. Private Server-Schlüssel gehören nicht ins Frontend. Kontakte und direkte Chats sind auf authentifizierte Nutzer und bestätigte Beziehungen begrenzt. Gruppen werden serverseitig auf bestätigte Kontakte, Gruppen-Mitgliedschaft und Rollen geprüft. Das Nutzerverzeichnis gibt keine E-Mail-Adressen aus. Eine spätere Ende-zu-Ende-Verschlüsselung wird mit etablierter Kryptografie separat entworfen; die aktuellen Messenger-Phasen sind noch keine E2E-Verschlüsselung.
