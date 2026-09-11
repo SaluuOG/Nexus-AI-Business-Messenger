@@ -40,7 +40,15 @@ Routen:
 - `#/app/ai`
 - `#/app/settings`
 
-> Aktuell arbeitet die App noch mit Testdaten. Echte Authentifizierung, Datenbank, Sessions und Verschlüsselung folgen schrittweise.
+### Phase 1B.3 — Supabase & Auth-Grundlage ✅
+- Supabase-Client und Auth-Schicht integriert
+- Registrierung und Login vorbereitet
+- persistente Sessions und Logout integriert
+- geschützte App-Routen vorbereitet
+- öffentliche Supabase-Konfiguration über GitHub Actions Variables
+- keine privaten Server-Schlüssel im Frontend
+
+> Business-Daten wie Profile, Workspaces, Rollen, Kontakte und Nachrichten werden in den nächsten Schritten von Testdaten auf die echte Datenbank umgestellt.
 
 ## Lokal starten
 
@@ -57,7 +65,7 @@ npm run build
 
 ## Nächster Entwicklungsschritt
 
-Phase 1B.3: Supabase-Grundlage und echte Authentifizierung vorbereiten. Danach Datenbankschema, Profile, Workspaces und Rollen.
+Phase 1B.4: Datenbankschema für Profile, Business-Identitäten, Workspaces, Mitglieder und Rollen mit Row Level Security aufbauen.
 
 ## Sicherheit
 
