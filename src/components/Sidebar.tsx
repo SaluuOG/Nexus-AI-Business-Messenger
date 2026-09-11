@@ -7,32 +7,33 @@ import {
   Settings,
   Sparkles,
 } from 'lucide-react';
-import type { IdentityMode, Tab, Workspace } from '../types';
+import { useLocation, useNavigate } from 'react-router-dom';
+import type { IdentityMode, Workspace } from '../types';
+import { routes } from '../app/routes';
 
 type SidebarProps = {
-  tab: Tab;
-  onTabChange: (tab: Tab) => void;
   workspace: Workspace;
   onWorkspaceChange: (workspace: Workspace) => void;
   identity: IdentityMode;
 };
 
 const navigation = [
-  ['briefing', House, 'Briefing'],
-  ['chats', MessageCircle, 'Chats'],
-  ['contacts', ContactRound, 'Kontakte'],
-  ['business', BriefcaseBusiness, 'Business'],
-  ['ai', Bot, 'AI Assistent'],
-  ['settings', Settings, 'Einstellungen'],
+  [routes.briefing, House, 'Briefing'],
+  [routes.chats, MessageCircle, 'Chats'],
+  [routes.contacts, ContactRound, 'Kontakte'],
+  [routes.business, BriefcaseBusiness, 'Business'],
+  [routes.ai, Bot, 'AI Assistent'],
+  [routes.settings, Settings, 'Einstellungen'],
 ] as const;
 
 export function Sidebar({
-  tab,
-  onTabChange,
   workspace,
   onWorkspaceChange,
   identity,
 }: SidebarProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   return (
     <aside className="side">
       <div className="brand">
@@ -46,11 +47,11 @@ export function Sidebar({
       </div>
 
       <nav>
-        {navigation.map(([key, Icon, label]) => (
+        {navigation.map(([path, Icon, label]) => (
           <button
-            key={key}
-            className={tab === key ? 'active' : ''}
-            onClick={() => onTabChange(key)}
+            key={path}
+            className={location.pathname === path ? 'active' : ''}
+            onClick={() => navigate(path)}
           >
             <Icon size={19} />
             <span>{label}</span>
