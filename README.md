@@ -53,10 +53,11 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Zwei-Account-Livetest erfolgreich: Online/Presence, „schreibt gerade…“, Gelesen/Doppelhaken, Antworten, Bearbeiten und Löschen funktionieren in beide Richtungen
 
 ### Phase 2.3 — Medien, Dateien & Anhänge 🚧
-- Migration `0007_chat_attachments.sql` aktiv
+- Migrationen `0007_chat_attachments.sql` und `0008_fix_attachment_cleanup.sql` aktiv
 - privater Supabase-Storage-Bucket `nexus-chat-attachments`
 - Anhänge sind serverseitig an Chat, Nachricht und Uploader gebunden
 - Storage-Policies erlauben Upload/Lesen/Löschen nur für berechtigte Chat-Teilnehmer
+- fehlgeschlagene Uploads können sicher aus dem eigenen Chat-/User-Pfad bereinigt werden
 - Bilder/Fotos und Dokumente können als echte Chat-Nachrichten gesendet werden
 - unterstützte Bilder: JPEG, PNG, WebP, GIF, HEIC und HEIF
 - unterstützte Dokumente: PDF, TXT, CSV, Word, Excel, PowerPoint und ZIP
