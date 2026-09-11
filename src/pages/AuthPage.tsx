@@ -1,11 +1,12 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { LockKeyhole, Mail, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthProvider';
 import { routes } from '../app/routes';
 
 export function AuthPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const auth = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [fullName, setFullName] = useState('');
@@ -14,6 +15,18 @@ export function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const inviteFromUrl = new URLSearchParams(location.search).get('invite');
+  const pendingInvite = inviteFromUrl || localStorage.getItem('nexus_pending_invite');
+  const destination = pendingInvite
+    ? `${routes.settings}?invite=${encodeURIComponent(pendingInvite)}`
+    : routes.briefing;
+
+  useEffect(() => {
+    if (inviteFromUrl) {
+      localStorage.setItem('nexus_pending_invite', inviteFromUrl);
+    }
+  }, [inviteFromUrl]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -28,7 +41,7 @@ export function AuthPage() {
         setError(result.error);
         return;
       }
-      navigate(routes.briefing, { replace: true });
+      navigate(destination, { replace: true });
       return;
     }
 
@@ -40,11 +53,15 @@ export function AuthPage() {
     }
 
     if (result.needsEmailConfirmation) {
-      setMessage('Account erstellt. Bitte bestätige jetzt die E-Mail-Adresse.');
+      setMessage(
+        pendingInvite
+          ? 'Account erstellt. Bitte bestätige deine E-Mail-Adresse. Deine Workspace-Einladung bleibt gespeichert.'
+          : 'Account erstellt. Bitte bestätige jetzt die E-Mail-Adresse.',
+      );
       return;
     }
 
-    navigate(routes.briefing, { replace: true });
+    navigate(destination, { replace: true });
   };
 
   if (!auth.configured) {
@@ -77,9 +94,13 @@ export function AuthPage() {
           <div className="auth-logo"><Sparkles /></div>
           <span className="auth-kicker">NEXUS ACCOUNT</span>
           <h1>Du bist angemeldet</h1>
-          <p>{auth.user.email}</p>
-          <button className="auth-primary" onClick={() => navigate(routes.briefing)}>
-            Nexus öffnen
+          <p>
+            {pendingInvite
+              ? 'Eine Workspace-Einladung wartet auf dich.'
+              : auth.user.email}
+          </p>
+          <button className="auth-primary" onClick={() => navigate(destination)}>
+            {pendingInvite ? 'Einladung öffnen' : 'Nexus öffnen'}
           </button>
         </div>
       </div>
@@ -93,9 +114,11 @@ export function AuthPage() {
         <span className="auth-kicker">NEXUS · AI BUSINESS MESSENGER</span>
         <h1>{mode === 'login' ? 'Willkommen zurück' : 'Nexus Account erstellen'}</h1>
         <p>
-          {mode === 'login'
-            ? 'Melde dich sicher in deinem Workspace an.'
-            : 'Erstelle deine persönliche Identität. Business-Profile folgen im nächsten Schritt.'}
+          {pendingInvite
+            ? 'Melde dich mit der eingeladenen E-Mail-Adresse an, um dem Workspace beizutreten.'
+            : mode === 'login'
+              ? 'Melde dich sicher in deinem Workspace an.'
+              : 'Erstelle deine persönliche Identität.'}
         </p>
 
         <div className="auth-tabs">
