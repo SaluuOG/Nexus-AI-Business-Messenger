@@ -3,7 +3,7 @@ import {
   MessageCircle,
   Pencil,
   RefreshCw,
-  Reply2,
+  Reply,
   Search,
   Send,
   Trash2,
@@ -380,7 +380,7 @@ export function ChatsPage({ currentUserId, requestedConversationId, onRequestedC
 
                     {!message.deleted_at && (
                       <div className="message-actions">
-                        <button title="Antworten" onClick={() => startReply(message)}><Reply2 size={13} /></button>
+                        <button title="Antworten" onClick={() => startReply(message)}><Reply size={13} /></button>
                         {mine && <button title="Bearbeiten" onClick={() => startEdit(message)}><Pencil size={13} /></button>}
                         {mine && <button title="Löschen" onClick={() => void removeMessage(message)} disabled={actionId === message.message_id}><Trash2 size={13} /></button>}
                       </div>
