@@ -6,6 +6,7 @@ import {
   MessageCircle,
   Settings,
   Sparkles,
+  UsersRound,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { routes } from '../app/routes';
@@ -26,6 +27,7 @@ type SidebarProps = {
 const navigation = [
   [routes.briefing, House, 'Briefing'],
   [routes.chats, MessageCircle, 'Chats'],
+  [routes.groups, UsersRound, 'Gruppen'],
   [routes.contacts, ContactRound, 'Kontakte'],
   [routes.business, BriefcaseBusiness, 'Business'],
   [routes.ai, Bot, 'AI Assistent'],
