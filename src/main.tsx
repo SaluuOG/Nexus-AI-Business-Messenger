@@ -7,6 +7,7 @@ import './styles.css';
 import './auth.css';
 import './settings-data.css';
 import './contacts-data.css';
+import './chat-data.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
