@@ -39,7 +39,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Nachrichtenlänge serverseitig auf 1–5000 Zeichen begrenzt
 - Zwei-Account-Praxistest Samet ↔ Darlyn erfolgreich: Versand und Empfang in beide Richtungen funktionieren
 
-### Phase 2.2 — Messenger-Erlebnis 🚧
+### Phase 2.2 — Messenger-Erlebnis ✅
 - Migration `0006_messenger_experience.sql` aktiv
 - Online-/Zuletzt-online-Status mit geschütztem Presence-Heartbeat
 - „schreibt gerade…“-Status zwischen Chat-Teilnehmern
@@ -50,7 +50,16 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - eigene Nachrichten per Soft-Delete löschen
 - gelöschte Nachrichten verlieren serverseitig ihren Nachrichtentext
 - RLS und Security-Definer-RPCs schützen Presence-, Typing- und Message-Aktionen
-- als Nächstes: Zwei-Account-Test der neuen Phase-2.2-Funktionen, danach Anhänge/Bilder/Dateien
+- Zwei-Account-Livetest erfolgreich: Online/Presence, „schreibt gerade…“, Gelesen/Doppelhaken, Antworten, Bearbeiten und Löschen funktionieren in beide Richtungen
+
+### Phase 2.3 — Medien, Dateien & Anhänge 🚧
+- sichere Supabase-Storage-Architektur für Chat-Anhänge
+- Bilder/Fotos und Dokumente senden
+- Datei-Metadaten, Typ- und Größenvalidierung
+- sichere Zugriffsregeln nur für Chat-Teilnehmer
+- Vorschauen und Datei-Darstellung direkt im Messenger
+- Upload-Zustände und Fehlerbehandlung
+- Zwei-Account-Livetest vor Abschluss
 
 ## Routen
 - `#/app/briefing`
