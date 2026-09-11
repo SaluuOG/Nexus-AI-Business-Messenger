@@ -124,18 +124,38 @@ export async function loadWorkspaceMemberships(userId: string) {
 export async function createWorkspace(name: string, ownerId: string) {
   if (!supabase) return { data: null, error: 'Supabase ist nicht konfiguriert.' };
 
-  const slugBase = name
-    .trim()
+  const workspaceId = crypto.randomUUID();
+  const normalizedName = name.trim();
+  const slugBase = normalizedName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
   const slug = `${slugBase || 'workspace'}-${crypto.randomUUID().slice(0, 8)}`;
 
-  const { data, error } = await supabase
-    .from('workspaces')
-    .insert({ name: name.trim(), owner_id: ownerId, slug })
-    .select('id, owner_id, name, slug, avatar_url')
-    .single();
+  // Important: do not chain .select() to this INSERT. The workspace SELECT
+  // policy requires membership, while the owner membership is created by the
+  // AFTER INSERT trigger. Asking PostgREST to return the row can therefore
+  // evaluate the SELECT policy before the membership is visible and reject an
+  // otherwise valid owner insert. Generate the UUID client-side, insert only,
+  // then use the known values locally; subsequent reads are protected by RLS.
+  const { error } = await supabase.from('workspaces').insert({
+    id: workspaceId,
+    name: normalizedName,
+    owner_id: ownerId,
+    slug,
+  });
 
-  return { data: data as NexusWorkspace | null, error: error?.message ?? null };
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  const workspace: NexusWorkspace = {
+    id: workspaceId,
+    owner_id: ownerId,
+    name: normalizedName,
+    slug,
+    avatar_url: null,
+  };
+
+  return { data: workspace, error: null };
 }
