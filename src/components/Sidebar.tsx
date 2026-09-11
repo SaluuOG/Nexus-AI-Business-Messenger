@@ -15,6 +15,8 @@ type SidebarProps = {
   workspace: Workspace;
   onWorkspaceChange: (workspace: Workspace) => void;
   identity: IdentityMode;
+  accountName?: string;
+  accountSubtitle?: string;
 };
 
 const navigation = [
@@ -30,9 +32,18 @@ export function Sidebar({
   workspace,
   onWorkspaceChange,
   identity,
+  accountName,
+  accountSubtitle,
 }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const fallbackSubtitle = identity === 'business' ? '@webworkbalance' : '@samet';
+  const initials = (accountName || 'Samet')
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <aside className="side">
@@ -74,10 +85,10 @@ export function Sidebar({
       </div>
 
       <div className="profile">
-        <div className="avatar">S</div>
+        <div className="avatar">{initials}</div>
         <div>
-          <b>Samet</b>
-          <small>{identity === 'business' ? '@webworkbalance' : '@samet'}</small>
+          <b>{accountName || 'Samet'}</b>
+          <small>{accountSubtitle || fallbackSubtitle}</small>
         </div>
       </div>
     </aside>
