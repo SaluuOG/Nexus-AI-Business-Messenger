@@ -26,7 +26,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Kontakte entfernen
 - Zwei-Account-Test erfolgreich
 
-### Phase 2.1 — Echte 1:1-Chats 🚧
+### Phase 2.1 — Echte 1:1-Chats ✅
 - Migration `0005_direct_messages.sql` aktiv
 - echte persistente 1:1-Unterhaltungen zwischen bestätigten Nexus-Kontakten
 - Kontaktseite kann einen Chat direkt erstellen/öffnen
@@ -37,8 +37,20 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Supabase Realtime für neue Nachrichten aktiviert
 - RLS auf Conversations, Messages und Read-Status
 - Nachrichtenlänge serverseitig auf 1–5000 Zeichen begrenzt
+- Zwei-Account-Praxistest Samet ↔ Darlyn erfolgreich: Versand und Empfang in beide Richtungen funktionieren
 
-> Phase 2.1 ist technisch integriert. Als nächster Schritt folgt der Zwei-Account-Praxistest Samet ↔ Darlyn für Versand, Empfang, Realtime und Ungelesen-Status.
+### Phase 2.2 — Messenger-Erlebnis 🚧
+- Migration `0006_messenger_experience.sql` aktiv
+- Online-/Zuletzt-online-Status mit geschütztem Presence-Heartbeat
+- „schreibt gerade…“-Status zwischen Chat-Teilnehmern
+- Realtime-Synchronisierung für neue, bearbeitete und gelöschte Nachrichten
+- Realtime-Lesestatus mit Doppelhaken für gelesene eigene Nachrichten
+- Antworten auf einzelne Nachrichten mit Reply-Vorschau
+- eigene Nachrichten bearbeiten
+- eigene Nachrichten per Soft-Delete löschen
+- gelöschte Nachrichten verlieren serverseitig ihren Nachrichtentext
+- RLS und Security-Definer-RPCs schützen Presence-, Typing- und Message-Aktionen
+- als Nächstes: Zwei-Account-Test der neuen Phase-2.2-Funktionen, danach Anhänge/Bilder/Dateien
 
 ## Routen
 - `#/app/briefing`
@@ -60,4 +72,4 @@ npm run build
 ```
 
 ## Sicherheit
-Nexus verwendet Supabase Row Level Security und Security-Definer-RPCs für sensible Datenoperationen. Private Server-Schlüssel gehören nicht ins Frontend. Kontakte und direkte Chats sind auf authentifizierte Nutzer und bestätigte Beziehungen begrenzt. Das Nutzerverzeichnis gibt keine E-Mail-Adressen aus. Eine spätere Ende-zu-Ende-Verschlüsselung wird mit etablierter Kryptografie separat entworfen; Phase 2.1 ist noch keine E2E-Verschlüsselung.
+Nexus verwendet Supabase Row Level Security und Security-Definer-RPCs für sensible Datenoperationen. Private Server-Schlüssel gehören nicht ins Frontend. Kontakte und direkte Chats sind auf authentifizierte Nutzer und bestätigte Beziehungen begrenzt. Das Nutzerverzeichnis gibt keine E-Mail-Adressen aus. Eine spätere Ende-zu-Ende-Verschlüsselung wird mit etablierter Kryptografie separat entworfen; die aktuellen Messenger-Phasen sind noch keine E2E-Verschlüsselung.
