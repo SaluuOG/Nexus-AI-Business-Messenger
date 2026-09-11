@@ -42,13 +42,24 @@ Routen:
 
 ### Phase 1B.3 — Supabase & Auth-Grundlage ✅
 - Supabase-Client und Auth-Schicht integriert
-- Registrierung und Login vorbereitet
-- persistente Sessions und Logout integriert
-- geschützte App-Routen vorbereitet
+- echte Registrierung und Login
+- persistente Sessions und Logout
+- geschützte App-Routen
 - öffentliche Supabase-Konfiguration über GitHub Actions Variables
 - keine privaten Server-Schlüssel im Frontend
 
-> Business-Daten wie Profile, Workspaces, Rollen, Kontakte und Nachrichten werden in den nächsten Schritten von Testdaten auf die echte Datenbank umgestellt.
+### Phase 1B.4 — Profile, Business-Identitäten, Workspaces & Rollen 🚧
+- Supabase-Schema für `profiles`, `business_profiles`, `workspaces` und `workspace_members` ausgeführt
+- Rollenmodell Owner / Admin / Member / Guest
+- Row Level Security und Rollenprüfungen aktiviert
+- bestehende Auth-Nutzer automatisch in `profiles` übernommen
+- persönliches Profil wird aus Supabase geladen und kann gespeichert werden
+- Business-Identität kann real in Supabase erstellt werden
+- Workspaces werden real geladen, erstellt und in der Sidebar gewechselt
+- aktuelle Workspace-Rolle wird aus `workspace_members` geladen
+- Begrüßung und Profilanzeige verwenden echte Account-/Profildaten
+
+> Chats, Kontakte, Briefing-Kennzahlen und Beispielkunden arbeiten aktuell noch teilweise mit Testdaten. Diese Bereiche werden in den nächsten Datenbank-Schritten ersetzt.
 
 ## Lokal starten
 
@@ -65,8 +76,8 @@ npm run build
 
 ## Nächster Entwicklungsschritt
 
-Phase 1B.4: Datenbankschema für Profile, Business-Identitäten, Workspaces, Mitglieder und Rollen mit Row Level Security aufbauen.
+Phase 1B.4 fortsetzen: Teammitglieder einladen, Rollen verwalten und danach Kontakte auf echte Datenbankdaten umstellen.
 
 ## Sicherheit
 
-Nexus wird keine selbst erfundene Kryptografie für Ende-zu-Ende-Verschlüsselung verwenden. Vor einem Produktionsrelease wird eine gesonderte Security-Architektur für Authentifizierung, Sessions, Schlüsselverwaltung und E2E-Verschlüsselung benötigt.
+Nexus verwendet Supabase Row Level Security für den Zugriff auf Account- und Workspace-Daten. Private Server-Schlüssel gehören nicht ins Frontend. Für eine spätere Ende-zu-Ende-Verschlüsselung wird keine selbst erfundene Kryptografie verwendet; dafür folgt eine gesonderte Security-Architektur.
