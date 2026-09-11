@@ -1,6 +1,49 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 
+const ATTACHMENT_BUCKET = 'nexus-chat-attachments';
+export const MAX_CHAT_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+export const SUPPORTED_CHAT_ATTACHMENT_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+  'text/plain',
+  'text/csv',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/zip',
+  'application/x-zip-compressed',
+] as const;
+
+const extensionMimeMap: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  pdf: 'application/pdf',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  zip: 'application/zip',
+};
+
 export type DirectConversation = {
   conversation_id: string;
   contact_user_id: string;
@@ -10,6 +53,15 @@ export type DirectConversation = {
   last_message: string | null;
   last_message_at: string | null;
   unread_count: number;
+};
+
+export type DirectAttachment = {
+  attachment_id: string;
+  storage_path: string;
+  file_name: string;
+  mime_type: string;
+  file_size: number;
+  signed_url: string | null;
 };
 
 export type DirectMessage = {
@@ -23,6 +75,7 @@ export type DirectMessage = {
   edited_at: string | null;
   deleted_at: string | null;
   read_at: string | null;
+  attachments: DirectAttachment[];
 };
 
 export type ContactPresence = {
@@ -30,6 +83,55 @@ export type ContactPresence = {
   last_seen_at: string | null;
   online: boolean;
 };
+
+function mimeTypeForFile(file: File) {
+  if (file.type) return file.type.toLowerCase();
+  const extension = file.name.split('.').pop()?.toLowerCase() || '';
+  return extensionMimeMap[extension] || '';
+}
+
+function extensionForFile(file: File) {
+  const extension = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+  return extension && extension.length <= 10 ? `.${extension}` : '';
+}
+
+function createObjectPath(conversationId: string, userId: string, file: File) {
+  const randomId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${conversationId}/${userId}/${randomId}${extensionForFile(file)}`;
+}
+
+export function validateChatAttachment(file: File) {
+  const mimeType = mimeTypeForFile(file);
+  if (!file.size) return { mimeType, error: 'Die Datei ist leer.' };
+  if (file.size > MAX_CHAT_ATTACHMENT_BYTES) return { mimeType, error: 'Die Datei ist größer als 25 MB.' };
+  if (!SUPPORTED_CHAT_ATTACHMENT_TYPES.includes(mimeType as (typeof SUPPORTED_CHAT_ATTACHMENT_TYPES)[number])) {
+    return { mimeType, error: 'Dieser Dateityp wird noch nicht unterstützt.' };
+  }
+  if (!file.name.trim() || file.name.trim().length > 255) return { mimeType, error: 'Der Dateiname ist ungültig.' };
+  return { mimeType, error: null as string | null };
+}
+
+async function signAttachments(messages: DirectMessage[]) {
+  if (!supabase) return messages;
+
+  return Promise.all(messages.map(async (message) => {
+    const attachments = await Promise.all((message.attachments || []).map(async (attachment) => {
+      const { data, error } = await supabase.storage
+        .from(ATTACHMENT_BUCKET)
+        .createSignedUrl(attachment.storage_path, 3600);
+
+      return {
+        ...attachment,
+        file_size: Number(attachment.file_size || 0),
+        signed_url: error ? null : data?.signedUrl ?? null,
+      };
+    }));
+
+    return { ...message, attachments };
+  }));
+}
 
 export async function openDirectConversation(contactUserId: string) {
   if (!supabase) return { data: null as string | null, error: 'Supabase ist nicht konfiguriert.' };
@@ -57,7 +159,19 @@ export async function loadDirectMessages(conversationId: string) {
     p_conversation_id: conversationId,
     p_limit: 200,
   });
-  return { data: (data ?? []) as DirectMessage[], error: error?.message ?? null };
+
+  if (error) return { data: [] as DirectMessage[], error: error.message };
+
+  const normalized = ((data ?? []) as Array<Omit<DirectMessage, 'attachments'> & { attachments?: DirectAttachment[] | null }>).map((message) => ({
+    ...message,
+    attachments: Array.isArray(message.attachments) ? message.attachments.map((attachment) => ({
+      ...attachment,
+      file_size: Number(attachment.file_size || 0),
+      signed_url: null,
+    })) : [],
+  }));
+
+  return { data: await signAttachments(normalized), error: null as string | null };
 }
 
 export async function sendDirectMessage(conversationId: string, body: string, replyToMessageId?: string | null) {
@@ -70,6 +184,49 @@ export async function sendDirectMessage(conversationId: string, body: string, re
   return { data: (data as string | null) ?? null, error: error?.message ?? null };
 }
 
+export async function sendDirectAttachmentMessage(
+  conversationId: string,
+  currentUserId: string,
+  file: File,
+  body: string,
+  replyToMessageId?: string | null,
+) {
+  if (!supabase) return { data: null as string | null, error: 'Supabase ist nicht konfiguriert.' };
+
+  const validation = validateChatAttachment(file);
+  if (validation.error) return { data: null as string | null, error: validation.error };
+
+  const storagePath = createObjectPath(conversationId, currentUserId, file);
+  const uploadResult = await supabase.storage
+    .from(ATTACHMENT_BUCKET)
+    .upload(storagePath, file, {
+      cacheControl: '3600',
+      contentType: validation.mimeType,
+      upsert: false,
+    });
+
+  if (uploadResult.error) {
+    return { data: null as string | null, error: `Upload fehlgeschlagen: ${uploadResult.error.message}` };
+  }
+
+  const { data, error } = await supabase.rpc('send_direct_attachment_message', {
+    p_conversation_id: conversationId,
+    p_storage_path: storagePath,
+    p_file_name: file.name.trim(),
+    p_mime_type: validation.mimeType,
+    p_file_size: file.size,
+    p_body: body.trim(),
+    p_reply_to_message_id: replyToMessageId ?? null,
+  });
+
+  if (error) {
+    await supabase.storage.from(ATTACHMENT_BUCKET).remove([storagePath]);
+    return { data: null as string | null, error: error.message };
+  }
+
+  return { data: (data as string | null) ?? null, error: null as string | null };
+}
+
 export async function editDirectMessage(messageId: string, body: string) {
   if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
   const { error } = await supabase.rpc('edit_direct_message', {
@@ -79,8 +236,14 @@ export async function editDirectMessage(messageId: string, body: string) {
   return { error: error?.message ?? null };
 }
 
-export async function deleteDirectMessage(messageId: string) {
+export async function deleteDirectMessage(messageId: string, attachmentPaths: string[] = []) {
   if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
+
+  if (attachmentPaths.length > 0) {
+    const storageResult = await supabase.storage.from(ATTACHMENT_BUCKET).remove(attachmentPaths);
+    if (storageResult.error) return { error: `Anhang konnte nicht gelöscht werden: ${storageResult.error.message}` };
+  }
+
   const { error } = await supabase.rpc('delete_direct_message', {
     p_message_id: messageId,
   });
