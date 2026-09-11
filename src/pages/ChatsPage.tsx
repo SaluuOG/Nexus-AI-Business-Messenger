@@ -1,6 +1,8 @@
 import {
   CheckCheck,
+  FileText,
   MessageCircle,
+  Paperclip,
   Pencil,
   RefreshCw,
   Reply,
@@ -19,11 +21,15 @@ import {
   loadDirectConversations,
   loadDirectMessages,
   markDirectConversationRead,
+  sendDirectAttachmentMessage,
   sendDirectMessage,
   setConversationTyping,
   subscribeToConversationRealtime,
+  SUPPORTED_CHAT_ATTACHMENT_TYPES,
   unsubscribeConversationRealtime,
+  validateChatAttachment,
   type ContactPresence,
+  type DirectAttachment,
   type DirectConversation,
   type DirectMessage,
 } from '../features/data/chatData';
@@ -71,12 +77,59 @@ function formatPresence(presence: ContactPresence | null) {
   return `Zuletzt online ${date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`;
 }
 
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function messagePreview(message: DirectMessage) {
+  if (message.deleted_at) return 'Nachricht gelöscht';
+  if (message.body.trim()) return message.body;
+  const attachment = message.attachments[0];
+  if (!attachment) return 'Nachricht';
+  return attachment.mime_type.startsWith('image/') ? 'Bild' : attachment.file_name;
+}
+
+function AttachmentView({ attachment }: { attachment: DirectAttachment }) {
+  const isImage = attachment.mime_type.startsWith('image/');
+
+  if (!attachment.signed_url) {
+    return (
+      <div className="attachment-unavailable">
+        <FileText size={17} />
+        <span><b>{attachment.file_name}</b><small>Datei konnte nicht geladen werden</small></span>
+      </div>
+    );
+  }
+
+  if (isImage) {
+    return (
+      <a className="chat-image-link" href={attachment.signed_url} target="_blank" rel="noreferrer" title={attachment.file_name}>
+        <img className="chat-image" src={attachment.signed_url} alt={attachment.file_name} loading="lazy" />
+      </a>
+    );
+  }
+
+  return (
+    <a className="file-attachment" href={attachment.signed_url} target="_blank" rel="noreferrer" download={attachment.file_name}>
+      <span className="file-attachment-icon"><FileText size={19} /></span>
+      <span className="file-attachment-info">
+        <b>{attachment.file_name}</b>
+        <small>{formatFileSize(attachment.file_size)}</small>
+      </span>
+    </a>
+  );
+}
+
 export function ChatsPage({ currentUserId, requestedConversationId, onRequestedConversationHandled }: ChatsPageProps) {
   const [conversations, setConversations] = useState<DirectConversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(requestedConversationId ?? null);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState('');
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<DirectMessage | null>(null);
   const [editing, setEditing] = useState<DirectMessage | null>(null);
   const [presence, setPresence] = useState<ContactPresence | null>(null);
@@ -87,6 +140,7 @@ export function ChatsPage({ currentUserId, requestedConversationId, onRequestedC
   const [actionId, setActionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingRecheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSignalRef = useRef(0);
@@ -150,12 +204,15 @@ export function ChatsPage({ currentUserId, requestedConversationId, onRequestedC
       setMessages([]);
       setPresence(null);
       setContactTyping(false);
+      setPendingFile(null);
       return;
     }
 
     setReplyingTo(null);
     setEditing(null);
     setDraft('');
+    setPendingFile(null);
+    setUploadStatus(null);
     setPresence(null);
     setContactTyping(false);
 
@@ -226,24 +283,64 @@ export function ChatsPage({ currentUserId, requestedConversationId, onRequestedC
     }, 2500);
   };
 
+  const handleFileSelected = (file: File | null) => {
+    if (!file) return;
+    const validation = validateChatAttachment(file);
+    if (validation.error) {
+      setError(validation.error);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setError(null);
+    setEditing(null);
+    setPendingFile(file);
+  };
+
+  const clearPendingFile = () => {
+    setPendingFile(null);
+    setUploadStatus(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const submitComposer = async () => {
     const body = draft.trim();
-    if (!selectedId || !body || sending) return;
+    if (!selectedId || sending) return;
+    if (editing && !body) return;
+    if (!editing && !body && !pendingFile) return;
 
     setSending(true);
     setError(null);
 
-    const result = editing
-      ? await editDirectMessage(editing.message_id, body)
-      : await sendDirectMessage(selectedId, body, replyingTo?.message_id ?? null);
+    let result: { data?: string | null; error: string | null } | { error: string | null };
+    if (editing) {
+      result = await editDirectMessage(editing.message_id, body);
+    } else if (pendingFile) {
+      if (!currentUserId) {
+        setSending(false);
+        setError('Nutzerkonto konnte nicht bestimmt werden.');
+        return;
+      }
+      setUploadStatus('Datei wird sicher hochgeladen…');
+      result = await sendDirectAttachmentMessage(
+        selectedId,
+        currentUserId,
+        pendingFile,
+        body,
+        replyingTo?.message_id ?? null,
+      );
+    } else {
+      result = await sendDirectMessage(selectedId, body, replyingTo?.message_id ?? null);
+    }
 
     setSending(false);
+    setUploadStatus(null);
     if (result.error) {
       setError(result.error);
       return;
     }
 
     setDraft('');
+    clearPendingFile();
     setReplyingTo(null);
     setEditing(null);
     void setConversationTyping(selectedId, false);
@@ -261,6 +358,7 @@ export function ChatsPage({ currentUserId, requestedConversationId, onRequestedC
   const startEdit = (message: DirectMessage) => {
     if (message.sender_id !== currentUserId || message.deleted_at) return;
     setReplyingTo(null);
+    clearPendingFile();
     setEditing(message);
     setDraft(message.body);
   };
@@ -271,7 +369,10 @@ export function ChatsPage({ currentUserId, requestedConversationId, onRequestedC
 
     setActionId(message.message_id);
     setError(null);
-    const result = await deleteDirectMessage(message.message_id);
+    const result = await deleteDirectMessage(
+      message.message_id,
+      message.attachments.map((attachment) => attachment.storage_path),
+    );
     setActionId(null);
 
     if (result.error) {
@@ -299,6 +400,8 @@ export function ChatsPage({ currentUserId, requestedConversationId, onRequestedC
     }
   };
 
+  const canSend = Boolean(editing ? draft.trim() : draft.trim() || pendingFile) && !sending;
+
   return (
     <div className="chat-layout real-chat-layout">
       <section className="chat-list">
@@ -323,7 +426,7 @@ export function ChatsPage({ currentUserId, requestedConversationId, onRequestedC
             <span>
               <b>{nameOf(chat)}</b>
               <small>{chat.username ? `@${chat.username}` : 'Nexus-Kontakt'}</small>
-              <p>{chat.last_message || (chat.last_message_at ? 'Nachricht gelöscht' : 'Neuer Chat · Schreib die erste Nachricht')}</p>
+              <p>{chat.last_message || 'Neuer Chat · Schreib die erste Nachricht'}</p>
             </span>
             <em>{formatTime(chat.last_message_at)}{chat.unread_count > 0 && <i>{chat.unread_count > 99 ? '99+' : chat.unread_count}</i>}</em>
           </button>
@@ -361,12 +464,24 @@ export function ChatsPage({ currentUserId, requestedConversationId, onRequestedC
                       {message.reply_to_message_id && (
                         <div className="reply-preview">
                           <b>{replyAuthor}</b>
-                          <span>{message.reply_body || 'Nachricht gelöscht'}</span>
+                          <span>{message.reply_body || 'Anhang'}</span>
                         </div>
                       )}
-                      <span className={message.deleted_at ? 'deleted-message' : ''}>
-                        {message.deleted_at ? 'Nachricht gelöscht' : message.body}
-                      </span>
+
+                      {!message.deleted_at && message.attachments.length > 0 && (
+                        <div className="message-attachments">
+                          {message.attachments.map((attachment) => (
+                            <AttachmentView key={attachment.attachment_id} attachment={attachment} />
+                          ))}
+                        </div>
+                      )}
+
+                      {(message.deleted_at || message.body.trim()) && (
+                        <span className={message.deleted_at ? 'deleted-message' : 'message-body'}>
+                          {message.deleted_at ? 'Nachricht gelöscht' : message.body}
+                        </span>
+                      )}
+
                       <div className="message-meta">
                         {message.edited_at && !message.deleted_at && <small>bearbeitet</small>}
                         <time>{formatTime(message.created_at)}</time>
@@ -395,13 +510,40 @@ export function ChatsPage({ currentUserId, requestedConversationId, onRequestedC
               <div className="composer-context">
                 <div>
                   <b>{editing ? 'Nachricht bearbeiten' : `Antwort an ${replyingTo?.sender_id === currentUserId ? 'dich selbst' : nameOf(currentChat)}`}</b>
-                  <span>{editing ? editing.body : replyingTo?.body}</span>
+                  <span>{editing ? (editing.body || 'Beschriftung hinzufügen…') : replyingTo ? messagePreview(replyingTo) : ''}</span>
                 </div>
                 <button onClick={cancelComposerContext} title="Abbrechen"><X size={15} /></button>
               </div>
             )}
 
-            <div className="composer">
+            {pendingFile && !editing && (
+              <div className="pending-attachment">
+                <span className="pending-attachment-icon"><Paperclip size={16} /></span>
+                <span className="pending-attachment-info">
+                  <b>{pendingFile.name}</b>
+                  <small>{uploadStatus || `${formatFileSize(pendingFile.size)} · bereit zum Senden`}</small>
+                </span>
+                <button onClick={clearPendingFile} title="Anhang entfernen" disabled={sending}><X size={15} /></button>
+              </div>
+            )}
+
+            <div className="composer attachment-composer">
+              <input
+                ref={fileInputRef}
+                className="attachment-file-input"
+                type="file"
+                accept={SUPPORTED_CHAT_ATTACHMENT_TYPES.join(',')}
+                onChange={(event) => handleFileSelected(event.target.files?.[0] ?? null)}
+              />
+              <button
+                className="attach-button"
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending || Boolean(editing)}
+                title={editing ? 'Beim Bearbeiten können keine Dateien angehängt werden' : 'Bild oder Datei anhängen'}
+              >
+                <Paperclip size={18} />
+              </button>
               <input
                 value={draft}
                 onChange={(event) => handleDraftChange(event.target.value)}
@@ -411,10 +553,10 @@ export function ChatsPage({ currentUserId, requestedConversationId, onRequestedC
                     void submitComposer();
                   }
                 }}
-                placeholder={editing ? 'Bearbeitete Nachricht…' : 'Nachricht schreiben…'}
+                placeholder={editing ? 'Bearbeitete Nachricht…' : pendingFile ? 'Beschriftung hinzufügen (optional)…' : 'Nachricht schreiben…'}
                 maxLength={5000}
               />
-              <button onClick={() => void submitComposer()} disabled={!draft.trim() || sending} title={editing ? 'Änderung speichern' : 'Nachricht senden'}><Send size={18} /></button>
+              <button onClick={() => void submitComposer()} disabled={!canSend} title={editing ? 'Änderung speichern' : 'Nachricht senden'}><Send size={18} /></button>
             </div>
           </>
         )}
