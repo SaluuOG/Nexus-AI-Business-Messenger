@@ -34,6 +34,38 @@ export type NexusWorkspaceMembership = {
   joined_at: string;
 };
 
+export type NexusWorkspaceMember = {
+  user_id: string;
+  role: WorkspaceRole;
+  joined_at: string;
+  full_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+};
+
+export type NexusWorkspaceInvitation = {
+  id: string;
+  workspace_id: string;
+  email: string;
+  role: WorkspaceRole;
+  token: string;
+  invited_by: string;
+  created_at: string;
+  expires_at: string;
+};
+
+export type AcceptedWorkspaceInvitation = {
+  workspace_id: string;
+  workspace_name: string;
+  role: WorkspaceRole;
+};
+
+function firstRpcRow<T>(data: unknown): T | null {
+  if (Array.isArray(data)) return (data[0] as T | undefined) ?? null;
+  if (data && typeof data === 'object') return data as T;
+  return null;
+}
+
 export async function loadOwnProfile(userId: string) {
   if (!supabase) return { data: null, error: 'Supabase ist nicht konfiguriert.' };
 
@@ -132,12 +164,8 @@ export async function createWorkspace(name: string, ownerId: string) {
     .replace(/^-|-$/g, '');
   const slug = `${slugBase || 'workspace'}-${crypto.randomUUID().slice(0, 8)}`;
 
-  // Important: do not chain .select() to this INSERT. The workspace SELECT
-  // policy requires membership, while the owner membership is created by the
-  // AFTER INSERT trigger. Asking PostgREST to return the row can therefore
-  // evaluate the SELECT policy before the membership is visible and reject an
-  // otherwise valid owner insert. Generate the UUID client-side, insert only,
-  // then use the known values locally; subsequent reads are protected by RLS.
+  // Do not chain .select() to this INSERT. The workspace SELECT policy requires
+  // membership, while the owner membership is created by the AFTER INSERT trigger.
   const { error } = await supabase.from('workspaces').insert({
     id: workspaceId,
     name: normalizedName,
@@ -158,4 +186,99 @@ export async function createWorkspace(name: string, ownerId: string) {
   };
 
   return { data: workspace, error: null };
+}
+
+export async function loadWorkspaceMembers(workspaceId: string) {
+  if (!supabase) return { data: [], error: 'Supabase ist nicht konfiguriert.' };
+
+  const { data, error } = await supabase.rpc('get_workspace_members', {
+    p_workspace_id: workspaceId,
+  });
+
+  return {
+    data: (data ?? []) as NexusWorkspaceMember[],
+    error: error?.message ?? null,
+  };
+}
+
+export async function loadWorkspaceInvitations(workspaceId: string) {
+  if (!supabase) return { data: [], error: 'Supabase ist nicht konfiguriert.' };
+
+  const { data, error } = await supabase.rpc('get_workspace_invitations', {
+    p_workspace_id: workspaceId,
+  });
+
+  return {
+    data: (data ?? []) as NexusWorkspaceInvitation[],
+    error: error?.message ?? null,
+  };
+}
+
+export async function createWorkspaceInvitation(
+  workspaceId: string,
+  email: string,
+  role: Exclude<WorkspaceRole, 'owner'>,
+) {
+  if (!supabase) return { data: null, error: 'Supabase ist nicht konfiguriert.' };
+
+  const { data, error } = await supabase.rpc('create_workspace_invitation', {
+    p_workspace_id: workspaceId,
+    p_email: email.trim(),
+    p_role: role,
+  });
+
+  return {
+    data: firstRpcRow<NexusWorkspaceInvitation>(data),
+    error: error?.message ?? null,
+  };
+}
+
+export async function acceptWorkspaceInvitation(token: string) {
+  if (!supabase) return { data: null, error: 'Supabase ist nicht konfiguriert.' };
+
+  const { data, error } = await supabase.rpc('accept_workspace_invitation', {
+    p_token: token,
+  });
+
+  return {
+    data: firstRpcRow<AcceptedWorkspaceInvitation>(data),
+    error: error?.message ?? null,
+  };
+}
+
+export async function revokeWorkspaceInvitation(invitationId: string) {
+  if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
+
+  const { error } = await supabase.rpc('revoke_workspace_invitation', {
+    p_invitation_id: invitationId,
+  });
+
+  return { error: error?.message ?? null };
+}
+
+export async function updateWorkspaceMemberRole(
+  workspaceId: string,
+  userId: string,
+  role: Exclude<WorkspaceRole, 'owner'>,
+) {
+  if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
+
+  const { error } = await supabase.rpc('update_workspace_member_role', {
+    p_workspace_id: workspaceId,
+    p_user_id: userId,
+    p_role: role,
+  });
+
+  return { error: error?.message ?? null };
+}
+
+export async function removeWorkspaceMember(workspaceId: string, userId: string) {
+  if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
+
+  const { error } = await supabase.rpc('remove_workspace_member', {
+    p_workspace_id: workspaceId,
+    p_user_id: userId,
+  });
+
+  return { error: error?.message ?? null };
 }
