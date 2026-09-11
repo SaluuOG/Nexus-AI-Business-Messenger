@@ -59,20 +59,31 @@ Routen:
 - aktuelle Workspace-Rolle wird aus `workspace_members` geladen
 - Begrüßung und Profilanzeige verwenden echte Account-/Profildaten
 
-### Phase 1B.5 — Team, Einladungen & Rollenverwaltung 🚧
-- Migration `0002_workspace_team.sql` vorbereitet
-- echte Workspace-Mitgliederansicht vorbereitet
-- Einladung per E-Mail + sicherem Einladungslink vorbereitet
+### Phase 1B.5 — Team, Einladungen & Rollenverwaltung ✅
+- echte Workspace-Mitgliederansicht
+- Einladung per E-Mail + sicherem Einladungslink
 - Einladungen laufen nach 7 Tagen ab und können widerrufen werden
 - eingeladene Nutzer können nach Login/Registrierung dem Workspace beitreten
 - Owner kann Admin / Member / Guest vergeben
 - Admin kann Member / Guest verwalten
-- Owner-Rolle ist auf Datenbankebene gegen Admin-Änderungen und Entfernen geschützt
-- Team-Schreibzugriffe laufen über Security-Definer-RPCs statt direkter Tabellenänderungen
+- Owner-Rolle ist auf Datenbankebene geschützt
+- Team-Schreibzugriffe laufen über Security-Definer-RPCs
+- kompletter Zwei-Account-Test erfolgreich: Einladung, Beitritt, Member- und Admin-Rechte
+- Hotfix `0003_fix_invitation_ambiguity.sql` behebt die gefundene mehrdeutige `workspace_id`-Referenz
 
-> Phase 1B.5 wird aktiv, sobald `supabase/migrations/0002_workspace_team.sql` einmal im Supabase SQL Editor ausgeführt wurde.
+### Phase 1B.6 — Echte Kontakte & Nutzerverzeichnis 🚧
+- Migration `0004_contacts_directory.sql` vorbereitet
+- Mock-Kontaktansicht durch echte Supabase-Kontaktoberfläche ersetzt
+- Nutzer werden datenschutzfreundlich über exakten Nexus-Username gesucht
+- Kontaktanfragen können gesendet, angenommen, abgelehnt und zurückgezogen werden
+- akzeptierte Kontakte werden dauerhaft und beidseitig gespeichert
+- Kontakte können wieder entfernt werden
+- direkte Tabellenzugriffe auf Kontaktbeziehungen sind gesperrt; Schreib- und Lesezugriffe laufen über geschützte RPCs
+- echte 1:1-Chats bleiben für den nächsten Messenger-Schritt vorbereitet
 
-> Chats, Kontakte, Briefing-Kennzahlen und Beispielkunden arbeiten aktuell noch teilweise mit Testdaten. Diese Bereiche werden in den nächsten Datenbank-Schritten ersetzt.
+> Phase 1B.6 wird aktiv, sobald `supabase/migrations/0004_contacts_directory.sql` einmal im Supabase SQL Editor ausgeführt wurde.
+
+> Chats, Briefing-Kennzahlen und Beispielkunden arbeiten aktuell noch teilweise mit Testdaten. Diese Bereiche werden in den nächsten Datenbank-Schritten ersetzt.
 
 ## Lokal starten
 
@@ -89,8 +100,8 @@ npm run build
 
 ## Nächster Entwicklungsschritt
 
-Nach Aktivierung von Phase 1B.5: Team-Einladungen mit zwei Accounts testen und anschließend Kontakte auf echte Supabase-Daten umstellen.
+Phase 1B.6 mit zwei Accounts testen: Nutzer per Username finden, Kontaktanfrage senden und annehmen. Danach folgt der echte 1:1-Messenger auf Basis der bestätigten Kontakte.
 
 ## Sicherheit
 
-Nexus verwendet Supabase Row Level Security für den Zugriff auf Account- und Workspace-Daten. Private Server-Schlüssel gehören nicht ins Frontend. Rollenänderungen und Einladungen werden zusätzlich serverseitig in Datenbankfunktionen geprüft. Für eine spätere Ende-zu-Ende-Verschlüsselung wird keine selbst erfundene Kryptografie verwendet; dafür folgt eine gesonderte Security-Architektur.
+Nexus verwendet Supabase Row Level Security für den Zugriff auf Account- und Workspace-Daten. Private Server-Schlüssel gehören nicht ins Frontend. Rollenänderungen, Einladungen und Kontaktbeziehungen werden zusätzlich serverseitig in Datenbankfunktionen geprüft. Das Nutzerverzeichnis gibt keine E-Mail-Adressen aus und sucht ausschließlich nach dem exakten Nexus-Username. Für eine spätere Ende-zu-Ende-Verschlüsselung wird keine selbst erfundene Kryptografie verwendet; dafür folgt eine gesonderte Security-Architektur.
