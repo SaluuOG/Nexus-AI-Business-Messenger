@@ -1,4 +1,4 @@
-import { Crown, FileText, MessageCircle, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Trash2, UsersRound, X } from 'lucide-react';
+import { Crown, FileText, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UsersRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Header } from '../components/Header';
 import { SUPPORTED_CHAT_ATTACHMENT_TYPES, validateChatAttachment } from '../features/data/chatData';
@@ -23,6 +23,8 @@ import {
 
 type GroupChatsPageProps = { currentUserId?: string };
 
+type NexusMediaRecorder = MediaRecorder & { __cancel?: boolean };
+
 const groupInitials = (name: string) => name.split(/\s+/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 const personName = (member: GroupMember) => member.full_name || (member.username ? `@${member.username}` : 'Nexus Nutzer');
 const contactName = (contact: NexusContact) => contact.full_name || (contact.username ? `@${contact.username}` : 'Nexus Nutzer');
@@ -43,6 +45,12 @@ function formatFileSize(bytes: number) {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
+function formatDuration(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${minutes}:${String(rest).padStart(2, '0')}`;
+}
+
 function messagePreview(message: GroupMessage | null) {
   if (!message) return 'Nachricht';
   if (message.deleted_at) return 'Nachricht gelöscht';
@@ -56,11 +64,15 @@ function messagePreview(message: GroupMessage | null) {
 
 function GroupAttachmentView({ attachment }: { attachment: GroupAttachment }) {
   const image = attachment.mime_type.startsWith('image/');
+  const audio = attachment.mime_type.startsWith('audio/');
   if (!attachment.signed_url) {
     return <div className="attachment-unavailable"><FileText size={17} /><span><b>{attachment.file_name}</b><small>Datei konnte nicht geladen werden</small></span></div>;
   }
   if (image) {
     return <a className="chat-image-link" href={attachment.signed_url} target="_blank" rel="noreferrer"><img className="chat-image" src={attachment.signed_url} alt={attachment.file_name} /></a>;
+  }
+  if (audio) {
+    return <div className="voice-message"><Mic size={18} /><audio controls preload="metadata" src={attachment.signed_url} /></div>;
   }
   return <a className="file-attachment" href={attachment.signed_url} target="_blank" rel="noreferrer" download={attachment.file_name}><span className="file-attachment-icon"><FileText size={19} /></span><span className="file-attachment-info"><b>{attachment.file_name}</b><small>{formatFileSize(attachment.file_size)}</small></span></a>;
 }
@@ -84,9 +96,25 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const pendingIsAudio = Boolean(pendingFile?.type.startsWith('audio/'));
+  const pendingAudioUrl = useMemo(
+    () => pendingFile && pendingIsAudio ? URL.createObjectURL(pendingFile) : null,
+    [pendingFile, pendingIsAudio],
+  );
+
+  useEffect(() => () => {
+    if (pendingAudioUrl) URL.revokeObjectURL(pendingAudioUrl);
+  }, [pendingAudioUrl]);
 
   const refreshGroups = async (preferred?: string | null) => {
     setLoading(true);
@@ -155,6 +183,16 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => () => {
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    const recorder = recorderRef.current as NexusMediaRecorder | null;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.__cancel = true;
+      recorder.stop();
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
   const filteredGroups = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return groups;
@@ -187,6 +225,65 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     setPendingFile(file);
   };
 
+  const stopRecording = (cancel = false) => {
+    const recorder = recorderRef.current as NexusMediaRecorder | null;
+    if (!recorder) return;
+    recorder.__cancel = cancel;
+    if (recorder.state !== 'inactive') recorder.stop();
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    setRecording(false);
+  };
+
+  const startRecording = async () => {
+    if (recording || saving || editing || !selectedId) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setError('Sprachaufnahme wird von diesem Browser nicht unterstützt.');
+      return;
+    }
+    try {
+      setError(null);
+      clearPendingFile();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const candidates = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+      const mimeType = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined) as NexusMediaRecorder;
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        const cancelled = recorder.__cancel;
+        if (!cancelled && chunksRef.current.length) {
+          const type = (recorder.mimeType || 'audio/webm').split(';')[0];
+          const extension = type === 'audio/mp4' ? 'm4a' : type === 'audio/ogg' ? 'ogg' : 'webm';
+          const blob = new Blob(chunksRef.current, { type });
+          const file = new File([blob], `sprachnachricht-${Date.now()}.${extension}`, { type });
+          const validation = validateChatAttachment(file);
+          if (validation.error) setError(validation.error);
+          else setPendingFile(file);
+        }
+        chunksRef.current = [];
+        recorderRef.current = null;
+        setRecordSeconds(0);
+      };
+      recorder.start(250);
+      setRecordSeconds(0);
+      setRecording(true);
+      recordTimerRef.current = setInterval(() => setRecordSeconds((seconds) => seconds + 1), 1000);
+    } catch (recordError) {
+      setError(recordError instanceof DOMException && recordError.name === 'NotAllowedError'
+        ? 'Mikrofonzugriff wurde nicht erlaubt. Bitte erlaube Nexus den Mikrofonzugriff.'
+        : 'Mikrofon konnte nicht gestartet werden.');
+    }
+  };
+
   const create = async () => {
     if (saving || groupName.trim().length < 2 || selectedContacts.length === 0) return;
     setSaving(true);
@@ -206,7 +303,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
 
   const submit = async () => {
     const body = draft.trim();
-    if (!selectedId || saving || (editing && !body) || (!editing && !body && !pendingFile)) return;
+    if (!selectedId || saving || recording || (editing && !body) || (!editing && !body && !pendingFile)) return;
     setSaving(true);
     setError(null);
     let result: { error: string | null } | { data: string | null; error: string | null };
@@ -218,7 +315,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
         setError('Nutzerkonto konnte nicht bestimmt werden.');
         return;
       }
-      setUploadStatus('Datei wird sicher hochgeladen…');
+      setUploadStatus(pendingIsAudio ? 'Sprachnachricht wird sicher hochgeladen…' : 'Datei wird sicher hochgeladen…');
       result = await sendGroupAttachmentMessage(selectedId, currentUserId, pendingFile, body, replyingTo?.message_id ?? null);
     } else {
       result = await sendGroupMessage(selectedId, body, replyingTo?.message_id ?? null);
@@ -252,7 +349,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     }
   };
 
-  const canSend = Boolean(editing ? draft.trim() : draft.trim() || pendingFile) && !saving;
+  const canSend = Boolean(editing ? draft.trim() : draft.trim() || pendingFile) && !saving && !recording;
 
   return (
     <div className="chat-layout real-chat-layout group-chat-layout">
@@ -364,18 +461,33 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
               </div>
             )}
 
+            {recording && (
+              <div className="voice-recording">
+                <span className="record-dot" />
+                <b>Aufnahme läuft</b>
+                <span>{formatDuration(recordSeconds)}</span>
+                <button onClick={() => stopRecording(true)} title="Aufnahme abbrechen"><Trash2 size={15} /></button>
+                <button className="voice-stop" onClick={() => stopRecording(false)} title="Aufnahme beenden"><Square size={14} /></button>
+              </div>
+            )}
+
             {pendingFile && !editing && (
-              <div className="pending-attachment">
-                <span className="file-attachment-icon"><FileText size={17} /></span>
-                <span><b>{pendingFile.name}</b><small>{formatFileSize(pendingFile.size)}{uploadStatus ? ` · ${uploadStatus}` : ''}</small></span>
+              <div className={`pending-attachment${pendingIsAudio ? ' voice-pending' : ''}`}>
+                <span className="pending-attachment-icon">{pendingIsAudio ? <Mic size={17} /> : <FileText size={17} />}</span>
+                <span className="pending-attachment-info">
+                  <b>{pendingIsAudio ? 'Sprachnachricht' : pendingFile.name}</b>
+                  <small>{formatFileSize(pendingFile.size)}{uploadStatus ? ` · ${uploadStatus}` : ''}</small>
+                  {pendingIsAudio && pendingAudioUrl && <audio controls preload="metadata" src={pendingAudioUrl} />}
+                </span>
                 <button onClick={clearPendingFile} disabled={saving} title="Anhang entfernen"><X size={15} /></button>
               </div>
             )}
 
-            <div className="composer group-composer">
-              <input ref={fileRef} type="file" hidden accept={SUPPORTED_CHAT_ATTACHMENT_TYPES.join(',')} onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} />
-              <button className="attach-button" onClick={() => fileRef.current?.click()} disabled={saving || Boolean(editing)} title="Datei oder Bild anhängen"><Paperclip size={18} /></button>
-              <input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder={editing ? 'Bearbeitete Nachricht…' : pendingFile ? 'Nachricht zum Anhang (optional)…' : 'Nachricht an die Gruppe…'} maxLength={5000} />
+            <div className="composer group-composer attachment-composer">
+              <input ref={fileRef} className="attachment-file-input" type="file" accept={SUPPORTED_CHAT_ATTACHMENT_TYPES.join(',')} onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} />
+              <button className="attach-button" onClick={() => fileRef.current?.click()} disabled={saving || recording || Boolean(editing)} title="Datei oder Bild anhängen"><Paperclip size={18} /></button>
+              <button className={`attach-button mic-button${recording ? ' recording' : ''}`} onClick={() => void startRecording()} disabled={saving || recording || Boolean(editing)} title="Sprachnachricht aufnehmen"><Mic size={18} /></button>
+              <input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder={editing ? 'Bearbeitete Nachricht…' : pendingIsAudio ? 'Text zur Sprachnachricht (optional)…' : pendingFile ? 'Nachricht zum Anhang (optional)…' : 'Nachricht an die Gruppe…'} maxLength={5000} />
               <button onClick={() => void submit()} disabled={!canSend}><Send size={18} /></button>
             </div>
           </>
