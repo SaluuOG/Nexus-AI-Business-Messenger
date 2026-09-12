@@ -15,6 +15,21 @@ if ('scrollRestoration' in window.history) {
   window.history.scrollRestoration = 'manual';
 }
 
+const syncVisibleViewport = () => {
+  const viewport = window.visualViewport;
+  const height = Math.max(320, Math.round(viewport?.height ?? window.innerHeight));
+  const top = Math.max(0, Math.round(viewport?.offsetTop ?? 0));
+  document.documentElement.style.setProperty('--nexus-visual-height', `${height}px`);
+  document.documentElement.style.setProperty('--nexus-visual-top', `${top}px`);
+};
+
+syncVisibleViewport();
+window.addEventListener('resize', syncVisibleViewport, { passive: true });
+window.addEventListener('orientationchange', syncVisibleViewport, { passive: true });
+window.addEventListener('pageshow', syncVisibleViewport, { passive: true });
+window.visualViewport?.addEventListener('resize', syncVisibleViewport, { passive: true });
+window.visualViewport?.addEventListener('scroll', syncVisibleViewport, { passive: true });
+
 const nativeScrollIntoView = Element.prototype.scrollIntoView;
 Element.prototype.scrollIntoView = function scrollIntoViewInsideNexus(arg?: boolean | ScrollIntoViewOptions) {
   const messageScroller = this.closest?.('.real-chat-layout .messages') as HTMLElement | null;
