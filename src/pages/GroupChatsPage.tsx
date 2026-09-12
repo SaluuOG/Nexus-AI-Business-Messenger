@@ -1,19 +1,24 @@
-import { CheckCheck, Crown, FileText, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UsersRound, X } from 'lucide-react';
+import { CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Header } from '../components/Header';
 import { SUPPORTED_CHAT_ATTACHMENT_TYPES, validateChatAttachment } from '../features/data/chatData';
 import { loadNexusContacts, type NexusContact } from '../features/data/contactsData';
 import {
+  addGroupMember,
   createGroupChat,
   deleteGroupMessage,
   editGroupMessage,
+  leaveGroupChat,
   loadGroupActivity,
   loadGroupChats,
   loadGroupMembers,
   loadGroupMessages,
   markGroupRead,
+  removeGroupMember,
+  renameGroupChat,
   sendGroupAttachmentMessage,
   sendGroupMessage,
+  setGroupMemberRole,
   setGroupTyping,
   subscribeToGroupRealtime,
   unsubscribeGroupRealtime,
@@ -109,6 +114,9 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
   const [groupName, setGroupName] = useState('');
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [showMembers, setShowMembers] = useState(false);
+  const [managementName, setManagementName] = useState('');
+  const [showAddMembers, setShowAddMembers] = useState(false);
+  const [managing, setManaging] = useState(false);
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -201,6 +209,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     setReplyingTo(null);
     setEditing(null);
     setShowMembers(false);
+    setShowAddMembers(false);
     setActivity([]);
     void refreshGroup(selectedId);
     void refreshActivity(selectedId);
@@ -258,11 +267,103 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
       ? `${activityName(typingMembers[0])} schreibt gerade…`
       : `${activityName(typingMembers[0])} + ${typingMembers.length - 1} weitere schreiben…`
     : `${onlineCount} online · ${currentGroup?.member_count ?? members.length} Mitglieder`;
+  const canManageGroup = currentGroup?.role === 'owner' || currentGroup?.role === 'admin';
+  const isGroupOwner = currentGroup?.role === 'owner';
+  const memberIds = useMemo(() => new Set(members.map((member) => member.user_id)), [members]);
+  const addableContacts = useMemo(
+    () => contacts.filter((contact) => !memberIds.has(contact.contact_user_id)),
+    [contacts, memberIds],
+  );
+
+  useEffect(() => {
+    setManagementName(currentGroup?.name ?? '');
+    setShowAddMembers(false);
+  }, [currentGroup?.group_id, currentGroup?.name]);
 
   const toggleContact = (userId: string) => {
     setSelectedContacts((current) => current.includes(userId)
       ? current.filter((id) => id !== userId)
       : [...current, userId]);
+  };
+
+  const refreshManagedGroup = async () => {
+    if (!selectedId) return;
+    await Promise.all([
+      refreshGroup(selectedId, false),
+      refreshActivity(selectedId),
+      refreshGroups(selectedId),
+    ]);
+  };
+
+  const saveGroupName = async () => {
+    const name = managementName.trim();
+    if (!selectedId || !canManageGroup || managing || name.length < 2 || name === currentGroup?.name) return;
+    setManaging(true);
+    setError(null);
+    const result = await renameGroupChat(selectedId, name);
+    setManaging(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    await refreshManagedGroup();
+  };
+
+  const addMember = async (userId: string) => {
+    if (!selectedId || !canManageGroup || managing) return;
+    setManaging(true);
+    setError(null);
+    const result = await addGroupMember(selectedId, userId);
+    setManaging(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    await refreshManagedGroup();
+  };
+
+  const removeMember = async (member: GroupMember) => {
+    if (!selectedId || !currentGroup || managing || member.user_id === currentUserId || member.role === 'owner') return;
+    const allowed = currentGroup.role === 'owner' || (currentGroup.role === 'admin' && member.role === 'member');
+    if (!allowed || !window.confirm(`${personName(member)} wirklich aus der Gruppe entfernen?`)) return;
+    setManaging(true);
+    setError(null);
+    const result = await removeGroupMember(selectedId, member.user_id);
+    setManaging(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    await refreshManagedGroup();
+  };
+
+  const changeMemberRole = async (member: GroupMember) => {
+    if (!selectedId || !isGroupOwner || managing || member.role === 'owner') return;
+    const nextRole = member.role === 'admin' ? 'member' : 'admin';
+    setManaging(true);
+    setError(null);
+    const result = await setGroupMemberRole(selectedId, member.user_id, nextRole);
+    setManaging(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    await refreshManagedGroup();
+  };
+
+  const leaveCurrentGroup = async () => {
+    if (!selectedId || isGroupOwner || managing || !window.confirm('Diese Gruppe wirklich verlassen?')) return;
+    setManaging(true);
+    setError(null);
+    const result = await leaveGroupChat(selectedId);
+    setManaging(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setSelectedId(null);
+    setShowMembers(false);
+    await refreshGroups();
   };
 
   const draftChange = (value: string) => {
@@ -495,20 +596,68 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
 
             {showMembers && (
               <div className="group-members-panel">
-                {members.map((member) => {
-                  const memberActivity = activity.find((item) => item.user_id === member.user_id);
-                  return (
-                    <div className="group-member" key={member.user_id}>
-                      <span className="avatar">{groupInitials(personName(member))}</span>
-                      <span>
-                        <b>{personName(member)}{member.user_id === currentUserId ? ' · Du' : ''}</b>
-                        <small>{member.username ? `@${member.username}` : 'Nexus Nutzer'}</small>
-                        <small className={memberActivity?.online ? 'group-member-online' : ''}>{memberActivity?.typing ? 'schreibt gerade…' : formatPresence(memberActivity)}</small>
-                      </span>
-                      <em>{member.role === 'owner' ? <Crown size={13} /> : member.role === 'admin' ? <ShieldCheck size={13} /> : null}{roleLabel(member.role)}</em>
-                    </div>
-                  );
-                })}
+                <div className="group-management">
+                  <div className="group-management-title">
+                    <div><b>Gruppenverwaltung</b><small>Deine Rolle: {roleLabel(currentGroup.role)}</small></div>
+                    {!isGroupOwner && <button className="group-leave-button" onClick={() => void leaveCurrentGroup()} disabled={managing}><LogOut size={13} /> Gruppe verlassen</button>}
+                  </div>
+
+                  {canManageGroup && (
+                    <>
+                      <div className="group-rename-row">
+                        <input value={managementName} onChange={(event) => setManagementName(event.target.value)} maxLength={80} aria-label="Gruppenname" />
+                        <button onClick={() => void saveGroupName()} disabled={managing || managementName.trim().length < 2 || managementName.trim() === currentGroup.name}><Pencil size={13} /> Speichern</button>
+                      </div>
+                      <div className="group-add-member-head">
+                        <span><b>Mitglied hinzufügen</b><small>Nur bestätigte Nexus-Kontakte</small></span>
+                        <button onClick={() => setShowAddMembers((value) => !value)}><UserPlus size={13} /> {showAddMembers ? 'Schließen' : 'Hinzufügen'}</button>
+                      </div>
+                      {showAddMembers && (
+                        <div className="group-add-member-list">
+                          {addableContacts.length === 0 && <span>Alle deine Kontakte sind bereits in dieser Gruppe.</span>}
+                          {addableContacts.map((contact) => (
+                            <button key={contact.contact_user_id} onClick={() => void addMember(contact.contact_user_id)} disabled={managing}>
+                              <span className="avatar">{groupInitials(contactName(contact))}</span>
+                              <span><b>{contactName(contact)}</b><small>{contact.username ? `@${contact.username}` : 'Nexus Kontakt'}</small></span>
+                              <UserPlus size={14} />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {isGroupOwner && <small className="group-owner-note">Als Owner kannst du Admins ernennen oder zurückstufen. Ownership-Transfer folgt in einem späteren Sicherheits-Schritt.</small>}
+                </div>
+
+                <div className="group-member-grid">
+                  {members.map((member) => {
+                    const memberActivity = activity.find((item) => item.user_id === member.user_id);
+                    const canRemove = member.user_id !== currentUserId
+                      && member.role !== 'owner'
+                      && (currentGroup.role === 'owner' || (currentGroup.role === 'admin' && member.role === 'member'));
+                    const canChangeRole = isGroupOwner && member.user_id !== currentUserId && member.role !== 'owner';
+                    return (
+                      <div className="group-member" key={member.user_id}>
+                        <span className="avatar">{groupInitials(personName(member))}</span>
+                        <span>
+                          <b>{personName(member)}{member.user_id === currentUserId ? ' · Du' : ''}</b>
+                          <small>{member.username ? `@${member.username}` : 'Nexus Nutzer'}</small>
+                          <small className={memberActivity?.online ? 'group-member-online' : ''}>{memberActivity?.typing ? 'schreibt gerade…' : formatPresence(memberActivity)}</small>
+                        </span>
+                        <div className="group-member-side">
+                          <em>{member.role === 'owner' ? <Crown size={13} /> : member.role === 'admin' ? <ShieldCheck size={13} /> : null}{roleLabel(member.role)}</em>
+                          {(canRemove || canChangeRole) && (
+                            <div className="group-member-actions">
+                              {canChangeRole && <button onClick={() => void changeMemberRole(member)} disabled={managing} title={member.role === 'admin' ? 'Zum Mitglied machen' : 'Zum Admin machen'}><ShieldCheck size={12} /> {member.role === 'admin' ? 'Mitglied' : 'Admin'}</button>}
+                              {canRemove && <button className="danger" onClick={() => void removeMember(member)} disabled={managing} title="Mitglied entfernen"><UserMinus size={12} /></button>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
