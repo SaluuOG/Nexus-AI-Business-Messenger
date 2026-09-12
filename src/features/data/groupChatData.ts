@@ -23,6 +23,15 @@ export type GroupMember = {
   joined_at: string;
 };
 
+export type GroupActivity = {
+  user_id: string;
+  full_name: string | null;
+  username: string | null;
+  last_seen_at: string | null;
+  online: boolean;
+  typing: boolean;
+};
+
 export type GroupAttachment = {
   attachment_id: string;
   storage_path: string;
@@ -48,6 +57,8 @@ export type GroupMessage = {
   reply_sender_id: string | null;
   reply_sender_name: string | null;
   attachments: GroupAttachment[];
+  read_count: number;
+  recipient_count: number;
 };
 
 function extensionForFile(file: File) {
@@ -92,12 +103,20 @@ export async function loadGroupMembers(groupId: string) {
   return { data: (data ?? []) as GroupMember[], error: error?.message ?? null };
 }
 
+export async function loadGroupActivity(groupId: string) {
+  if (!supabase) return { data: [] as GroupActivity[], error: 'Supabase ist nicht konfiguriert.' };
+  const { data, error } = await supabase.rpc('get_group_activity', { p_group_id: groupId });
+  return { data: (data ?? []) as GroupActivity[], error: error?.message ?? null };
+}
+
 export async function loadGroupMessages(groupId: string) {
   if (!supabase) return { data: [] as GroupMessage[], error: 'Supabase ist nicht konfiguriert.' };
   const { data, error } = await supabase.rpc('get_group_messages', { p_group_id: groupId, p_limit: 200 });
   if (error) return { data: [] as GroupMessage[], error: error.message };
-  const normalized = ((data ?? []) as Array<Omit<GroupMessage, 'attachments'> & { attachments?: GroupAttachment[] | null }>).map((message) => ({
+  const normalized = ((data ?? []) as Array<Omit<GroupMessage, 'attachments' | 'read_count' | 'recipient_count'> & { attachments?: GroupAttachment[] | null; read_count?: number | string; recipient_count?: number | string }>).map((message) => ({
     ...message,
+    read_count: Number(message.read_count || 0),
+    recipient_count: Number(message.recipient_count || 0),
     attachments: Array.isArray(message.attachments) ? message.attachments.map((attachment) => ({ ...attachment, file_size: Number(attachment.file_size || 0), signed_url: null })) : [],
   }));
   return { data: await signGroupAttachments(normalized), error: null as string | null };
@@ -135,6 +154,12 @@ export async function sendGroupAttachmentMessage(groupId: string, currentUserId:
 export async function markGroupRead(groupId: string) {
   if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
   const { error } = await supabase.rpc('mark_group_read', { p_group_id: groupId });
+  return { error: error?.message ?? null };
+}
+
+export async function setGroupTyping(groupId: string, isTyping: boolean) {
+  if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
+  const { error } = await supabase.rpc('set_group_typing', { p_group_id: groupId, p_is_typing: isTyping });
   return { error: error?.message ?? null };
 }
 
@@ -184,9 +209,13 @@ export async function leaveGroupChat(groupId: string) {
   return { error: error?.message ?? null };
 }
 
-export function subscribeToGroupRealtime(groupId: string, onChanged: () => void): RealtimeChannel | null {
+export function subscribeToGroupRealtime(groupId: string, handlers: { onMessagesChanged?: () => void; onReadChanged?: () => void; onTypingChanged?: () => void }): RealtimeChannel | null {
   if (!supabase) return null;
-  return supabase.channel(`group-chat:${groupId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, onChanged).subscribe();
+  return supabase.channel(`group-chat:${groupId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, () => handlers.onMessagesChanged?.())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_reads', filter: `group_id=eq.${groupId}` }, () => handlers.onReadChanged?.())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_typing', filter: `group_id=eq.${groupId}` }, () => handlers.onTypingChanged?.())
+    .subscribe();
 }
 
 export async function unsubscribeGroupRealtime(channel: RealtimeChannel | null) {
