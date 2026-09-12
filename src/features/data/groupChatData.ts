@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { validateChatAttachment } from './chatData';
 
 const ATTACHMENT_BUCKET = 'nexus-chat-attachments';
+const groupTypingPollers = new WeakMap<RealtimeChannel, number>();
 
 export type GroupChat = {
   group_id: string;
@@ -211,14 +212,26 @@ export async function leaveGroupChat(groupId: string) {
 
 export function subscribeToGroupRealtime(groupId: string, handlers: { onMessagesChanged?: () => void; onReadChanged?: () => void; onTypingChanged?: () => void }): RealtimeChannel | null {
   if (!supabase) return null;
-  return supabase.channel(`group-chat:${groupId}`)
+  const channel = supabase.channel(`group-chat:${groupId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, () => handlers.onMessagesChanged?.())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_reads', filter: `group_id=eq.${groupId}` }, () => handlers.onReadChanged?.())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_typing', filter: `group_id=eq.${groupId}` }, () => handlers.onTypingChanged?.())
     .subscribe();
+
+  if (handlers.onTypingChanged && typeof window !== 'undefined') {
+    const poller = window.setInterval(() => handlers.onTypingChanged?.(), 1500);
+    groupTypingPollers.set(channel, poller);
+  }
+
+  return channel;
 }
 
 export async function unsubscribeGroupRealtime(channel: RealtimeChannel | null) {
   if (!supabase || !channel) return;
+  const poller = groupTypingPollers.get(channel);
+  if (poller !== undefined && typeof window !== 'undefined') {
+    window.clearInterval(poller);
+    groupTypingPollers.delete(channel);
+  }
   await supabase.removeChannel(channel);
 }
