@@ -1,4 +1,4 @@
-import { CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
+import { Camera, CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Header } from '../components/Header';
 import { SUPPORTED_CHAT_ATTACHMENT_TYPES, validateChatAttachment } from '../features/data/chatData';
@@ -6,6 +6,7 @@ import { loadNexusContacts, type NexusContact } from '../features/data/contactsD
 import {
   addGroupMember,
   createGroupChat,
+  deleteGroupChat,
   deleteGroupMessage,
   editGroupMessage,
   leaveGroupChat,
@@ -15,6 +16,7 @@ import {
   loadGroupMessages,
   markGroupRead,
   removeGroupMember,
+  removeGroupAvatar,
   renameGroupChat,
   sendGroupAttachmentMessage,
   sendGroupMessage,
@@ -22,6 +24,8 @@ import {
   setGroupTyping,
   subscribeToGroupRealtime,
   unsubscribeGroupRealtime,
+  transferGroupOwnership,
+  updateGroupAvatar,
   type GroupActivity,
   type GroupAttachment,
   type GroupChat,
@@ -38,6 +42,13 @@ const personName = (member: GroupMember) => member.full_name || (member.username
 const activityName = (member: GroupActivity) => member.full_name || (member.username ? `@${member.username}` : 'Nexus Nutzer');
 const contactName = (contact: NexusContact) => contact.full_name || (contact.username ? `@${contact.username}` : 'Nexus Nutzer');
 const roleLabel = (role: GroupChat['role'] | GroupMember['role']) => role === 'owner' ? 'Owner' : role === 'admin' ? 'Admin' : 'Mitglied';
+const lostGroupAccess = (message: string | null) => Boolean(message && /Gruppe nicht gefunden|kein Gruppenzugriff|kein Zugriff/i.test(message));
+
+function GroupAvatar({ group, size = 17 }: { group: GroupChat; size?: number }) {
+  return group.avatar_url
+    ? <img src={group.avatar_url} alt="" />
+    : <UsersRound size={size} />;
+}
 
 function formatTime(value: string | null) {
   if (!value) return '';
@@ -117,6 +128,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
   const [managementName, setManagementName] = useState('');
   const [showAddMembers, setShowAddMembers] = useState(false);
   const [managing, setManaging] = useState(false);
+  const [managementNotice, setManagementNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -125,6 +137,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const avatarRef = useRef<HTMLInputElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -149,8 +162,9 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     setLoading(false);
     if (result.error) {
       setError(result.error);
-      return;
+      return null;
     }
+    setError(null);
     setGroups(result.data);
     setSelectedId((current) => {
       const target = preferred || current;
@@ -158,11 +172,18 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
         ? target
         : result.data[0]?.group_id ?? null;
     });
+    return result.data;
   };
 
   const refreshActivity = async (groupId: string) => {
     const result = await loadGroupActivity(groupId);
     if (result.error) {
+      if (lostGroupAccess(result.error)) {
+        setError(null);
+        setSelectedId(null);
+        void refreshGroups();
+        return;
+      }
       setError(result.error);
       return;
     }
@@ -177,7 +198,14 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     ]);
     setMessagesLoading(false);
     if (messageResult.error || memberResult.error) {
-      setError(messageResult.error || memberResult.error);
+      const groupError = messageResult.error || memberResult.error;
+      if (lostGroupAccess(groupError)) {
+        setError(null);
+        setSelectedId(null);
+        void refreshGroups();
+        return;
+      }
+      setError(groupError);
       return;
     }
     setMessages(messageResult.data);
@@ -210,6 +238,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     setEditing(null);
     setShowMembers(false);
     setShowAddMembers(false);
+    setManagementNotice(null);
     setActivity([]);
     void refreshGroup(selectedId);
     void refreshActivity(selectedId);
@@ -224,6 +253,16 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
         void refreshActivity(selectedId);
         if (typingRecheckRef.current) clearTimeout(typingRecheckRef.current);
         typingRecheckRef.current = setTimeout(() => void refreshActivity(selectedId), 6500);
+      },
+      onGroupChanged: () => {
+        void refreshGroups(selectedId);
+      },
+      onMembersChanged: () => {
+        void refreshGroups(selectedId).then((nextGroups) => {
+          if (!nextGroups?.some((group) => group.group_id === selectedId)) return;
+          void refreshGroup(selectedId, false);
+          void refreshActivity(selectedId);
+        });
       },
     });
     const activityInterval = window.setInterval(() => void refreshActivity(selectedId), 20000);
@@ -278,6 +317,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
   useEffect(() => {
     setManagementName(currentGroup?.name ?? '');
     setShowAddMembers(false);
+    setManagementNotice(null);
   }, [currentGroup?.group_id, currentGroup?.name]);
 
   const toggleContact = (userId: string) => {
@@ -306,6 +346,37 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
       setError(result.error);
       return;
     }
+    await refreshManagedGroup();
+  };
+
+  const changeGroupAvatar = async (file: File | null) => {
+    if (!file || !selectedId || !currentUserId || !canManageGroup || managing) return;
+    setManaging(true);
+    setError(null);
+    setManagementNotice(null);
+    const result = await updateGroupAvatar(selectedId, currentUserId, file);
+    setManaging(false);
+    if (avatarRef.current) avatarRef.current.value = '';
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setManagementNotice(result.warning || 'Gruppenbild wurde aktualisiert.');
+    await refreshManagedGroup();
+  };
+
+  const clearGroupAvatar = async () => {
+    if (!selectedId || !currentGroup?.avatar_path || !canManageGroup || managing) return;
+    setManaging(true);
+    setError(null);
+    setManagementNotice(null);
+    const result = await removeGroupAvatar(selectedId);
+    setManaging(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setManagementNotice(result.warning || 'Gruppenbild wurde entfernt.');
     await refreshManagedGroup();
   };
 
@@ -351,11 +422,45 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     await refreshManagedGroup();
   };
 
+  const transferOwnership = async (member: GroupMember) => {
+    if (!selectedId || !isGroupOwner || managing || member.user_id === currentUserId || member.role === 'owner') return;
+    if (!window.confirm(`${personName(member)} wirklich zum neuen Owner machen? Du wirst anschließend Admin.`)) return;
+    setManaging(true);
+    setError(null);
+    setManagementNotice(null);
+    const result = await transferGroupOwnership(selectedId, member.user_id);
+    setManaging(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setManagementNotice(`${personName(member)} ist jetzt Owner. Du bist weiterhin Admin.`);
+    await refreshManagedGroup();
+  };
+
   const leaveCurrentGroup = async () => {
     if (!selectedId || isGroupOwner || managing || !window.confirm('Diese Gruppe wirklich verlassen?')) return;
     setManaging(true);
     setError(null);
     const result = await leaveGroupChat(selectedId);
+    setManaging(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setSelectedId(null);
+    setShowMembers(false);
+    await refreshGroups();
+  };
+
+  const deleteCurrentGroup = async () => {
+    if (!selectedId || !currentGroup || !isGroupOwner || managing) return;
+    const confirmed = window.confirm(`„${currentGroup.name}“ endgültig löschen? Alle Nachrichten und Anhänge dieser Gruppe werden entfernt.`);
+    if (!confirmed) return;
+    setManaging(true);
+    setError(null);
+    setManagementNotice(null);
+    const result = await deleteGroupChat(selectedId);
     setManaging(false);
     if (result.error) {
       setError(result.error);
@@ -573,7 +678,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
         {!loading && groups.length === 0 && <div className="chat-list-empty"><UsersRound size={24} /><b>Noch keine Gruppen</b><span>Erstelle deine erste Gruppe mit einem Nexus-Kontakt.</span></div>}
         {filteredGroups.map((group) => (
           <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => setSelectedId(group.group_id)} key={group.group_id}>
-            <div className="avatar group-avatar"><UsersRound size={16} /></div>
+            <div className="avatar group-avatar"><GroupAvatar group={group} size={16} /></div>
             <span><b>{group.name}</b><small>{group.member_count} Mitglieder · {roleLabel(group.role)}</small><p>{group.last_message || 'Neue Gruppe'}</p></span>
             <em>{formatTime(group.last_message_at)}{group.unread_count > 0 && <i>{group.unread_count > 99 ? '99+' : group.unread_count}</i>}</em>
           </button>
@@ -588,7 +693,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
           <>
             <div className="chat-head">
               <div className="chat-head-person">
-                <div className="avatar group-avatar"><UsersRound size={17} /></div>
+                <div className="avatar group-avatar"><GroupAvatar group={currentGroup} /></div>
                 <div><b>{currentGroup.name}</b><small className={typingMembers.length ? 'typing-status' : onlineCount > 0 ? 'online-status' : ''}>{groupStatus}</small></div>
               </div>
               <button className={`project-pill group-members-toggle${showMembers ? ' active' : ''}`} onClick={() => setShowMembers((value) => !value)}><UsersRound size={13} /> Mitglieder</button>
@@ -600,10 +705,26 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
                   <div className="group-management-title">
                     <div><b>Gruppenverwaltung</b><small>Deine Rolle: {roleLabel(currentGroup.role)}</small></div>
                     {!isGroupOwner && <button className="group-leave-button" onClick={() => void leaveCurrentGroup()} disabled={managing}><LogOut size={13} /> Gruppe verlassen</button>}
+                    {isGroupOwner && <button className="group-delete-button" onClick={() => void deleteCurrentGroup()} disabled={managing}><Trash2 size={13} /> Gruppe löschen</button>}
                   </div>
+
+                  {managementNotice && <div className="group-management-notice">{managementNotice}</div>}
 
                   {canManageGroup && (
                     <>
+                      <div className="group-avatar-management">
+                        <div className="avatar group-avatar group-avatar-preview"><GroupAvatar group={currentGroup} size={21} /></div>
+                        <span><b>Gruppenbild</b><small>JPEG, PNG, WebP oder GIF · maximal 5 MB</small></span>
+                        <input
+                          ref={avatarRef}
+                          className="group-avatar-input"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          onChange={(event) => void changeGroupAvatar(event.target.files?.[0] ?? null)}
+                        />
+                        <button onClick={() => avatarRef.current?.click()} disabled={managing}><Camera size={13} /> {currentGroup.avatar_path ? 'Ändern' : 'Hochladen'}</button>
+                        {currentGroup.avatar_path && <button className="danger" onClick={() => void clearGroupAvatar()} disabled={managing} title="Gruppenbild entfernen"><Trash2 size={13} /></button>}
+                      </div>
                       <div className="group-rename-row">
                         <input value={managementName} onChange={(event) => setManagementName(event.target.value)} maxLength={80} aria-label="Gruppenname" />
                         <button onClick={() => void saveGroupName()} disabled={managing || managementName.trim().length < 2 || managementName.trim() === currentGroup.name}><Pencil size={13} /> Speichern</button>
@@ -627,7 +748,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
                     </>
                   )}
 
-                  {isGroupOwner && <small className="group-owner-note">Als Owner kannst du Admins ernennen oder zurückstufen. Ownership-Transfer folgt in einem späteren Sicherheits-Schritt.</small>}
+                  {isGroupOwner && <small className="group-owner-note">Als Owner kannst du Admins verwalten, die Ownership übertragen oder die Gruppe endgültig löschen.</small>}
                 </div>
 
                 <div className="group-member-grid">
@@ -650,6 +771,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
                           {(canRemove || canChangeRole) && (
                             <div className="group-member-actions">
                               {canChangeRole && <button onClick={() => void changeMemberRole(member)} disabled={managing} title={member.role === 'admin' ? 'Zum Mitglied machen' : 'Zum Admin machen'}><ShieldCheck size={12} /> {member.role === 'admin' ? 'Mitglied' : 'Admin'}</button>}
+                              {canChangeRole && <button onClick={() => void transferOwnership(member)} disabled={managing} title="Ownership übertragen"><Crown size={12} /> Owner</button>}
                               {canRemove && <button className="danger" onClick={() => void removeMember(member)} disabled={managing} title="Mitglied entfernen"><UserMinus size={12} /></button>}
                             </div>
                           )}

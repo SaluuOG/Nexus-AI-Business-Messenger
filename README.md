@@ -87,19 +87,32 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Produktionsbuild und GitHub-Pages-Deployment erfolgreich
 - Zwei-Account-Livetest Samet ↔ Darlyn erfolgreich: Aufnahme, Vorschau, Versand, Empfang und Wiedergabe funktionieren in beide Richtungen
 
-### Phase 2.5 — Gruppen & Team-Messenger 🚧
-- Migration `0011_group_chats_foundation.sql` aktiv
+### Phase 2.5 — Gruppen & Team-Messenger ✅
+- Migrationen `0011_group_chats_foundation.sql` bis `0016_harden_group_storage_cleanup.sql`
 - sichere Gruppen-Grundstruktur mit `group_conversations`, `group_members`, `group_messages` und `group_reads`
 - RLS auf allen Gruppentabellen
 - Gruppen können nur mit bestätigten Nexus-Kontakten erstellt werden
-- Rollen-Grundlage: Owner, Admin und Mitglied
+- Rollen und Rechte: Owner, Admin und Mitglied
 - Gruppen erstellen und mehrere Kontakte auswählen
 - Gruppenliste mit Mitgliederzahl, letzter Nachricht und Ungelesen-Zähler
 - echte Gruppen-Nachrichten mit Supabase Realtime
 - Antworten, Bearbeiten und Löschen eigener Gruppen-Nachrichten
-- Mitgliederübersicht direkt im Gruppenchat
-- Backend-RPCs für Umbenennen, Mitglieder hinzufügen/entfernen, Rollen ändern und Gruppe verlassen vorbereitet
-- Produktionsbuild erfolgreich; Zwei-Account-Livetest steht noch aus
+- Bilder, Dokumente und Sprachnachrichten im Gruppenchat
+- Online-, Tipp- und Gruppen-Lesestatus in Echtzeit
+- Mitgliederübersicht mit Online- und Rollenstatus direkt im Gruppenchat
+- Gruppenname und privates Gruppenbild ändern
+- bestätigte Kontakte nachträglich hinzufügen sowie Mitglieder entfernen
+- Admins ernennen und zurückstufen
+- Ownership sicher an ein vorhandenes Mitglied übertragen
+- Gruppe als Mitglied/Admin verlassen; endgültiges Löschen ausschließlich durch den Owner
+- Gruppen-, Rollen- und Mitgliederänderungen werden live synchronisiert
+- Gruppenanhänge und Gruppenbilder sind über getrennte private Storage-Regeln geschützt
+- beim endgültigen Löschen werden auch verwaiste Dateien im Gruppenspeicher bereinigt
+- neue Mitglieder erhalten keine historischen Nachrichten fälschlich als ungelesen
+- Build, TypeScript-Prüfung, automatisierte Vertrags-/Sicherheitschecks und Supabase-RLS-Prüfung eingerichtet
+- Seiten werden als kleinere Teilpakete geladen, damit der Messenger schneller startet
+- ältere Trigger- und RLS-Hilfsfunktionen gegen anonymen RPC-Zugriff gehärtet
+- Basis-Gruppenchat mit Samet ↔ Darlyn live bestätigt; abschließender Zwei-Account-Test der neuen Verwaltungsaktionen folgt nach Veröffentlichung
 
 ## Routen
 - `#/app/briefing`

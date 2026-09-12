@@ -9,6 +9,7 @@ import './settings-data.css';
 import './contacts-data.css';
 import './chat-data.css';
 import './group-chat.css';
+import './group-management.css';
 import './chat-layout-fixed.css';
 
 if ('scrollRestoration' in window.history) {

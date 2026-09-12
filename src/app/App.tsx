@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { useAuth } from '../features/auth/AuthProvider';
@@ -26,23 +26,28 @@ import {
   type NexusWorkspaceMembership,
   type WorkspaceRole,
 } from '../features/data/nexusData';
-import { AIPage } from '../pages/AIPage';
-import { AuthPage } from '../pages/AuthPage';
-import { BriefingPage } from '../pages/BriefingPage';
-import { BusinessPage } from '../pages/BusinessPage';
-import { ChatsPage } from '../pages/ChatsPage';
-import { ContactsPage } from '../pages/ContactsPage';
-import { GroupChatsPage } from '../pages/GroupChatsPage';
-import { SettingsPage } from '../pages/SettingsPage';
 import type { IdentityMode } from '../types';
 import { routes } from './routes';
 
 type ManageableRole = Exclude<WorkspaceRole, 'owner'>;
 
+const AIPage = lazy(() => import('../pages/AIPage').then((module) => ({ default: module.AIPage })));
+const AuthPage = lazy(() => import('../pages/AuthPage').then((module) => ({ default: module.AuthPage })));
+const BriefingPage = lazy(() => import('../pages/BriefingPage').then((module) => ({ default: module.BriefingPage })));
+const BusinessPage = lazy(() => import('../pages/BusinessPage').then((module) => ({ default: module.BusinessPage })));
+const ChatsPage = lazy(() => import('../pages/ChatsPage').then((module) => ({ default: module.ChatsPage })));
+const ContactsPage = lazy(() => import('../pages/ContactsPage').then((module) => ({ default: module.ContactsPage })));
+const GroupChatsPage = lazy(() => import('../pages/GroupChatsPage').then((module) => ({ default: module.GroupChatsPage })));
+const SettingsPage = lazy(() => import('../pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
+
+function AppLoading() {
+  return <div className="app-loading"><div className="auth-logo">N</div><b>Nexus wird sicher geladen…</b></div>;
+}
+
 export function App() {
   const auth = useAuth();
-  if (auth.configured && auth.loading) return <div className="app-loading"><div className="auth-logo">N</div><b>Nexus wird sicher geladen…</b></div>;
-  return <Routes><Route path={routes.auth} element={<AuthPage />} /><Route path="*" element={<AppShell />} /></Routes>;
+  if (auth.configured && auth.loading) return <AppLoading />;
+  return <Suspense fallback={<AppLoading />}><Routes><Route path={routes.auth} element={<AuthPage />} /><Route path="*" element={<AppShell />} /></Routes></Suspense>;
 }
 
 function AppShell() {
