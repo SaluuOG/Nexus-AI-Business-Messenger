@@ -15,10 +15,20 @@ if ('scrollRestoration' in window.history) {
   window.history.scrollRestoration = 'manual';
 }
 
+const desktopPointer = window.matchMedia('(hover: hover) and (pointer: fine)');
+
 const syncVisibleViewport = () => {
   const viewport = window.visualViewport;
-  const height = Math.max(320, Math.round(viewport?.height ?? window.innerHeight));
-  const top = Math.max(0, Math.round(viewport?.offsetTop ?? 0));
+  const visualHeight = Math.round(viewport?.height ?? window.innerHeight);
+  const layoutHeight = Math.round(window.innerHeight);
+  const isDesktop = desktopPointer.matches;
+
+  // Desktop Safari already reports the page area below its toolbar/tab bar via innerHeight.
+  // visualViewport.offsetTop can jump when Safari changes its chrome, which previously shifted
+  // the whole Nexus shell downward and clipped the profile area at the bottom.
+  const height = Math.max(320, isDesktop ? Math.min(layoutHeight, visualHeight) : visualHeight);
+  const top = isDesktop ? 0 : Math.max(0, Math.round(viewport?.offsetTop ?? 0));
+
   document.documentElement.style.setProperty('--nexus-visual-height', `${height}px`);
   document.documentElement.style.setProperty('--nexus-visual-top', `${top}px`);
 };
@@ -29,6 +39,7 @@ window.addEventListener('orientationchange', syncVisibleViewport, { passive: tru
 window.addEventListener('pageshow', syncVisibleViewport, { passive: true });
 window.visualViewport?.addEventListener('resize', syncVisibleViewport, { passive: true });
 window.visualViewport?.addEventListener('scroll', syncVisibleViewport, { passive: true });
+desktopPointer.addEventListener?.('change', syncVisibleViewport);
 
 const nativeScrollIntoView = Element.prototype.scrollIntoView;
 Element.prototype.scrollIntoView = function scrollIntoViewInsideNexus(arg?: boolean | ScrollIntoViewOptions) {
