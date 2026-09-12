@@ -1,4 +1,4 @@
-import { Crown, FileText, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UsersRound, X } from 'lucide-react';
+import { CheckCheck, Crown, FileText, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UsersRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Header } from '../components/Header';
 import { SUPPORTED_CHAT_ATTACHMENT_TYPES, validateChatAttachment } from '../features/data/chatData';
@@ -7,14 +7,17 @@ import {
   createGroupChat,
   deleteGroupMessage,
   editGroupMessage,
+  loadGroupActivity,
   loadGroupChats,
   loadGroupMembers,
   loadGroupMessages,
   markGroupRead,
   sendGroupAttachmentMessage,
   sendGroupMessage,
+  setGroupTyping,
   subscribeToGroupRealtime,
   unsubscribeGroupRealtime,
+  type GroupActivity,
   type GroupAttachment,
   type GroupChat,
   type GroupMember,
@@ -27,6 +30,7 @@ type NexusMediaRecorder = MediaRecorder & { __cancel?: boolean };
 
 const groupInitials = (name: string) => name.split(/\s+/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 const personName = (member: GroupMember) => member.full_name || (member.username ? `@${member.username}` : 'Nexus Nutzer');
+const activityName = (member: GroupActivity) => member.full_name || (member.username ? `@${member.username}` : 'Nexus Nutzer');
 const contactName = (contact: NexusContact) => contact.full_name || (contact.username ? `@${contact.username}` : 'Nexus Nutzer');
 const roleLabel = (role: GroupChat['role'] | GroupMember['role']) => role === 'owner' ? 'Owner' : role === 'admin' ? 'Admin' : 'Mitglied';
 
@@ -37,6 +41,17 @@ function formatTime(value: string | null) {
   return date.toDateString() === today.toDateString()
     ? date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
     : date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+}
+
+function formatPresence(member: GroupActivity | undefined) {
+  if (!member) return 'Status wird geladen…';
+  if (member.online) return 'Online';
+  if (!member.last_seen_at) return 'Offline';
+  const date = new Date(member.last_seen_at);
+  const today = new Date();
+  return date.toDateString() === today.toDateString()
+    ? `Zuletzt heute ${date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`
+    : `Zuletzt ${date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`;
 }
 
 function formatFileSize(bytes: number) {
@@ -83,6 +98,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [members, setMembers] = useState<GroupMember[]>([]);
+  const [activity, setActivity] = useState<GroupActivity[]>([]);
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState('');
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -105,6 +121,9 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingRecheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingRef = useRef(0);
 
   const pendingIsAudio = Boolean(pendingFile?.type.startsWith('audio/'));
   const pendingAudioUrl = useMemo(
@@ -131,6 +150,15 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
         ? target
         : result.data[0]?.group_id ?? null;
     });
+  };
+
+  const refreshActivity = async (groupId: string) => {
+    const result = await loadGroupActivity(groupId);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setActivity(result.data);
   };
 
   const refreshGroup = async (groupId: string, markRead = true) => {
@@ -164,6 +192,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     if (!selectedId) {
       setMessages([]);
       setMembers([]);
+      setActivity([]);
       return;
     }
     setDraft('');
@@ -172,11 +201,31 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     setReplyingTo(null);
     setEditing(null);
     setShowMembers(false);
+    setActivity([]);
     void refreshGroup(selectedId);
-    const channel = subscribeToGroupRealtime(selectedId, () => {
-      void refreshGroup(selectedId).then(() => refreshGroups(selectedId));
+    void refreshActivity(selectedId);
+    const channel = subscribeToGroupRealtime(selectedId, {
+      onMessagesChanged: () => {
+        void refreshGroup(selectedId).then(() => refreshGroups(selectedId));
+      },
+      onReadChanged: () => {
+        void refreshGroup(selectedId, false);
+      },
+      onTypingChanged: () => {
+        void refreshActivity(selectedId);
+        if (typingRecheckRef.current) clearTimeout(typingRecheckRef.current);
+        typingRecheckRef.current = setTimeout(() => void refreshActivity(selectedId), 6500);
+      },
     });
-    return () => { void unsubscribeGroupRealtime(channel); };
+    const activityInterval = window.setInterval(() => void refreshActivity(selectedId), 20000);
+    return () => {
+      window.clearInterval(activityInterval);
+      if (typingStopRef.current) clearTimeout(typingStopRef.current);
+      if (typingRecheckRef.current) clearTimeout(typingRecheckRef.current);
+      lastTypingRef.current = 0;
+      void setGroupTyping(selectedId, false);
+      void unsubscribeGroupRealtime(channel);
+    };
   }, [selectedId]);
 
   useEffect(() => {
@@ -185,6 +234,8 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
 
   useEffect(() => () => {
     if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    if (typingStopRef.current) clearTimeout(typingStopRef.current);
+    if (typingRecheckRef.current) clearTimeout(typingRecheckRef.current);
     const recorder = recorderRef.current as NexusMediaRecorder | null;
     if (recorder && recorder.state !== 'inactive') {
       recorder.__cancel = true;
@@ -200,11 +251,37 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
   }, [groups, query]);
 
   const currentGroup = groups.find((group) => group.group_id === selectedId) || null;
+  const typingMembers = activity.filter((member) => member.user_id !== currentUserId && member.typing);
+  const onlineCount = activity.filter((member) => member.online).length;
+  const groupStatus = typingMembers.length
+    ? typingMembers.length === 1
+      ? `${activityName(typingMembers[0])} schreibt gerade…`
+      : `${activityName(typingMembers[0])} + ${typingMembers.length - 1} weitere schreiben…`
+    : `${onlineCount} online · ${currentGroup?.member_count ?? members.length} Mitglieder`;
 
   const toggleContact = (userId: string) => {
     setSelectedContacts((current) => current.includes(userId)
       ? current.filter((id) => id !== userId)
       : [...current, userId]);
+  };
+
+  const draftChange = (value: string) => {
+    setDraft(value);
+    if (!selectedId || editing) return;
+    if (typingStopRef.current) clearTimeout(typingStopRef.current);
+    if (!value.trim()) {
+      void setGroupTyping(selectedId, false);
+      lastTypingRef.current = 0;
+      return;
+    }
+    if (Date.now() - lastTypingRef.current > 1200) {
+      lastTypingRef.current = Date.now();
+      void setGroupTyping(selectedId, true);
+    }
+    typingStopRef.current = setTimeout(() => {
+      void setGroupTyping(selectedId, false);
+      lastTypingRef.current = 0;
+    }, 2500);
   };
 
   const clearPendingFile = () => {
@@ -245,6 +322,8 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     }
     try {
       setError(null);
+      void setGroupTyping(selectedId, false);
+      lastTypingRef.current = 0;
       clearPendingFile();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -330,6 +409,8 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     clearPendingFile();
     setEditing(null);
     setReplyingTo(null);
+    void setGroupTyping(selectedId, false);
+    lastTypingRef.current = 0;
     await refreshGroup(selectedId);
     await refreshGroups(selectedId);
   };
@@ -407,20 +488,27 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
             <div className="chat-head">
               <div className="chat-head-person">
                 <div className="avatar group-avatar"><UsersRound size={17} /></div>
-                <div><b>{currentGroup.name}</b><small>{currentGroup.member_count} Mitglieder · {roleLabel(currentGroup.role)}</small></div>
+                <div><b>{currentGroup.name}</b><small className={typingMembers.length ? 'typing-status' : onlineCount > 0 ? 'online-status' : ''}>{groupStatus}</small></div>
               </div>
               <button className={`project-pill group-members-toggle${showMembers ? ' active' : ''}`} onClick={() => setShowMembers((value) => !value)}><UsersRound size={13} /> Mitglieder</button>
             </div>
 
             {showMembers && (
               <div className="group-members-panel">
-                {members.map((member) => (
-                  <div className="group-member" key={member.user_id}>
-                    <span className="avatar">{groupInitials(personName(member))}</span>
-                    <span><b>{personName(member)}{member.user_id === currentUserId ? ' · Du' : ''}</b><small>{member.username ? `@${member.username}` : 'Nexus Nutzer'}</small></span>
-                    <em>{member.role === 'owner' ? <Crown size={13} /> : member.role === 'admin' ? <ShieldCheck size={13} /> : null}{roleLabel(member.role)}</em>
-                  </div>
-                ))}
+                {members.map((member) => {
+                  const memberActivity = activity.find((item) => item.user_id === member.user_id);
+                  return (
+                    <div className="group-member" key={member.user_id}>
+                      <span className="avatar">{groupInitials(personName(member))}</span>
+                      <span>
+                        <b>{personName(member)}{member.user_id === currentUserId ? ' · Du' : ''}</b>
+                        <small>{member.username ? `@${member.username}` : 'Nexus Nutzer'}</small>
+                        <small className={memberActivity?.online ? 'group-member-online' : ''}>{memberActivity?.typing ? 'schreibt gerade…' : formatPresence(memberActivity)}</small>
+                      </span>
+                      <em>{member.role === 'owner' ? <Crown size={13} /> : member.role === 'admin' ? <ShieldCheck size={13} /> : null}{roleLabel(member.role)}</em>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -430,6 +518,10 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
               {messages.map((message) => {
                 const mine = message.sender_id === currentUserId;
                 const sender = message.sender_full_name || (message.sender_username ? `@${message.sender_username}` : 'Nexus Nutzer');
+                const fullyRead = message.recipient_count > 0 && message.read_count >= message.recipient_count;
+                const readTitle = message.recipient_count > 0
+                  ? `${message.read_count} von ${message.recipient_count} haben gelesen`
+                  : 'Gesendet';
                 return (
                   <div key={message.message_id} className={`message-wrap group-message-wrap${mine ? ' mine' : ''}`}>
                     {!mine && !message.deleted_at && <small className="group-message-sender">{sender}</small>}
@@ -439,7 +531,11 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
                       )}
                       {!message.deleted_at && message.attachments?.length > 0 && <div className="message-attachments">{message.attachments.map((attachment) => <GroupAttachmentView key={attachment.attachment_id} attachment={attachment} />)}</div>}
                       {(message.deleted_at || message.body.trim()) && <span className={message.deleted_at ? 'deleted-message' : 'message-body'}>{message.deleted_at ? 'Nachricht gelöscht' : message.body}</span>}
-                      <div className="message-meta">{message.edited_at && !message.deleted_at && <small>bearbeitet</small>}<time>{formatTime(message.created_at)}</time></div>
+                      <div className="message-meta">
+                        {message.edited_at && !message.deleted_at && <small>bearbeitet</small>}
+                        <time>{formatTime(message.created_at)}</time>
+                        {mine && !message.deleted_at && <span className={`message-receipt${fullyRead ? ' read' : ''}`} title={readTitle}>{message.read_count > 0 ? <CheckCheck size={13} /> : '✓'}</span>}
+                      </div>
                     </div>
                     {!message.deleted_at && (
                       <div className="message-actions">
@@ -487,7 +583,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
               <input ref={fileRef} className="attachment-file-input" type="file" accept={SUPPORTED_CHAT_ATTACHMENT_TYPES.join(',')} onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} />
               <button className="attach-button" onClick={() => fileRef.current?.click()} disabled={saving || recording || Boolean(editing)} title="Datei oder Bild anhängen"><Paperclip size={18} /></button>
               <button className={`attach-button mic-button${recording ? ' recording' : ''}`} onClick={() => void startRecording()} disabled={saving || recording || Boolean(editing)} title="Sprachnachricht aufnehmen"><Mic size={18} /></button>
-              <input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder={editing ? 'Bearbeitete Nachricht…' : pendingIsAudio ? 'Text zur Sprachnachricht (optional)…' : pendingFile ? 'Nachricht zum Anhang (optional)…' : 'Nachricht an die Gruppe…'} maxLength={5000} />
+              <input value={draft} onChange={(event) => draftChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder={editing ? 'Bearbeitete Nachricht…' : pendingIsAudio ? 'Text zur Sprachnachricht (optional)…' : pendingFile ? 'Nachricht zum Anhang (optional)…' : 'Nachricht an die Gruppe…'} maxLength={5000} />
               <button onClick={() => void submit()} disabled={!canSend}><Send size={18} /></button>
             </div>
           </>
