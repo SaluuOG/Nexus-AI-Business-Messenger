@@ -54,12 +54,12 @@ test('Group UI exposes avatar, roles, ownership, leave and owner-only deletion f
   ]) assert.ok(data.includes(token), `Datenfluss fehlt: ${token}`);
 });
 
-test('Migration sequence is complete from 0001 through 0017', async () => {
+test('Migration sequence is complete from 0001 through 0019', async () => {
   const files = (await readdir(new URL('../supabase/migrations/', import.meta.url)))
     .filter((name) => name.endsWith('.sql'))
     .sort();
   const prefixes = files.map((name) => Number(name.slice(0, 4)));
-  assert.deepEqual(prefixes, Array.from({ length: 17 }, (_, index) => index + 1));
+  assert.deepEqual(prefixes, Array.from({ length: 19 }, (_, index) => index + 1));
 });
 
 test('Legacy trigger and RLS helper functions are not anonymously executable', async () => {
@@ -88,4 +88,41 @@ test('No privileged Supabase secret is referenced by browser source', async () =
   await walk(new URL('../src/', import.meta.url));
   const source = (await Promise.all(sourceFiles.map((url) => readFile(url, 'utf8')))).join('\n');
   assert.doesNotMatch(source, /VITE_SUPABASE_SERVICE_ROLE|SUPABASE_SERVICE_ROLE_KEY|SUPABASE_SECRET_KEY/i);
+});
+
+test('Database hardening migration closes direct access and fixes advisor findings', async () => {
+  const sql = await read('supabase/migrations/0018_harden_database_access.sql');
+
+  for (const policy of [
+    'contact_links_no_direct_access',
+    'contact_requests_no_direct_access',
+    'workspace_invitations_no_direct_access',
+  ]) assert.ok(sql.includes(policy), `RPC-only deny policy fehlt: ${policy}`);
+
+  for (const index of [
+    'contact_links_user_b_idx',
+    'conversation_typing_user_id_idx',
+    'direct_conversation_reads_user_id_idx',
+    'workspace_invitations_accepted_by_idx',
+    'workspace_invitations_invited_by_idx',
+    'workspaces_owner_id_idx',
+  ]) assert.ok(sql.includes(index), `Fremdschlüsselindex fehlt: ${index}`);
+
+  assert.match(sql, /REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon, authenticated/);
+  assert.match(sql, /REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC, anon/);
+  assert.match(sql, /REVOKE ALL PRIVILEGES ON FUNCTION public\.send_direct_message\(uuid, text\) FROM authenticated/);
+  assert.match(sql, /ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public/);
+  assert.ok((sql.match(/\(SELECT auth\.uid\(\)\)/g) ?? []).length >= 13, 'RLS-InitPlan-Optimierung ist unvollständig.');
+});
+
+test('Presence RLS checks contacts through a non-exposed helper', async () => {
+  const sql = await read('supabase/migrations/0019_fix_presence_contact_rls.sql');
+
+  assert.match(sql, /CREATE SCHEMA IF NOT EXISTS private/);
+  assert.match(sql, /CREATE OR REPLACE FUNCTION private\.is_contact\(p_user_id uuid\)/);
+  assert.match(sql, /SECURITY DEFINER\s+SET search_path = public/);
+  assert.match(sql, /REVOKE ALL PRIVILEGES ON FUNCTION private\.is_contact\(uuid\) FROM PUBLIC, anon, authenticated/);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION private\.is_contact\(uuid\) TO authenticated/);
+  assert.match(sql, /OR private\.is_contact\(user_id\)/);
+  assert.doesNotMatch(sql, /GRANT SELECT ON (TABLE )?public\.contact_links/i);
 });

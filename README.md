@@ -112,7 +112,18 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Build, TypeScript-Prüfung, automatisierte Vertrags-/Sicherheitschecks und Supabase-RLS-Prüfung eingerichtet
 - Seiten werden als kleinere Teilpakete geladen, damit der Messenger schneller startet
 - ältere Trigger- und RLS-Hilfsfunktionen gegen anonymen RPC-Zugriff gehärtet
-- Basis-Gruppenchat mit Samet ↔ Darlyn live bestätigt; abschließender Zwei-Account-Test der neuen Verwaltungsaktionen folgt nach Veröffentlichung
+- Owner-/Admin-Abnahme mit zwei Konten erfolgreich: Rollenanzeige, Gruppenbild, Nachrichten, Admin-Aktionen und Owner-only-Löschung geprüft
+
+### Phase 2.6 — Datenbank-Sicherheit & Performance ✅
+- Migrationen `0017_harden_legacy_function_access.sql` bis `0019_fix_presence_contact_rls.sql` aktiv
+- anonyme Tabellen- und privilegierte Funktionszugriffe vollständig entzogen
+- direkte Rechte auf das tatsächlich vom Browser benötigte Minimum reduziert
+- Kontakte, Kontaktanfragen und Workspace-Einladungen explizit als RPC-only geschützt
+- veralteten Direktnachrichten-RPC geschlossen und zukünftige Datenbankobjekte standardmäßig gesperrt
+- 13 RLS-Regeln auf einmalige `auth.uid()`-Auswertung optimiert
+- sechs fehlende Fremdschlüssel-Indizes ergänzt
+- Presence-Kontaktprüfung über eine nicht exponierte Sicherheitsfunktion abgesichert
+- Supabase Security- und Performance-Advisors erneut geprüft
 
 ## Routen
 - `#/app/briefing`
