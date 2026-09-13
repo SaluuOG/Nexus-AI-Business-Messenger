@@ -125,7 +125,19 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Presence-Kontaktprüfung über eine nicht exponierte Sicherheitsfunktion abgesichert
 - Supabase Security- und Performance-Advisors erneut geprüft
 
+### Phase 2.7 — Account-Wiederherstellung & Passwortschutz ✅
+- neutraler „Passwort vergessen?“-Ablauf ohne Preisgabe, ob eine E-Mail registriert ist
+- Wiederherstellungs-E-Mail über Supabase Auth mit sicherer Rückkehr zu GitHub Pages
+- eigene Route `#/auth/reset-password` zum Setzen und Bestätigen eines neuen Passworts
+- abgelaufene, ungültige und bereits verwendete Links werden verständlich abgefangen
+- einmalige Auth-Codes und Callback-Parameter werden nach der Verarbeitung aus der URL entfernt
+- Passwort ein-/ausblenden und gemeinsame Mindestlängen-/Stärkeanzeige
+- angemeldete Nutzer können ihr Passwort direkt in den Einstellungen ändern
+- automatisierte Vertrags-, UI- und Sicherheitschecks für den Recovery-Fluss
+
 ## Routen
+- `#/auth`
+- `#/auth/reset-password`
 - `#/app/briefing`
 - `#/app/chats`
 - `#/app/groups`

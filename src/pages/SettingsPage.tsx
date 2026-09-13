@@ -14,7 +14,9 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { routes } from '../app/routes';
 import { Header } from '../components/Header';
+import { PasswordInput, PasswordStrengthHint } from '../components/PasswordInput';
 import { WorkspaceTeamPanel } from '../components/WorkspaceTeamPanel';
+import { PASSWORD_MIN_LENGTH, validateNewPassword } from '../features/auth/passwordPolicy';
 import type {
   NexusBusinessProfile,
   NexusProfile,
@@ -59,6 +61,7 @@ type SettingsPageProps = {
   onAcceptWorkspaceInvitation: (
     token: string,
   ) => Promise<{ error: string | null; workspaceName?: string }>;
+  onUpdatePassword?: (password: string) => Promise<{ error: string | null }>;
   onSignOut?: () => void;
 };
 
@@ -95,6 +98,7 @@ export function SettingsPage({
   onRevokeWorkspaceInvitation,
   onRefreshWorkspaceTeam,
   onAcceptWorkspaceInvitation,
+  onUpdatePassword,
   onSignOut,
 }: SettingsPageProps) {
   const location = useLocation();
@@ -109,10 +113,15 @@ export function SettingsPage({
   const [workspaceSaving, setWorkspaceSaving] = useState(false);
   const [businessSaving, setBusinessSaving] = useState(false);
   const [inviteAccepting, setInviteAccepting] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [profileFeedback, setProfileFeedback] = useState<string | null>(null);
   const [workspaceFeedback, setWorkspaceFeedback] = useState<string | null>(null);
   const [businessFeedback, setBusinessFeedback] = useState<string | null>(null);
   const [inviteFeedback, setInviteFeedback] = useState<string | null>(null);
+  const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const inviteToken = new URLSearchParams(location.search).get('invite');
 
@@ -188,6 +197,37 @@ export function SettingsPage({
     localStorage.removeItem('nexus_pending_invite');
     setInviteFeedback(null);
     navigate(routes.settings, { replace: true });
+  };
+
+  const submitPassword = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!onUpdatePassword) return;
+
+    const validationError = validateNewPassword(newPassword, passwordConfirmation);
+    if (validationError) {
+      setPasswordError(validationError);
+      setPasswordFeedback(null);
+      return;
+    }
+
+    setPasswordSaving(true);
+    setPasswordError(null);
+    setPasswordFeedback(null);
+    try {
+      const result = await onUpdatePassword(newPassword);
+      if (result.error) {
+        setPasswordError(result.error);
+        return;
+      }
+
+      setNewPassword('');
+      setPasswordConfirmation('');
+      setPasswordFeedback('Passwort erfolgreich geändert.');
+    } catch {
+      setPasswordError('Das Passwort konnte gerade nicht geändert werden. Bitte versuche es erneut.');
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   return (
@@ -370,6 +410,40 @@ export function SettingsPage({
           <span className="ok">
             <CheckCircle2 size={15} /> RLS aktiv · Owner-Rolle geschützt
           </span>
+          {onUpdatePassword && (
+            <form className="settings-form password-settings-form" onSubmit={submitPassword}>
+              <h4>Passwort ändern</h4>
+              <p>Lege für deinen angemeldeten Account ein neues Passwort fest.</p>
+              <label>
+                Neues Passwort
+                <PasswordInput
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  required
+                  minLength={PASSWORD_MIN_LENGTH}
+                  placeholder={`Mindestens ${PASSWORD_MIN_LENGTH} Zeichen`}
+                  autoComplete="new-password"
+                />
+              </label>
+              <PasswordStrengthHint password={newPassword} />
+              <label>
+                Passwort bestätigen
+                <PasswordInput
+                  value={passwordConfirmation}
+                  onChange={(event) => setPasswordConfirmation(event.target.value)}
+                  required
+                  minLength={PASSWORD_MIN_LENGTH}
+                  placeholder="Noch einmal eingeben"
+                  autoComplete="new-password"
+                />
+              </label>
+              {passwordError && <small className="form-feedback error" role="alert">{passwordError}</small>}
+              {passwordFeedback && <small className="form-feedback success" role="status">{passwordFeedback}</small>}
+              <button className="secondary" disabled={passwordSaving}>
+                <LockKeyhole size={15} /> {passwordSaving ? 'Wird geändert…' : 'Passwort aktualisieren'}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </section>

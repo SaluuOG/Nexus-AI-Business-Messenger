@@ -1,5 +1,6 @@
 export const routes = {
   auth: '/auth',
+  resetPassword: '/auth/reset-password',
   briefing: '/app/briefing',
   chats: '/app/chats',
   groups: '/app/groups',

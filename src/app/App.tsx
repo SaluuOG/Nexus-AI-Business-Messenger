@@ -38,6 +38,7 @@ const BusinessPage = lazy(() => import('../pages/BusinessPage').then((module) =>
 const ChatsPage = lazy(() => import('../pages/ChatsPage').then((module) => ({ default: module.ChatsPage })));
 const ContactsPage = lazy(() => import('../pages/ContactsPage').then((module) => ({ default: module.ContactsPage })));
 const GroupChatsPage = lazy(() => import('../pages/GroupChatsPage').then((module) => ({ default: module.GroupChatsPage })));
+const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })));
 const SettingsPage = lazy(() => import('../pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 
 function AppLoading() {
@@ -47,7 +48,7 @@ function AppLoading() {
 export function App() {
   const auth = useAuth();
   if (auth.configured && auth.loading) return <AppLoading />;
-  return <Suspense fallback={<AppLoading />}><Routes><Route path={routes.auth} element={<AuthPage />} /><Route path="*" element={<AppShell />} /></Routes></Suspense>;
+  return <Suspense fallback={<AppLoading />}><Routes><Route path={routes.auth} element={<AuthPage />} /><Route path={routes.resetPassword} element={<ResetPasswordPage />} /><Route path="*" element={<AppShell />} /></Routes></Suspense>;
 }
 
 function AppShell() {
@@ -188,7 +189,7 @@ function AppShell() {
       <Route path={routes.groups} element={<GroupChatsPage currentUserId={auth.user?.id} />} />
       <Route path={routes.contacts} element={<ContactsPage onStartChat={startContactChat} />} />
       <Route path={routes.business} element={<BusinessPage />} /><Route path={routes.ai} element={<AIPage />} />
-      <Route path={routes.settings} element={<SettingsPage identity={identity} setIdentity={setIdentity} backendConfigured={auth.configured} accountEmail={auth.user?.email} currentUserId={auth.user?.id} profile={profile} businessProfiles={businessProfiles} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} currentWorkspaceRole={currentWorkspaceRole} workspaceMembers={workspaceMembers} workspaceInvitations={workspaceInvitations} teamLoading={teamLoading} teamError={teamError} dataLoading={dataLoading} dataError={dataError} onSaveProfile={saveProfile} onCreateWorkspace={addWorkspace} onCreateBusinessProfile={addBusinessProfile} onInviteWorkspaceMember={inviteWorkspaceMember} onUpdateWorkspaceMemberRole={changeWorkspaceMemberRole} onRemoveWorkspaceMember={deleteWorkspaceMember} onRevokeWorkspaceInvitation={revokeInvitation} onRefreshWorkspaceTeam={refreshWorkspaceTeam} onAcceptWorkspaceInvitation={acceptInvitation} onSignOut={auth.configured ? signOut : undefined} />} />
+      <Route path={routes.settings} element={<SettingsPage identity={identity} setIdentity={setIdentity} backendConfigured={auth.configured} accountEmail={auth.user?.email} currentUserId={auth.user?.id} profile={profile} businessProfiles={businessProfiles} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} currentWorkspaceRole={currentWorkspaceRole} workspaceMembers={workspaceMembers} workspaceInvitations={workspaceInvitations} teamLoading={teamLoading} teamError={teamError} dataLoading={dataLoading} dataError={dataError} onSaveProfile={saveProfile} onCreateWorkspace={addWorkspace} onCreateBusinessProfile={addBusinessProfile} onInviteWorkspaceMember={inviteWorkspaceMember} onUpdateWorkspaceMemberRole={changeWorkspaceMemberRole} onRemoveWorkspaceMember={deleteWorkspaceMember} onRevokeWorkspaceInvitation={revokeInvitation} onRefreshWorkspaceTeam={refreshWorkspaceTeam} onAcceptWorkspaceInvitation={acceptInvitation} onUpdatePassword={auth.configured ? auth.updatePassword : undefined} onSignOut={auth.configured ? signOut : undefined} />} />
       <Route path={routes.auth} element={<Navigate to={routes.briefing} replace />} /><Route path="*" element={<Navigate to={routes.briefing} replace />} />
     </Routes></main>
   </div>;
