@@ -48,7 +48,19 @@ function AppLoading() {
 export function App() {
   const auth = useAuth();
   if (auth.configured && auth.loading) return <AppLoading />;
-  return <Suspense fallback={<AppLoading />}><Routes><Route path={routes.auth} element={<AuthPage />} /><Route path={routes.resetPassword} element={<ResetPasswordPage />} /><Route path="*" element={<AppShell />} /></Routes></Suspense>;
+  return (
+    <Suspense fallback={<AppLoading />}>
+      {auth.recoveryMode ? (
+        <ResetPasswordPage />
+      ) : (
+        <Routes>
+          <Route path={routes.auth} element={<AuthPage />} />
+          <Route path={routes.resetPassword} element={<ResetPasswordPage />} />
+          <Route path="*" element={<AppShell />} />
+        </Routes>
+      )}
+    </Suspense>
+  );
 }
 
 function AppShell() {

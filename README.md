@@ -129,6 +129,8 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - neutraler „Passwort vergessen?“-Ablauf ohne Preisgabe, ob eine E-Mail registriert ist
 - Wiederherstellungs-E-Mail über Supabase Auth mit sicherer Rückkehr zu GitHub Pages
 - eigene Route `#/auth/reset-password` zum Setzen und Bestätigen eines neuen Passworts
+- Recovery-Rückkehr für die reine Web-App ohne browsergebundenen PKCE-Verifier, damit der Link auch aus Mail-Apps und auf einem anderen Gerät zuverlässig geöffnet werden kann
+- Callback-Daten werden vor der URL-Bereinigung sicher erkannt; der Recovery-Modus übersteht außerdem ein versehentliches Neuladen des Tabs
 - abgelaufene, ungültige und bereits verwendete Links werden verständlich abgefangen
 - einmalige Auth-Codes und Callback-Parameter werden nach der Verarbeitung aus der URL entfernt
 - Passwort ein-/ausblenden und gemeinsame Mindestlängen-/Stärkeanzeige

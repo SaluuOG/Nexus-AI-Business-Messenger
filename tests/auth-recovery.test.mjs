@@ -5,19 +5,24 @@ import test from 'node:test';
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('Phase 2.7 wires the complete Supabase password-recovery contract', async () => {
-  const [provider, routes, app] = await Promise.all([
+  const [provider, routes, app, client] = await Promise.all([
     read('src/features/auth/AuthProvider.tsx'),
     read('src/app/routes.ts'),
     read('src/app/App.tsx'),
+    read('src/lib/supabase.ts'),
   ]);
 
   assert.match(provider, /resetPasswordForEmail\(email, \{ redirectTo \}\)/);
   assert.match(provider, /event === 'PASSWORD_RECOVERY'/);
   assert.match(provider, /updateUser\(\{ password \}\)/);
-  assert.match(provider, /buildAuthRedirect\('recovery', routes\.resetPassword\)/);
+  assert.match(provider, /buildAuthRedirect\('recovery'\)/);
   assert.match(provider, /AUTH_CALLBACK_KEYS/);
+  assert.match(provider, /rememberRecoverySession\(true\)/);
   assert.match(routes, /resetPassword: '\/auth\/reset-password'/);
   assert.match(app, /path=\{routes\.resetPassword\}/);
+  assert.match(app, /auth\.recoveryMode \? \(/);
+  assert.match(client, /flowType: 'implicit'/);
+  assert.doesNotMatch(provider, /function buildAuthRedirect[\s\S]{0,300}url\.hash/);
 });
 
 test('Password-reset requests never disclose whether an account exists', async () => {
