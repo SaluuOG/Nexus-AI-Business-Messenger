@@ -196,7 +196,26 @@ function AppShell() {
     <Sidebar workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onWorkspaceChange={setSelectedWorkspaceId} workspaceRole={currentWorkspaceRole} workspaceLoading={dataLoading} identity={identity} accountName={accountName} accountSubtitle={accountSubtitle} />
     <main><Routes>
       <Route path="/" element={<Navigate to={routes.briefing} replace />} />
-      <Route path={routes.briefing} element={<BriefingPage openChat={() => navigate(routes.chats)} displayName={accountName} />} />
+      <Route
+        path={routes.briefing}
+        element={
+          <BriefingPage
+            openChat={() => navigate(routes.chats)}
+            openBusiness={(target) => {
+              const params = new URLSearchParams();
+              if (target?.view) params.set('view', target.view);
+              if (target?.projectId) params.set('project', target.projectId);
+              if (target?.taskId) params.set('task', target.taskId);
+              const query = params.toString();
+              navigate(routes.business + (query ? '?' + query : ''));
+            }}
+            displayName={accountName}
+            workspaceId={selectedWorkspaceId}
+            workspaceName={workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.name}
+            currentUserId={auth.user?.id}
+          />
+        }
+      />
       <Route path={routes.chats} element={<ChatsPage currentUserId={auth.user?.id} requestedConversationId={requestedConversationId} onRequestedConversationHandled={() => setRequestedConversationId(null)} />} />
       <Route path={routes.groups} element={<GroupChatsPage currentUserId={auth.user?.id} />} />
       <Route path={routes.contacts} element={<ContactsPage onStartChat={startContactChat} />} />

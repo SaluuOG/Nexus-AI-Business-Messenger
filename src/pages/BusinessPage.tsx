@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Header } from '../components/Header';
 import { ProjectTasksPanel } from '../components/ProjectTasksPanel';
 import {
@@ -198,13 +199,19 @@ function normalizeWebsite(value: string) {
 }
 
 export function BusinessPage({ workspaceId, workspaceName, workspaceRole, currentUserId }: BusinessPageProps) {
-  const [view, setView] = useState<'projects' | 'customers' | 'tasks'>('projects');
+  const [searchParams] = useSearchParams();
+  const requestedView = searchParams.get('view');
+  const requestedProjectId = searchParams.get('project');
+  const requestedTaskId = searchParams.get('task');
+  const [view, setView] = useState<'projects' | 'customers' | 'tasks'>(
+    requestedView === 'tasks' || requestedView === 'customers' ? requestedView : 'projects',
+  );
   const [customers, setCustomers] = useState<NexusCustomer[]>([]);
   const [projects, setProjects] = useState<NexusProject[]>([]);
   const [tasks, setTasks] = useState<NexusProjectTask[]>([]);
   const [members, setMembers] = useState<NexusWorkspaceMember[]>([]);
   const [taskError, setTaskError] = useState<string | null>(null);
-  const [taskProjectId, setTaskProjectId] = useState('all');
+  const [taskProjectId, setTaskProjectId] = useState(requestedProjectId || 'all');
   const [query, setQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState<ProjectStatus | 'all'>('all');
   const [customerFilter, setCustomerFilter] = useState<CustomerStatus | 'all'>('all');
@@ -217,6 +224,27 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(emptyCustomerDraft);
   const [projectDraft, setProjectDraft] = useState<ProjectDraft>(emptyProjectDraft);
   const requestVersion = useRef(0);
+
+  useEffect(() => {
+    const nextView =
+      requestedView === 'tasks' || requestedView === 'customers'
+        ? requestedView
+        : requestedTaskId
+          ? 'tasks'
+          : requestedProjectId
+            ? 'projects'
+            : null;
+    if (nextView) setView(nextView);
+    if (requestedProjectId) setTaskProjectId(requestedProjectId);
+  }, [requestedProjectId, requestedTaskId, requestedView]);
+
+  useEffect(() => {
+    if (!requestedProjectId || view === 'tasks' || !projects.length) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById('nexus-project-' + requestedProjectId)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [projects.length, requestedProjectId, view]);
 
   const canCreate = workspaceRole === 'owner' || workspaceRole === 'admin';
   const canEdit = canCreate || workspaceRole === 'member';
@@ -621,7 +649,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
             </div>}
           </div>
 
-          {view === 'tasks' ? <ProjectTasksPanel key={`${workspaceId}:${taskProjectId}`} workspaceId={workspaceId} currentUserId={currentUserId} tasks={tasks} projects={projects} members={members} defaultProjectId={taskProjectId} loading={loading} loadError={taskError} onRefresh={() => refresh(false)} /> : loading && customers.length === 0 && projects.length === 0 ? (
+          {view === 'tasks' ? <ProjectTasksPanel key={`${workspaceId}:${taskProjectId}`} workspaceId={workspaceId} currentUserId={currentUserId} tasks={tasks} projects={projects} members={members} defaultProjectId={taskProjectId} initialTaskId={requestedTaskId} loading={loading} loadError={taskError} onRefresh={() => refresh(false)} /> : loading && customers.length === 0 && projects.length === 0 ? (
             <div className="panel business-loading">Business-Daten werden geladen…</div>
           ) : view === 'projects' ? (
             visibleProjects.length === 0 ? (
@@ -649,7 +677,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
                       project.deadline < today,
                   );
                   return (
-                    <article className="business-project-card panel" key={project.id}>
+                    <article id={'nexus-project-' + project.id} className={'business-project-card panel ' + (requestedProjectId === project.id ? 'briefing-focus-project' : '')} key={project.id}>
                       <div className="business-project-main">
                         <div className="business-project-icon"><FolderKanban size={19} /></div>
                         <div>

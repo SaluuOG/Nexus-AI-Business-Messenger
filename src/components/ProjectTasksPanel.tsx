@@ -17,6 +17,7 @@ type Props = {
   projects: NexusProject[];
   members: NexusWorkspaceMember[];
   defaultProjectId: string;
+  initialTaskId?: string | null;
   loading: boolean;
   loadError: string | null;
   onRefresh: () => Promise<void>;
@@ -26,7 +27,7 @@ function dueLabel(value: string | null) {
   return value ? new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : 'Keine Deadline';
 }
 
-export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects, members, defaultProjectId, loading, loadError, onRefresh }: Props) {
+export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects, members, defaultProjectId, initialTaskId, loading, loadError, onRefresh }: Props) {
   const [filters, setFilters] = useState<TaskFilters>({ query: '', project: defaultProjectId, status: 'all', assignee: 'all' });
   const [editor, setEditor] = useState<NexusProjectTask | 'new' | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -41,6 +42,16 @@ export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects,
     const interval = window.setInterval(() => setToday(localDateKey()), 60_000);
     return () => { mounted.current = false; window.clearInterval(interval); };
   }, []);
+
+  useEffect(() => {
+    const task = initialTaskId ? tasks.find((item) => item.id === initialTaskId) : null;
+    if (!task) return;
+    setFilters((current) => current.project === 'all' || current.project === task.project_id ? current : { ...current, project: 'all' });
+    const timer = window.setTimeout(() => {
+      document.getElementById('nexus-task-' + task.id)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [initialTaskId, tasks]);
 
   const membersById = useMemo(() => new Map(members.map(member => [member.user_id, member])), [members]);
   const projectNames = useMemo(() => new Map(projects.map(project => [project.id, project.title])), [projects]);
@@ -135,7 +146,7 @@ export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects,
       <div className="task-list">{visibleTasks.map(task => {
         const overdue = taskIsOverdue(task, today);
         const dueToday = task.status !== 'done' && task.due_date === today;
-        return <article className={`panel task-card ${task.status === 'done' ? 'is-done' : ''}`} key={task.id} aria-label={task.title}>
+        return <article id={'nexus-task-' + task.id} className={`panel task-card ${task.status === 'done' ? 'is-done' : ''} ${initialTaskId === task.id ? 'is-focused' : ''}`} key={task.id} aria-label={task.title}>
           <div className="task-card-main">
             <span className={`task-state-dot task-${task.status}`} aria-hidden="true" />
             <div><span className="task-project-name">{projectNames.get(task.project_id) ?? 'Projekt nicht verfügbar'}</span><h3>{task.title}</h3>{task.description && <p>{task.description}</p>}</div>
