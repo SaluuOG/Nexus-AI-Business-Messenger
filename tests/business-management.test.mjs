@@ -48,8 +48,7 @@ test('Business data layer includes persistent CRUD and realtime synchronization'
     'updateProject',
     'deleteProject',
     'subscribeToBusinessWorkspace',
-    "table: 'customers'",
-    "table: 'projects'",
+    "'customers', 'projects', 'project_tasks', 'workspace_members'",
     'removeChannel',
   ]) {
     assert.ok(data.includes(token), `Business-Datenfluss fehlt: ${token}`);

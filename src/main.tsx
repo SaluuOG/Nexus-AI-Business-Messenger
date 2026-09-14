@@ -9,6 +9,7 @@ import './password.css';
 import './settings-data.css';
 import './contacts-data.css';
 import './business-data.css';
+import './project-tasks.css';
 import './chat-data.css';
 import './group-chat.css';
 import './group-management.css';

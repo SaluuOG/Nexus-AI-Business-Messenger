@@ -1,5 +1,8 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
+import { loadWorkspaceMembers, type NexusWorkspaceMember } from './nexusData';
+import type { TaskStatus } from './projectTasks';
+export { taskStatuses, type TaskStatus } from './projectTasks';
 
 export const customerStatuses = ['lead', 'active', 'inactive'] as const;
 export const projectStatuses = [
@@ -48,6 +51,22 @@ export type NexusProject = {
   updated_at: string;
 };
 
+export type NexusProjectTask = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  title: string;
+  status: TaskStatus;
+  priority: ProjectPriority;
+  assigned_to: string | null;
+  due_date: string | null;
+  description: string | null;
+  completed_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CustomerInput = Pick<NexusCustomer, 'name' | 'status'> &
   Partial<Pick<NexusCustomer, 'contact_name' | 'email' | 'phone' | 'website' | 'notes'>>;
 
@@ -58,6 +77,11 @@ export type ProjectInput = Pick<
   customer_id?: string | null;
 };
 
+export type ProjectTaskInput = Pick<
+  NexusProjectTask,
+  'project_id' | 'title' | 'status' | 'priority' | 'assigned_to' | 'due_date' | 'description'
+>;
+
 type DatabaseProject = Omit<NexusProject, 'value_cents' | 'progress'> & {
   value_cents: number | string;
   progress: number | string;
@@ -67,6 +91,8 @@ const customerColumns =
   'id, workspace_id, name, contact_name, email, phone, website, status, notes, created_by, created_at, updated_at';
 const projectColumns =
   'id, workspace_id, customer_id, title, status, priority, value_cents, currency, deadline, progress, description, created_by, created_at, updated_at';
+const taskColumns =
+  'id, workspace_id, project_id, title, status, priority, assigned_to, due_date, description, completed_at, created_by, created_at, updated_at';
 
 function nullableText(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -89,7 +115,10 @@ function publicBusinessError(message: string | undefined, fallback: string) {
     return 'Deine Workspace-Rolle erlaubt diese Aktion nicht.';
   }
   if (normalized.includes('same workspace') || normalized.includes('selben workspace')) {
-    return 'Kunde und Projekt müssen zum selben Workspace gehören.';
+    return 'Die verknüpften Datensätze müssen zum selben Workspace gehören.';
+  }
+  if (normalized.includes('verantwortliche personen')) {
+    return 'Die verantwortliche Person muss ein aktives Team-Mitglied mit Schreibrecht sein.';
   }
   if (normalized.includes('duplicate key')) {
     return 'Dieser Datensatz ist bereits vorhanden.';
@@ -103,11 +132,14 @@ export async function loadBusinessWorkspace(workspaceId: string) {
     return {
       customers: [] as NexusCustomer[],
       projects: [] as NexusProject[],
+      tasks: [] as NexusProjectTask[],
+      members: [] as NexusWorkspaceMember[],
+      taskError: 'Supabase ist nicht konfiguriert.',
       error: 'Supabase ist nicht konfiguriert.',
     };
   }
 
-  const [customerResult, projectResult] = await Promise.all([
+  const [customerResult, projectResult, taskResult, memberResult] = await Promise.all([
     supabase
       .from('customers')
       .select(customerColumns)
@@ -118,16 +150,34 @@ export async function loadBusinessWorkspace(workspaceId: string) {
       .select(projectColumns)
       .eq('workspace_id', workspaceId)
       .order('updated_at', { ascending: false }),
+    loadProjectTasks(workspaceId),
+    loadWorkspaceMembers(workspaceId),
   ]);
 
   return {
     customers: (customerResult.data ?? []) as NexusCustomer[],
     projects: ((projectResult.data ?? []) as DatabaseProject[]).map(normalizeProject),
+    tasks: (taskResult.data ?? []) as NexusProjectTask[],
+    members: memberResult.data,
+    taskError: taskResult.error || (memberResult.error ? 'Das Team konnte nicht geladen werden. Bitte aktualisieren.' : null),
     error:
       publicBusinessError(customerResult.error?.message, 'Kunden konnten nicht geladen werden.') ||
       publicBusinessError(projectResult.error?.message, 'Projekte konnten nicht geladen werden.') ||
       null,
   };
+}
+
+async function loadProjectTasks(workspaceId: string) {
+  const tasks: NexusProjectTask[] = [];
+  if (!supabase) return { data: tasks, error: 'Supabase ist nicht konfiguriert.' };
+  // Read every page so counters and filters never silently omit tasks at the API row limit.
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await supabase.from('project_tasks').select(taskColumns)
+      .eq('workspace_id', workspaceId).order('id').range(offset, offset + 499);
+    if (error) return { data: [] as NexusProjectTask[], error: publicBusinessError(error.message, 'Aufgaben konnten nicht geladen werden.') };
+    tasks.push(...(data ?? []) as NexusProjectTask[]);
+    if (!data || data.length < 500) return { data: tasks, error: null };
+  }
 }
 
 export async function createCustomer(workspaceId: string, input: CustomerInput) {
@@ -259,22 +309,97 @@ export async function deleteProject(projectId: string) {
   };
 }
 
+export async function createProjectTask(workspaceId: string, input: ProjectTaskInput) {
+  if (!supabase) return { data: null, error: 'Supabase ist nicht konfiguriert.' };
+
+  const { data, error } = await supabase
+    .from('project_tasks')
+    .insert({
+      workspace_id: workspaceId,
+      project_id: input.project_id,
+      title: input.title.trim(),
+      status: input.status,
+      priority: input.priority,
+      assigned_to: input.assigned_to || null,
+      due_date: input.due_date || null,
+      description: nullableText(input.description),
+    })
+    .select(taskColumns)
+    .single();
+
+  return {
+    data: data as NexusProjectTask | null,
+    error: publicBusinessError(error?.message, 'Die Aufgabe konnte nicht angelegt werden.'),
+  };
+}
+
+export async function updateProjectTask(workspaceId: string, taskId: string, input: ProjectTaskInput, expectedUpdatedAt: string) {
+  if (!supabase) return { data: null, error: 'Supabase ist nicht konfiguriert.' };
+
+  const { data, error } = await supabase
+    .from('project_tasks')
+    .update({
+      project_id: input.project_id,
+      title: input.title.trim(),
+      status: input.status,
+      priority: input.priority,
+      assigned_to: input.assigned_to || null,
+      due_date: input.due_date || null,
+      description: nullableText(input.description),
+    })
+    .eq('id', taskId)
+    .eq('workspace_id', workspaceId)
+    .eq('updated_at', expectedUpdatedAt)
+    .select(taskColumns)
+    .maybeSingle();
+
+  return {
+    data: data as NexusProjectTask | null,
+    error: publicBusinessError(error?.message, 'Die Aufgabe konnte nicht gespeichert werden.') || (!data ? taskConflictError : null),
+  };
+}
+
+const taskConflictError = 'Die Aufgabe wurde inzwischen geändert oder entfernt, oder deine Berechtigung fehlt. Bitte aktualisiere und öffne sie erneut.';
+
+export async function updateProjectTaskStatus(workspaceId: string, task: NexusProjectTask, status: TaskStatus) {
+  if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
+  const { data, error } = await supabase.from('project_tasks').update({ status })
+    .eq('id', task.id).eq('workspace_id', workspaceId).eq('updated_at', task.updated_at)
+    .select('id').maybeSingle();
+  return { error: publicBusinessError(error?.message, 'Der Aufgabenstatus konnte nicht gespeichert werden.') || (!data ? taskConflictError : null) };
+}
+
+export async function deleteProjectTask(workspaceId: string, task: NexusProjectTask) {
+  if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
+  const { data, error } = await supabase
+    .from('project_tasks')
+    .delete()
+    .eq('id', task.id)
+    .eq('workspace_id', workspaceId)
+    .eq('updated_at', task.updated_at)
+    .select('id')
+    .maybeSingle();
+
+  return {
+    error:
+      publicBusinessError(error?.message, 'Die Aufgabe konnte nicht gelöscht werden.') ||
+      (!data ? taskConflictError : null),
+  };
+}
+
 export function subscribeToBusinessWorkspace(workspaceId: string, onChanged: () => void) {
   if (!supabase) return null;
 
-  return supabase
-    .channel(`business-workspace:${workspaceId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'customers', filter: `workspace_id=eq.${workspaceId}` },
-      onChanged,
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'projects', filter: `workspace_id=eq.${workspaceId}` },
-      onChanged,
-    )
-    .subscribe();
+  const channel = supabase.channel(`business-workspace:${workspaceId}:${crypto.randomUUID()}`);
+  for (const table of ['customers', 'projects', 'project_tasks', 'workspace_members']) {
+    channel
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter: `workspace_id=eq.${workspaceId}` }, onChanged)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table, filter: `workspace_id=eq.${workspaceId}` }, onChanged)
+      // DELETE payloads carry primary keys only under RLS. Refetch through the
+      // authorized API; never depend on an unavailable workspace_id filter.
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table }, onChanged);
+  }
+  return channel.subscribe(status => { if (status === 'SUBSCRIBED') onChanged(); });
 }
 
 export async function unsubscribeBusinessWorkspace(channel: RealtimeChannel | null) {

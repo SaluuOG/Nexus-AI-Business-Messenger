@@ -204,9 +204,11 @@ function AppShell() {
         path={routes.business}
         element={
           <BusinessPage
+            key={selectedWorkspaceId}
             workspaceId={selectedWorkspaceId}
             workspaceName={workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.name}
             workspaceRole={currentWorkspaceRole}
+            currentUserId={auth.user?.id}
           />
         }
       />

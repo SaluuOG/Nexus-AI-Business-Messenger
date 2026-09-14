@@ -150,6 +150,24 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Workspace und Ersteller eines Datensatzes sind serverseitig gegen Manipulation geschützt
 - beim Löschen eines Kunden bleiben zugehörige Projekte sicher erhalten
 
+### Phase 3.2 — Projektaufgaben, Zuständigkeiten & Deadlines ✅
+- Migration `0021_project_tasks.sql` mit geschützter Tabelle `project_tasks`
+- Aufgaben direkt aus einer Projektkarte oder im Business-Reiter „Aufgaben“ öffnen
+- Titel, Beschreibung, Projekt, verantwortliche Person, Priorität und Deadline
+- Status: Offen, In Arbeit, Zur Prüfung, Blockiert und Erledigt; direkt in der Liste änderbar
+- Projekt-/Personen-/Statusfilter sowie Suche und „Meine Aufgaben“
+- Kennzahlen für offene, heute fällige und überfällige Aufgaben; erledigte Aufgaben zählen nicht als überfällig
+- Aufgabenfortschritt aus erledigten Aufgaben je Projekt; der bestehende manuelle Projektfortschritt bleibt separat
+- Warnhinweis, wenn eine Aufgabe nach der Projekt-Deadline fällig wird
+- Owner/Admin können Aufgaben anlegen, bearbeiten und löschen; Member anlegen und bearbeiten; Guest lesen
+- Zuständigkeiten nur für schreibberechtigte Team-Mitglieder; Entfernung oder Herabstufung zum Guest gibt Aufgaben automatisch frei
+- Workspace-Trennung durch RLS und zusammengesetzte Fremdschlüssel; Audit-Felder sind nicht vom Browser beschreibbar
+- Gleichzeitige Bearbeitung wird über die gespeicherte Version erkannt, damit Änderungen nicht unbemerkt überschrieben werden
+- Realtime für Aufgaben- und Teamänderungen, einschließlich Löschungen; erneutes Laden bei Rückkehr zum Tab
+- Projektlöschung entfernt nach ausdrücklicher Bestätigung auch die zugehörigen Aufgaben
+- Funktionstests für Filter, Rollen, Datenzugriff, Seitengrenzen, Konflikte und gerenderte Oberfläche
+- `tests/sql/project-tasks-rls.sql` prüft Owner/Admin/Member/Guest, Workspace-Trennung und Löschketten in einer vollständig zurückgerollten Transaktion
+
 ## Routen
 - `#/auth`
 - `#/auth/reset-password`

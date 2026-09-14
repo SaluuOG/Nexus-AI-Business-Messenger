@@ -5,6 +5,7 @@ import {
   FolderKanban,
   Globe2,
   Mail,
+  ListTodo,
   Phone,
   Plus,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Header } from '../components/Header';
+import { ProjectTasksPanel } from '../components/ProjectTasksPanel';
 import {
   createCustomer,
   createProject,
@@ -34,16 +36,18 @@ import {
   type CustomerStatus,
   type NexusCustomer,
   type NexusProject,
+  type NexusProjectTask,
   type ProjectInput,
   type ProjectPriority,
   type ProjectStatus,
 } from '../features/data/businessData';
-import type { WorkspaceRole } from '../features/data/nexusData';
+import type { NexusWorkspaceMember, WorkspaceRole } from '../features/data/nexusData';
 
 type BusinessPageProps = {
   workspaceId: string | null;
   workspaceName?: string;
   workspaceRole?: WorkspaceRole;
+  currentUserId?: string;
 };
 
 type CustomerDraft = {
@@ -193,10 +197,14 @@ function normalizeWebsite(value: string) {
   }
 }
 
-export function BusinessPage({ workspaceId, workspaceName, workspaceRole }: BusinessPageProps) {
-  const [view, setView] = useState<'projects' | 'customers'>('projects');
+export function BusinessPage({ workspaceId, workspaceName, workspaceRole, currentUserId }: BusinessPageProps) {
+  const [view, setView] = useState<'projects' | 'customers' | 'tasks'>('projects');
   const [customers, setCustomers] = useState<NexusCustomer[]>([]);
   const [projects, setProjects] = useState<NexusProject[]>([]);
+  const [tasks, setTasks] = useState<NexusProjectTask[]>([]);
+  const [members, setMembers] = useState<NexusWorkspaceMember[]>([]);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const [taskProjectId, setTaskProjectId] = useState('all');
   const [query, setQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState<ProjectStatus | 'all'>('all');
   const [customerFilter, setCustomerFilter] = useState<CustomerStatus | 'all'>('all');
@@ -220,18 +228,27 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole }: Busi
       if (!workspaceId) {
         setCustomers([]);
         setProjects([]);
+        setTasks([]); setMembers([]); setTaskError(null);
         setError(null);
         setLoading(false);
         return;
       }
 
       if (showLoader) setLoading(true);
-      const result = await loadBusinessWorkspace(workspaceId);
-      if (requestId !== requestVersion.current) return;
-      setCustomers(result.customers);
-      setProjects(result.projects);
-      setError(result.error);
-      setLoading(false);
+      try {
+        const result = await loadBusinessWorkspace(workspaceId);
+        if (requestId !== requestVersion.current) return;
+        setCustomers(result.customers);
+        setProjects(result.projects);
+        setTasks(result.tasks); setMembers(result.members); setTaskError(result.taskError);
+        setError(result.error);
+      } catch {
+        if (requestId !== requestVersion.current) return;
+        setError('Business-Daten konnten nicht geladen werden. Bitte erneut aktualisieren.');
+        setTaskError('Aufgaben konnten nicht geladen werden. Bitte erneut aktualisieren.');
+      } finally {
+        if (requestId === requestVersion.current) setLoading(false);
+      }
     },
     [workspaceId],
   );
@@ -243,9 +260,20 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole }: Busi
     void refresh();
 
     if (!workspaceId) return;
-    const channel = subscribeToBusinessWorkspace(workspaceId, () => void refresh(false));
+    let refreshTimer: ReturnType<typeof setTimeout>;
+    const scheduleRefresh = () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => void refresh(false), 150);
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') scheduleRefresh(); };
+    const channel = subscribeToBusinessWorkspace(workspaceId, scheduleRefresh);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', scheduleRefresh);
     return () => {
       requestVersion.current += 1;
+      clearTimeout(refreshTimer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', scheduleRefresh);
       void unsubscribeBusinessWorkspace(channel);
     };
   }, [refresh, workspaceId]);
@@ -276,6 +304,21 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole }: Busi
     }
     return counts;
   }, [projects]);
+
+  const projectTaskCounts = useMemo(() => {
+    const counts = new Map<string, { total: number; done: number }>();
+    for (const task of tasks) {
+      const count = counts.get(task.project_id) ?? { total: 0, done: 0 };
+      count.total++;
+      if (task.status === 'done') count.done++;
+      counts.set(task.project_id, count);
+    }
+    return counts;
+  }, [tasks]);
+
+  const openTasks = (projectId = 'all') => {
+    setTaskProjectId(projectId); setView('tasks');
+  };
 
   const normalizedQuery = query.trim().toLocaleLowerCase('de-DE');
   const visibleProjects = projects.filter((project) => {
@@ -441,7 +484,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole }: Busi
   };
 
   const removeProject = async (project: NexusProject) => {
-    if (!window.confirm(`${project.title} wirklich dauerhaft löschen?`)) return;
+    if (!window.confirm(`${project.title} und alle zugehörigen Aufgaben wirklich dauerhaft löschen?`)) return;
     setError(null);
     const result = await deleteProject(project.id);
     if (result.error) {
@@ -500,8 +543,8 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole }: Busi
             {workspaceRole === 'guest'
               ? 'Guest: Du kannst Business-Daten ansehen.'
               : workspaceRole === 'member'
-                ? 'Member: Du kannst Kunden und Projekte bearbeiten.'
-                : 'Owner/Admin: Du kannst Kunden und Projekte vollständig verwalten.'}
+                ? 'Member: Kunden und Projekte bearbeiten sowie Aufgaben anlegen und bearbeiten.'
+                : 'Owner/Admin: Kunden, Projekte und Aufgaben vollständig verwalten.'}
           </div>
 
           <div className="business-stats">
@@ -541,8 +584,11 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole }: Busi
               >
                 Kunden <span>{customers.length}</span>
               </button>
+              <button className={view === 'tasks' ? 'active' : ''} onClick={() => openTasks()} role="tab" aria-selected={view === 'tasks'}>
+                Aufgaben <span>{tasks.length}</span>
+              </button>
             </div>
-            <div className="business-filters">
+            {view !== 'tasks' && <div className="business-filters">
               <label className="business-search">
                 <Search size={15} />
                 <input
@@ -572,10 +618,10 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole }: Busi
                   ))}
                 </select>
               )}
-            </div>
+            </div>}
           </div>
 
-          {loading && customers.length === 0 && projects.length === 0 ? (
+          {view === 'tasks' ? <ProjectTasksPanel key={`${workspaceId}:${taskProjectId}`} workspaceId={workspaceId} currentUserId={currentUserId} tasks={tasks} projects={projects} members={members} defaultProjectId={taskProjectId} loading={loading} loadError={taskError} onRefresh={() => refresh(false)} /> : loading && customers.length === 0 && projects.length === 0 ? (
             <div className="panel business-loading">Business-Daten werden geladen…</div>
           ) : view === 'projects' ? (
             visibleProjects.length === 0 ? (
@@ -624,12 +670,11 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole }: Busi
                       <div className="business-progress" aria-label={`${project.progress} Prozent abgeschlossen`}>
                         <i style={{ width: `${project.progress}%` }} />
                       </div>
-                      {(canEdit || canDelete) && (
                         <div className="business-card-actions">
+                          <button onClick={() => openTasks(project.id)}><ListTodo size={14} /> Aufgaben {taskError ? '' : `(${projectTaskCounts.get(project.id)?.done ?? 0}/${projectTaskCounts.get(project.id)?.total ?? 0})`}</button>
                           {canEdit && <button onClick={() => openProject(project)}><SquarePen size={14} /> Bearbeiten</button>}
                           {canDelete && <button className="danger" onClick={() => void removeProject(project)}><Trash2 size={14} /> Löschen</button>}
                         </div>
-                      )}
                     </article>
                   );
                 })}
