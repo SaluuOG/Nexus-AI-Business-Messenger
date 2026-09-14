@@ -40,7 +40,11 @@ try {
 
       await page.setViewportSize({ width: 390, height: 844 });
       assert.equal(await today.locator('.briefing-item-side').first().isVisible(), true);
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+      const overflow = await page.evaluate(() => ({
+        width: window.innerWidth, scrollWidth: document.documentElement.scrollWidth,
+        elements: [...document.querySelectorAll('body *')].filter(el => el.getBoundingClientRect().right > window.innerWidth + 1).slice(0, 12).map(el => ({ tag: el.tagName, class: el.className, width: el.getBoundingClientRect().width })),
+      }));
+      assert.ok(overflow.scrollWidth <= overflow.width, JSON.stringify(overflow));
       await page.screenshot({ path: 'browser-results/' + name + '-mobile.png', fullPage: true });
       await page.setViewportSize({ width: 1440, height: 1000 });
 
