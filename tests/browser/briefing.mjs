@@ -84,7 +84,7 @@ try {
       await page.evaluate(() => window.nexusTest.connection('SUBSCRIBED'));
       await page.getByText('Automatische Aktualisierung', { exact: true }).waitFor();
 
-      await page.getByRole('button', { name: /Überfälliges Projekt/ }).click();
+      await page.getByRole('region', { name: 'Projekte im Blick' }).getByRole('button', { name: /Überfälliges Projekt/ }).click();
       await page.locator('.business-project-card').getByRole('heading', { name: 'Überfälliges Projekt', exact: true }).waitFor();
       assert.equal(await page.locator('.business-project-card').count(), 1);
       await page.getByRole('button', { name: 'Alle Projekte anzeigen', exact: true }).click();
@@ -96,6 +96,7 @@ try {
 
       // Workspace switching must discard slow responses and use guest permissions.
       await page.evaluate(() => { window.nexusTest.delayWorkspace = 'w1'; window.nexusTest.emit(); });
+      await page.waitForTimeout(250);
       await page.locator('.workspace select').selectOption('w2');
       await page.getByRole('button', { name: /Aufgabe im zweiten Team/ }).waitFor();
       await page.waitForTimeout(900);
