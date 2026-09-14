@@ -137,6 +137,19 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - angemeldete Nutzer können ihr Passwort direkt in den Einstellungen ändern
 - automatisierte Vertrags-, UI- und Sicherheitschecks für den Recovery-Fluss
 
+### Phase 3.1 — Echte Kunden- und Projektverwaltung ✅
+- Migration `0020_business_management.sql` mit echten `customers`- und `projects`-Tabellen
+- Kunden mit Status, Ansprechpartner, E-Mail, Telefon, Website und Notizen
+- Projekte mit Kundenzuordnung, Status, Priorität, Auftragswert, Deadline, Fortschritt und Beschreibung
+- vollständiges Anlegen, Bearbeiten und Löschen über die Business-Oberfläche
+- Suche und Statusfilter für Kunden und Projekte
+- Live-Kennzahlen für Kunden, offene Projekte, Auftragswert und überfällige Deadlines
+- Supabase Realtime synchronisiert Business-Änderungen im Team
+- strikte Workspace-Trennung per Row Level Security
+- Rollenmodell: Owner/Admin vollständig, Member bearbeiten, Guest lesen
+- Workspace und Ersteller eines Datensatzes sind serverseitig gegen Manipulation geschützt
+- beim Löschen eines Kunden bleiben zugehörige Projekte sicher erhalten
+
 ## Routen
 - `#/auth`
 - `#/auth/reset-password`

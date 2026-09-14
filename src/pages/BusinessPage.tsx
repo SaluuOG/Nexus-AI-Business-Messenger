@@ -1,35 +1,746 @@
+import {
+  Building2,
+  CalendarDays,
+  CircleDollarSign,
+  FolderKanban,
+  Globe2,
+  Mail,
+  Phone,
+  Plus,
+  RefreshCw,
+  Search,
+  SquarePen,
+  Trash2,
+  UserRound,
+  UsersRound,
+  X,
+} from 'lucide-react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Header } from '../components/Header';
+import {
+  createCustomer,
+  createProject,
+  customerStatuses,
+  deleteCustomer,
+  deleteProject,
+  loadBusinessWorkspace,
+  projectPriorities,
+  projectStatuses,
+  subscribeToBusinessWorkspace,
+  unsubscribeBusinessWorkspace,
+  updateCustomer,
+  updateProject,
+  type CustomerInput,
+  type CustomerStatus,
+  type NexusCustomer,
+  type NexusProject,
+  type ProjectInput,
+  type ProjectPriority,
+  type ProjectStatus,
+} from '../features/data/businessData';
+import type { WorkspaceRole } from '../features/data/nexusData';
 
-const projects = [
-  ['Autohaus Müller', 'In Arbeit', '2.400 €', 'Montag', '72%'],
-  ['Restaurant Bella', 'Review', '1.850 €', 'Morgen', '91%'],
-  ['Zahnarzt Meier', 'Wartet auf Kunde', '1.600 €', '28. Sep', '54%'],
-] as const;
+type BusinessPageProps = {
+  workspaceId: string | null;
+  workspaceName?: string;
+  workspaceRole?: WorkspaceRole;
+};
 
-export function BusinessPage() {
+type CustomerDraft = {
+  name: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  website: string;
+  status: CustomerStatus;
+  notes: string;
+};
+
+type ProjectDraft = {
+  title: string;
+  customerId: string;
+  status: ProjectStatus;
+  priority: ProjectPriority;
+  value: string;
+  deadline: string;
+  progress: string;
+  description: string;
+};
+
+const customerStatusLabels: Record<CustomerStatus, string> = {
+  lead: 'Lead',
+  active: 'Aktiv',
+  inactive: 'Inaktiv',
+};
+
+const projectStatusLabels: Record<ProjectStatus, string> = {
+  planning: 'Planung',
+  active: 'In Arbeit',
+  review: 'Review',
+  waiting_customer: 'Wartet auf Kunde',
+  completed: 'Abgeschlossen',
+  archived: 'Archiviert',
+};
+
+const projectPriorityLabels: Record<ProjectPriority, string> = {
+  low: 'Niedrig',
+  medium: 'Normal',
+  high: 'Hoch',
+  urgent: 'Dringend',
+};
+
+const emptyCustomerDraft: CustomerDraft = {
+  name: '',
+  contactName: '',
+  email: '',
+  phone: '',
+  website: '',
+  status: 'lead',
+  notes: '',
+};
+
+const emptyProjectDraft: ProjectDraft = {
+  title: '',
+  customerId: '',
+  status: 'planning',
+  priority: 'medium',
+  value: '',
+  deadline: '',
+  progress: '0',
+  description: '',
+};
+
+const activeProjectStatuses: ProjectStatus[] = [
+  'planning',
+  'active',
+  'review',
+  'waiting_customer',
+];
+
+function formatMoney(cents: number, currency = 'EUR') {
+  try {
+    return new Intl.NumberFormat('de-DE', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 2,
+    }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${currency}`;
+  }
+}
+
+function formatDate(value: string | null) {
+  if (!value) return 'Keine Deadline';
+  return new Intl.DateTimeFormat('de-DE', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(`${value}T12:00:00`));
+}
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function websiteUrl(value: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function customerDraftFrom(customer: NexusCustomer): CustomerDraft {
+  return {
+    name: customer.name,
+    contactName: customer.contact_name ?? '',
+    email: customer.email ?? '',
+    phone: customer.phone ?? '',
+    website: customer.website ?? '',
+    status: customer.status,
+    notes: customer.notes ?? '',
+  };
+}
+
+function projectDraftFrom(project: NexusProject): ProjectDraft {
+  return {
+    title: project.title,
+    customerId: project.customer_id ?? '',
+    status: project.status,
+    priority: project.priority,
+    value: (project.value_cents / 100).toFixed(2),
+    deadline: project.deadline ?? '',
+    progress: String(project.progress),
+    description: project.description ?? '',
+  };
+}
+
+function normalizeWebsite(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return { value: '', error: null };
+  const normalized = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(normalized);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('Invalid protocol');
+    return { value: url.toString(), error: null };
+  } catch {
+    return { value: trimmed, error: 'Bitte gib eine gültige Website-Adresse ein.' };
+  }
+}
+
+export function BusinessPage({ workspaceId, workspaceName, workspaceRole }: BusinessPageProps) {
+  const [view, setView] = useState<'projects' | 'customers'>('projects');
+  const [customers, setCustomers] = useState<NexusCustomer[]>([]);
+  const [projects, setProjects] = useState<NexusProject[]>([]);
+  const [query, setQuery] = useState('');
+  const [projectFilter, setProjectFilter] = useState<ProjectStatus | 'all'>('all');
+  const [customerFilter, setCustomerFilter] = useState<CustomerStatus | 'all'>('all');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [customerEditor, setCustomerEditor] = useState<NexusCustomer | 'new' | null>(null);
+  const [projectEditor, setProjectEditor] = useState<NexusProject | 'new' | null>(null);
+  const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(emptyCustomerDraft);
+  const [projectDraft, setProjectDraft] = useState<ProjectDraft>(emptyProjectDraft);
+  const requestVersion = useRef(0);
+
+  const canCreate = workspaceRole === 'owner' || workspaceRole === 'admin';
+  const canEdit = canCreate || workspaceRole === 'member';
+  const canDelete = canCreate;
+
+  const refresh = useCallback(
+    async (showLoader = true) => {
+      const requestId = ++requestVersion.current;
+      if (!workspaceId) {
+        setCustomers([]);
+        setProjects([]);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
+      if (showLoader) setLoading(true);
+      const result = await loadBusinessWorkspace(workspaceId);
+      if (requestId !== requestVersion.current) return;
+      setCustomers(result.customers);
+      setProjects(result.projects);
+      setError(result.error);
+      setLoading(false);
+    },
+    [workspaceId],
+  );
+
+  useEffect(() => {
+    setFeedback(null);
+    setCustomerEditor(null);
+    setProjectEditor(null);
+    void refresh();
+
+    if (!workspaceId) return;
+    const channel = subscribeToBusinessWorkspace(workspaceId, () => void refresh(false));
+    return () => {
+      requestVersion.current += 1;
+      void unsubscribeBusinessWorkspace(channel);
+    };
+  }, [refresh, workspaceId]);
+
+  useEffect(() => {
+    if (!customerEditor && !projectEditor) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !saving) {
+        setCustomerEditor(null);
+        setProjectEditor(null);
+      }
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [customerEditor, projectEditor, saving]);
+
+  const customerById = useMemo(
+    () => new Map(customers.map((customer) => [customer.id, customer])),
+    [customers],
+  );
+
+  const projectCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const project of projects) {
+      if (project.customer_id) {
+        counts.set(project.customer_id, (counts.get(project.customer_id) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [projects]);
+
+  const normalizedQuery = query.trim().toLocaleLowerCase('de-DE');
+  const visibleProjects = projects.filter((project) => {
+    const customer = project.customer_id ? customerById.get(project.customer_id) : null;
+    const matchesQuery =
+      !normalizedQuery ||
+      project.title.toLocaleLowerCase('de-DE').includes(normalizedQuery) ||
+      customer?.name.toLocaleLowerCase('de-DE').includes(normalizedQuery) ||
+      project.description?.toLocaleLowerCase('de-DE').includes(normalizedQuery);
+    return matchesQuery && (projectFilter === 'all' || project.status === projectFilter);
+  });
+
+  const visibleCustomers = customers.filter((customer) => {
+    const searchable = [
+      customer.name,
+      customer.contact_name,
+      customer.email,
+      customer.phone,
+      customer.website,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLocaleLowerCase('de-DE');
+    return (
+      (!normalizedQuery || searchable.includes(normalizedQuery)) &&
+      (customerFilter === 'all' || customer.status === customerFilter)
+    );
+  });
+
+  const activeProjects = projects.filter((project) => activeProjectStatuses.includes(project.status));
+  const openValue = activeProjects.reduce((sum, project) => sum + project.value_cents, 0);
+  const today = localDateKey();
+  const overdueProjects = activeProjects.filter(
+    (project) => project.deadline && project.deadline < today,
+  ).length;
+
+  const openNewCustomer = () => {
+    setFeedback(null);
+    setError(null);
+    setCustomerDraft(emptyCustomerDraft);
+    setCustomerEditor('new');
+  };
+
+  const openCustomer = (customer: NexusCustomer) => {
+    setFeedback(null);
+    setError(null);
+    setCustomerDraft(customerDraftFrom(customer));
+    setCustomerEditor(customer);
+  };
+
+  const openNewProject = () => {
+    setFeedback(null);
+    setError(null);
+    setProjectDraft(emptyProjectDraft);
+    setProjectEditor('new');
+  };
+
+  const openProject = (project: NexusProject) => {
+    setFeedback(null);
+    setError(null);
+    setProjectDraft(projectDraftFrom(project));
+    setProjectEditor(project);
+  };
+
+  const saveCustomer = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!workspaceId || !customerEditor) return;
+    if (customerDraft.name.trim().length < 2) {
+      setError('Der Kundenname muss mindestens 2 Zeichen lang sein.');
+      return;
+    }
+    if (customerDraft.email && !/^\S+@\S+\.\S+$/.test(customerDraft.email.trim())) {
+      setError('Bitte gib eine gültige E-Mail-Adresse ein.');
+      return;
+    }
+    const website = normalizeWebsite(customerDraft.website);
+    if (website.error) {
+      setError(website.error);
+      return;
+    }
+
+    const input: CustomerInput = {
+      name: customerDraft.name,
+      contact_name: customerDraft.contactName,
+      email: customerDraft.email,
+      phone: customerDraft.phone,
+      website: website.value,
+      status: customerDraft.status,
+      notes: customerDraft.notes,
+    };
+    setSaving(true);
+    setError(null);
+    const result =
+      customerEditor === 'new'
+        ? await createCustomer(workspaceId, input)
+        : await updateCustomer(customerEditor.id, input);
+    setSaving(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    const wasNew = customerEditor === 'new';
+    setCustomerEditor(null);
+    setFeedback(wasNew ? 'Kunde erfolgreich angelegt.' : 'Kunde gespeichert.');
+    await refresh(false);
+  };
+
+  const saveProject = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!workspaceId || !projectEditor) return;
+    const value = Number(projectDraft.value.replace(',', '.') || 0);
+    const progress = Number(projectDraft.progress);
+    if (projectDraft.title.trim().length < 2) {
+      setError('Der Projekttitel muss mindestens 2 Zeichen lang sein.');
+      return;
+    }
+    if (!Number.isFinite(value) || value < 0 || value > 9_999_999_999.99) {
+      setError('Bitte gib einen gültigen Auftragswert ein.');
+      return;
+    }
+    if (!Number.isInteger(progress) || progress < 0 || progress > 100) {
+      setError('Der Fortschritt muss zwischen 0 und 100 Prozent liegen.');
+      return;
+    }
+
+    const input: ProjectInput = {
+      title: projectDraft.title,
+      customer_id: projectDraft.customerId || null,
+      status: projectDraft.status,
+      priority: projectDraft.priority,
+      value_cents: Math.round(value * 100),
+      deadline: projectDraft.deadline || null,
+      progress,
+      description: projectDraft.description,
+    };
+    setSaving(true);
+    setError(null);
+    const result =
+      projectEditor === 'new'
+        ? await createProject(workspaceId, input)
+        : await updateProject(projectEditor.id, input);
+    setSaving(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    const wasNew = projectEditor === 'new';
+    setProjectEditor(null);
+    setFeedback(wasNew ? 'Projekt erfolgreich angelegt.' : 'Projekt gespeichert.');
+    await refresh(false);
+  };
+
+  const removeCustomer = async (customer: NexusCustomer) => {
+    if (!window.confirm(`${customer.name} wirklich löschen? Zugeordnete Projekte bleiben erhalten.`)) return;
+    setError(null);
+    const result = await deleteCustomer(customer.id);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setFeedback('Kunde gelöscht. Zugeordnete Projekte wurden nicht entfernt.');
+    await refresh(false);
+  };
+
+  const removeProject = async (project: NexusProject) => {
+    if (!window.confirm(`${project.title} wirklich dauerhaft löschen?`)) return;
+    setError(null);
+    const result = await deleteProject(project.id);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setFeedback('Projekt gelöscht.');
+    await refresh(false);
+  };
+
   return (
-    <section className="page">
-      <Header
-        kicker="BUSINESS"
-        title="Projekte & Kunden"
-        sub="Jeder Chat kann direkt mit Auftrag, Status, Wert und Deadline verbunden sein."
-      />
-      <div className="panel">
-        <h3>Aktive Projekte</h3>
-        {projects.map((project) => (
-          <div className="project" key={project[0]}>
-            <div>
-              <b>{project[0]}</b>
-              <span>{project[1]}</span>
+    <section className="page business-page">
+      <div className="title-row business-title-row">
+        <Header
+          kicker="BUSINESS"
+          title="Projekte & Kunden"
+          sub={
+            workspaceName
+              ? `Echte Business-Daten im Workspace ${workspaceName}.`
+              : 'Kunden, Aufträge, Status, Wert und Deadlines zentral verwalten.'
+          }
+        />
+        {workspaceId && (
+          <div className="business-header-actions">
+            <button className="secondary" onClick={() => void refresh()} disabled={loading}>
+              <RefreshCw size={15} />
+              {loading ? 'Lädt…' : 'Aktualisieren'}
+            </button>
+            {canCreate && (
+              <>
+                <button className="secondary" onClick={openNewCustomer}>
+                  <Plus size={15} /> Kunde
+                </button>
+                <button className="primary" onClick={openNewProject}>
+                  <Plus size={15} /> Projekt
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {!workspaceId ? (
+        <div className="panel business-empty-state">
+          <Building2 size={34} />
+          <b>Kein Workspace ausgewählt</b>
+          <span>Lege in den Einstellungen einen Workspace an oder wähle links einen bestehenden aus.</span>
+        </div>
+      ) : (
+        <>
+          {error && <div className="data-alert business-alert">{error}</div>}
+          {feedback && <div className="contact-feedback business-feedback">{feedback}</div>}
+
+          <div className="business-role-note">
+            <UsersRound size={14} />
+            {workspaceRole === 'guest'
+              ? 'Guest: Du kannst Business-Daten ansehen.'
+              : workspaceRole === 'member'
+                ? 'Member: Du kannst Kunden und Projekte bearbeiten.'
+                : 'Owner/Admin: Du kannst Kunden und Projekte vollständig verwalten.'}
+          </div>
+
+          <div className="business-stats">
+            <div className="stat business-stat">
+              <Building2 size={18} />
+              <div><b>{customers.length}</b><span>Kunden</span></div>
             </div>
-            <strong>{project[2]}</strong>
-            <small>{project[3]}</small>
-            <div className="bar">
-              <i style={{ width: project[4] }} />
+            <div className="stat business-stat">
+              <FolderKanban size={18} />
+              <div><b>{activeProjects.length}</b><span>Offene Projekte</span></div>
+            </div>
+            <div className="stat business-stat">
+              <CircleDollarSign size={18} />
+              <div><b>{formatMoney(openValue)}</b><span>Offener Auftragswert</span></div>
+            </div>
+            <div className={`stat business-stat ${overdueProjects ? 'is-alert' : ''}`}>
+              <CalendarDays size={18} />
+              <div><b>{overdueProjects}</b><span>Überfällige Deadlines</span></div>
             </div>
           </div>
-        ))}
-      </div>
+
+          <div className="business-toolbar panel">
+            <div className="business-tabs" role="tablist" aria-label="Business-Bereich">
+              <button
+                className={view === 'projects' ? 'active' : ''}
+                onClick={() => setView('projects')}
+                role="tab"
+                aria-selected={view === 'projects'}
+              >
+                Projekte <span>{projects.length}</span>
+              </button>
+              <button
+                className={view === 'customers' ? 'active' : ''}
+                onClick={() => setView('customers')}
+                role="tab"
+                aria-selected={view === 'customers'}
+              >
+                Kunden <span>{customers.length}</span>
+              </button>
+            </div>
+            <div className="business-filters">
+              <label className="business-search">
+                <Search size={15} />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={view === 'projects' ? 'Projekte durchsuchen…' : 'Kunden durchsuchen…'}
+                />
+              </label>
+              {view === 'projects' ? (
+                <select
+                  value={projectFilter}
+                  onChange={(event) => setProjectFilter(event.target.value as ProjectStatus | 'all')}
+                >
+                  <option value="all">Alle Status</option>
+                  {projectStatuses.map((status) => (
+                    <option key={status} value={status}>{projectStatusLabels[status]}</option>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  value={customerFilter}
+                  onChange={(event) => setCustomerFilter(event.target.value as CustomerStatus | 'all')}
+                >
+                  <option value="all">Alle Status</option>
+                  {customerStatuses.map((status) => (
+                    <option key={status} value={status}>{customerStatusLabels[status]}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {loading && customers.length === 0 && projects.length === 0 ? (
+            <div className="panel business-loading">Business-Daten werden geladen…</div>
+          ) : view === 'projects' ? (
+            visibleProjects.length === 0 ? (
+              <div className="panel business-empty-state">
+                <FolderKanban size={32} />
+                <b>{projects.length ? 'Keine passenden Projekte' : 'Noch keine Projekte'}</b>
+                <span>
+                  {projects.length
+                    ? 'Ändere Suche oder Filter.'
+                    : canCreate
+                      ? 'Lege den ersten echten Auftrag für diesen Workspace an.'
+                      : 'Owner oder Admin können hier Projekte anlegen.'}
+                </span>
+                {!projects.length && canCreate && (
+                  <button className="primary" onClick={openNewProject}><Plus size={15} /> Erstes Projekt</button>
+                )}
+              </div>
+            ) : (
+              <div className="business-project-list">
+                {visibleProjects.map((project) => {
+                  const customer = project.customer_id ? customerById.get(project.customer_id) : null;
+                  const overdue = Boolean(
+                    project.deadline &&
+                      activeProjectStatuses.includes(project.status) &&
+                      project.deadline < today,
+                  );
+                  return (
+                    <article className="business-project-card panel" key={project.id}>
+                      <div className="business-project-main">
+                        <div className="business-project-icon"><FolderKanban size={19} /></div>
+                        <div>
+                          <div className="business-project-heading">
+                            <h3>{project.title}</h3>
+                            <span className={`business-badge status-${project.status}`}>{projectStatusLabels[project.status]}</span>
+                            <span className={`business-badge priority-${project.priority}`}>{projectPriorityLabels[project.priority]}</span>
+                          </div>
+                          <p>{customer?.name ?? 'Ohne Kundenzuordnung'}</p>
+                          {project.description && <small>{project.description}</small>}
+                        </div>
+                      </div>
+                      <div className="business-project-meta">
+                        <div><span>Auftragswert</span><b>{formatMoney(project.value_cents, project.currency)}</b></div>
+                        <div className={overdue ? 'is-overdue' : ''}><span>Deadline</span><b>{formatDate(project.deadline)}</b></div>
+                        <div><span>Fortschritt</span><b>{project.progress}%</b></div>
+                      </div>
+                      <div className="business-progress" aria-label={`${project.progress} Prozent abgeschlossen`}>
+                        <i style={{ width: `${project.progress}%` }} />
+                      </div>
+                      {(canEdit || canDelete) && (
+                        <div className="business-card-actions">
+                          {canEdit && <button onClick={() => openProject(project)}><SquarePen size={14} /> Bearbeiten</button>}
+                          {canDelete && <button className="danger" onClick={() => void removeProject(project)}><Trash2 size={14} /> Löschen</button>}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )
+          ) : visibleCustomers.length === 0 ? (
+            <div className="panel business-empty-state">
+              <Building2 size={32} />
+              <b>{customers.length ? 'Keine passenden Kunden' : 'Noch keine Kunden'}</b>
+              <span>
+                {customers.length
+                  ? 'Ändere Suche oder Filter.'
+                  : canCreate
+                    ? 'Lege den ersten Kunden für diesen Workspace an.'
+                    : 'Owner oder Admin können hier Kunden anlegen.'}
+              </span>
+              {!customers.length && canCreate && (
+                <button className="primary" onClick={openNewCustomer}><Plus size={15} /> Erster Kunde</button>
+              )}
+            </div>
+          ) : (
+            <div className="business-customer-grid">
+              {visibleCustomers.map((customer) => {
+                const url = websiteUrl(customer.website);
+                return (
+                  <article className="business-customer-card panel" key={customer.id}>
+                    <div className="business-customer-top">
+                      <div className="business-customer-avatar">{customer.name.slice(0, 2).toUpperCase()}</div>
+                      <span className={`business-badge customer-${customer.status}`}>{customerStatusLabels[customer.status]}</span>
+                    </div>
+                    <h3>{customer.name}</h3>
+                    {customer.contact_name && <p><UserRound size={14} /> {customer.contact_name}</p>}
+                    {customer.email && <p><Mail size={14} /> {customer.email}</p>}
+                    {customer.phone && <p><Phone size={14} /> {customer.phone}</p>}
+                    {url && <a href={url} target="_blank" rel="noreferrer"><Globe2 size={14} /> Website öffnen</a>}
+                    {customer.notes && <small>{customer.notes}</small>}
+                    <div className="business-customer-projects"><FolderKanban size={14} /> {projectCounts.get(customer.id) ?? 0} Projekte</div>
+                    {(canEdit || canDelete) && (
+                      <div className="business-card-actions">
+                        {canEdit && <button onClick={() => openCustomer(customer)}><SquarePen size={14} /> Bearbeiten</button>}
+                        {canDelete && <button className="danger" onClick={() => void removeCustomer(customer)}><Trash2 size={14} /> Löschen</button>}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {customerEditor && (
+        <div
+          className="business-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !saving) setCustomerEditor(null);
+          }}
+        >
+          <div className="business-modal" role="dialog" aria-modal="true" aria-labelledby="customer-dialog-title">
+            <div className="business-modal-head">
+              <div><small>KUNDENVERWALTUNG</small><h2 id="customer-dialog-title">{customerEditor === 'new' ? 'Neuen Kunden anlegen' : 'Kunden bearbeiten'}</h2></div>
+              <button aria-label="Dialog schließen" onClick={() => setCustomerEditor(null)} disabled={saving}><X size={19} /></button>
+            </div>
+            {error && <div className="data-alert business-modal-alert">{error}</div>}
+            <form onSubmit={(event) => void saveCustomer(event)}>
+              <div className="business-form-grid">
+                <label className="wide"><span>Kundenname / Firma *</span><input autoFocus required minLength={2} maxLength={120} value={customerDraft.name} onChange={(event) => setCustomerDraft((current) => ({ ...current, name: event.target.value }))} placeholder="z. B. Autohaus Müller" /></label>
+                <label><span>Ansprechpartner</span><input maxLength={120} value={customerDraft.contactName} onChange={(event) => setCustomerDraft((current) => ({ ...current, contactName: event.target.value }))} placeholder="Vor- und Nachname" /></label>
+                <label><span>Status</span><select value={customerDraft.status} onChange={(event) => setCustomerDraft((current) => ({ ...current, status: event.target.value as CustomerStatus }))}>{customerStatuses.map((status) => <option key={status} value={status}>{customerStatusLabels[status]}</option>)}</select></label>
+                <label><span>E-Mail</span><input type="email" maxLength={254} value={customerDraft.email} onChange={(event) => setCustomerDraft((current) => ({ ...current, email: event.target.value }))} placeholder="kontakt@firma.de" /></label>
+                <label><span>Telefon</span><input type="tel" maxLength={60} value={customerDraft.phone} onChange={(event) => setCustomerDraft((current) => ({ ...current, phone: event.target.value }))} placeholder="+49 …" /></label>
+                <label className="wide"><span>Website</span><input type="text" maxLength={500} value={customerDraft.website} onChange={(event) => setCustomerDraft((current) => ({ ...current, website: event.target.value }))} placeholder="www.firma.de" /></label>
+                <label className="wide"><span>Notizen</span><textarea maxLength={4000} value={customerDraft.notes} onChange={(event) => setCustomerDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Wichtige Kundendetails…" /></label>
+              </div>
+              <div className="business-modal-actions"><button type="button" className="secondary" onClick={() => setCustomerEditor(null)} disabled={saving}>Abbrechen</button><button className="primary" disabled={saving}>{saving ? 'Speichert…' : customerEditor === 'new' ? 'Kunde anlegen' : 'Änderungen speichern'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {projectEditor && (
+        <div
+          className="business-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !saving) setProjectEditor(null);
+          }}
+        >
+          <div className="business-modal" role="dialog" aria-modal="true" aria-labelledby="project-dialog-title">
+            <div className="business-modal-head">
+              <div><small>PROJEKTVERWALTUNG</small><h2 id="project-dialog-title">{projectEditor === 'new' ? 'Neues Projekt anlegen' : 'Projekt bearbeiten'}</h2></div>
+              <button aria-label="Dialog schließen" onClick={() => setProjectEditor(null)} disabled={saving}><X size={19} /></button>
+            </div>
+            {error && <div className="data-alert business-modal-alert">{error}</div>}
+            <form onSubmit={(event) => void saveProject(event)}>
+              <div className="business-form-grid">
+                <label className="wide"><span>Projekttitel *</span><input autoFocus required minLength={2} maxLength={160} value={projectDraft.title} onChange={(event) => setProjectDraft((current) => ({ ...current, title: event.target.value }))} placeholder="z. B. Neue Unternehmenswebsite" /></label>
+                <label><span>Kunde</span><select value={projectDraft.customerId} onChange={(event) => setProjectDraft((current) => ({ ...current, customerId: event.target.value }))}><option value="">Ohne Kundenzuordnung</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
+                <label><span>Status</span><select value={projectDraft.status} onChange={(event) => setProjectDraft((current) => ({ ...current, status: event.target.value as ProjectStatus }))}>{projectStatuses.map((status) => <option key={status} value={status}>{projectStatusLabels[status]}</option>)}</select></label>
+                <label><span>Priorität</span><select value={projectDraft.priority} onChange={(event) => setProjectDraft((current) => ({ ...current, priority: event.target.value as ProjectPriority }))}>{projectPriorities.map((priority) => <option key={priority} value={priority}>{projectPriorityLabels[priority]}</option>)}</select></label>
+                <label><span>Auftragswert (€)</span><input type="number" min="0" max="9999999999.99" step="0.01" value={projectDraft.value} onChange={(event) => setProjectDraft((current) => ({ ...current, value: event.target.value }))} placeholder="0,00" /></label>
+                <label><span>Deadline</span><input type="date" value={projectDraft.deadline} onChange={(event) => setProjectDraft((current) => ({ ...current, deadline: event.target.value }))} /></label>
+                <label><span>Fortschritt (%)</span><input type="number" min="0" max="100" step="1" value={projectDraft.progress} onChange={(event) => setProjectDraft((current) => ({ ...current, progress: event.target.value }))} /></label>
+                <label className="wide"><span>Beschreibung / Notizen</span><textarea maxLength={4000} value={projectDraft.description} onChange={(event) => setProjectDraft((current) => ({ ...current, description: event.target.value }))} placeholder="Leistungsumfang, nächste Schritte, Besonderheiten…" /></label>
+              </div>
+              <div className="business-modal-actions"><button type="button" className="secondary" onClick={() => setProjectEditor(null)} disabled={saving}>Abbrechen</button><button className="primary" disabled={saving}>{saving ? 'Speichert…' : projectEditor === 'new' ? 'Projekt anlegen' : 'Änderungen speichern'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
