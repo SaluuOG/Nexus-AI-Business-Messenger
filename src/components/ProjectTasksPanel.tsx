@@ -18,6 +18,7 @@ type Props = {
   members: NexusWorkspaceMember[];
   defaultProjectId: string;
   initialTaskId?: string | null;
+  onClearTaskFocus?: () => void;
   loading: boolean;
   loadError: string | null;
   onRefresh: () => Promise<void>;
@@ -27,7 +28,7 @@ function dueLabel(value: string | null) {
   return value ? new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : 'Keine Deadline';
 }
 
-export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects, members, defaultProjectId, initialTaskId, loading, loadError, onRefresh }: Props) {
+export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects, members, defaultProjectId, initialTaskId, onClearTaskFocus, loading, loadError, onRefresh }: Props) {
   const [filters, setFilters] = useState<TaskFilters>({ query: '', project: defaultProjectId, status: 'all', assignee: 'all' });
   const [editor, setEditor] = useState<NexusProjectTask | 'new' | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -43,21 +44,11 @@ export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects,
     return () => { mounted.current = false; window.clearInterval(interval); };
   }, []);
 
-  useEffect(() => {
-    const task = initialTaskId ? tasks.find((item) => item.id === initialTaskId) : null;
-    if (!task) return;
-    setFilters((current) => current.project === 'all' || current.project === task.project_id ? current : { ...current, project: 'all' });
-    const timer = window.setTimeout(() => {
-      document.getElementById('nexus-task-' + task.id)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [initialTaskId, tasks]);
-
   const membersById = useMemo(() => new Map(members.map(member => [member.user_id, member])), [members]);
   const projectNames = useMemo(() => new Map(projects.map(project => [project.id, project.title])), [projects]);
   const permissions = taskPermissions(currentUserId ? membersById.get(currentUserId)?.role : undefined);
   const summary = summarizeTasks(tasks, today, currentUserId);
-  const visibleTasks = filterTasks(tasks, filters, today, projectNames, membersById, currentUserId);
+  const visibleTasks = initialTaskId ? tasks.filter(task => task.id === initialTaskId) : filterTasks(tasks, filters, today, projectNames, membersById, currentUserId);
   const scopeTasks = filters.project === 'all' ? tasks : tasks.filter(task => task.project_id === filters.project);
   const scopeSummary = summarizeTasks(scopeTasks, today, currentUserId);
   const progress = scopeSummary.total ? Math.round(scopeSummary.done / scopeSummary.total * 100) : 0;
@@ -95,7 +86,7 @@ export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects,
   };
 
   return <div className="project-tasks-panel">
-    <div className="task-summary">
+    {!initialTaskId && <div className="task-summary">
       <button className={filters.assignee === 'me' ? 'active' : ''} disabled={!currentUserId} onClick={() => setFilters(f => ({ ...f, project: 'all', assignee: 'me', status: 'open' }))}>
         <UserRound size={17} /><b>{summary.mine}</b><span>Meine offenen Aufgaben</span>
       </button>
@@ -108,7 +99,8 @@ export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects,
       <button className={summary.overdue ? 'is-alert' : ''} onClick={() => setFilters(f => ({ ...f, project: 'all', assignee: 'all', status: 'overdue' }))}>
         <CalendarDays size={17} /><b>{summary.overdue}</b><span>Überfällig</span>
       </button>
-    </div>
+    </div>}
+    {initialTaskId && <div className="business-focus-note" role="status"><span>Aufgabendetails</span><button className="secondary" onClick={onClearTaskFocus}>Alle Projektaufgaben</button></div>}
 
     <div className="task-panel-head">
       <div><h2>Aufgaben im Team</h2><p>{permissions.write ? 'Arbeit verteilen, Fristen planen und Fortschritt teilen.' : 'Aufgaben, Zuständigkeiten und Fortschritt deines Teams ansehen.'}</p></div>
@@ -118,7 +110,7 @@ export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects,
     {error && <div className="data-alert" role="alert">{error}</div>}
     {feedback && <div className="contact-feedback" role="status">{feedback}</div>}
 
-    <div className="task-filters panel">
+    {!initialTaskId && <div className="task-filters panel">
       <label className="business-search"><Search size={15} /><input aria-label="Aufgaben durchsuchen" placeholder="Aufgabe, Projekt oder Person suchen…" value={filters.query} onChange={event => setFilters(f => ({ ...f, query: event.target.value }))} /></label>
       <label><span>Projekt</span><select value={filters.project} onChange={event => setFilters(f => ({ ...f, project: event.target.value }))}>
         <option value="all">Alle Projekte</option>
@@ -134,15 +126,15 @@ export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects,
         {members.filter(member => member.role !== 'guest').map(member => <option key={member.user_id} value={member.user_id}>{taskMemberName(member)}</option>)}
       </select></label>
       <button className="secondary" onClick={() => setFilters({ query: '', project: 'all', status: 'all', assignee: 'all' })}>Zurücksetzen</button>
-    </div>
+    </div>}
 
     <div className="task-progress-line">
       <span><CheckCheck size={15} /> {scopeSummary.done} von {scopeSummary.total} Aufgaben erledigt{filters.project !== 'all' ? ' im Projekt' : ''}</span>
       <div className="business-progress" role="progressbar" aria-label="Aufgabenfortschritt" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${progress}%` }} /></div><b>{progress}%</b>
     </div>
 
-    {loading && !tasks.length ? <div className="panel business-loading">Aufgaben werden geladen…</div> : visibleTasks.length === 0 ?
-      <div className="panel business-empty-state"><CheckSquare2 size={32} /><b>{tasks.length ? 'Keine passenden Aufgaben' : 'Noch keine Aufgaben'}</b><span>{!projects.length ? 'Lege zuerst ein Projekt an. Aufgaben werden immer einem Projekt zugeordnet.' : tasks.length ? 'Ändere die Filter oder setze sie zurück.' : permissions.write ? 'Teile das Projekt in konkrete Schritte auf und lege die erste Aufgabe an.' : 'Dein Team kann hier Aufgaben anlegen.'}</span></div> :
+    {loading && !tasks.length ? <div className="panel business-loading">Aufgaben werden geladen…</div> : loadError && !tasks.length ? <div className="panel business-empty-state">Aufgaben derzeit nicht verfügbar.</div> : visibleTasks.length === 0 ?
+      <div className="panel business-empty-state"><CheckSquare2 size={32} /><b>{initialTaskId ? 'Aufgabe nicht mehr verfügbar' : tasks.length ? 'Keine passenden Aufgaben' : 'Noch keine Aufgaben'}</b><span>{initialTaskId ? 'Die Aufgabe wurde entfernt oder ist für dich nicht mehr zugänglich.' : !projects.length ? 'Lege zuerst ein Projekt an. Aufgaben werden immer einem Projekt zugeordnet.' : tasks.length ? 'Ändere die Filter oder setze sie zurück.' : permissions.write ? 'Teile das Projekt in konkrete Schritte auf und lege die erste Aufgabe an.' : 'Dein Team kann hier Aufgaben anlegen.'}</span></div> :
       <div className="task-list">{visibleTasks.map(task => {
         const overdue = taskIsOverdue(task, today);
         const dueToday = task.status !== 'done' && task.due_date === today;

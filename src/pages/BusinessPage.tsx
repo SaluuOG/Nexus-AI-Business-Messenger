@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { businessSearch, readBusinessSearch } from '../app/businessNavigation';
 import { Header } from '../components/Header';
 import { ProjectTasksPanel } from '../components/ProjectTasksPanel';
 import {
@@ -49,6 +50,8 @@ type BusinessPageProps = {
   workspaceName?: string;
   workspaceRole?: WorkspaceRole;
   currentUserId?: string;
+  workspaceLoading?: boolean;
+  workspaceError?: string | null;
 };
 
 type CustomerDraft = {
@@ -198,24 +201,21 @@ function normalizeWebsite(value: string) {
   }
 }
 
-export function BusinessPage({ workspaceId, workspaceName, workspaceRole, currentUserId }: BusinessPageProps) {
-  const [searchParams] = useSearchParams();
-  const requestedView = searchParams.get('view');
-  const requestedProjectId = searchParams.get('project');
-  const requestedTaskId = searchParams.get('task');
-  const [view, setView] = useState<'projects' | 'customers' | 'tasks'>(
-    requestedView === 'tasks' || requestedView === 'customers' ? requestedView : 'projects',
-  );
+export function BusinessPage({ workspaceId, workspaceName, workspaceRole, currentUserId, workspaceLoading, workspaceError }: BusinessPageProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selection = readBusinessSearch(searchParams.toString(), workspaceId);
+  const { view, projectId: requestedProjectId, taskId: requestedTaskId } = selection;
+  const taskProjectId = requestedProjectId || 'all';
+  const setView = (next: 'projects' | 'customers' | 'tasks') => setSearchParams(businessSearch(workspaceId, { view: next }));
   const [customers, setCustomers] = useState<NexusCustomer[]>([]);
   const [projects, setProjects] = useState<NexusProject[]>([]);
   const [tasks, setTasks] = useState<NexusProjectTask[]>([]);
   const [members, setMembers] = useState<NexusWorkspaceMember[]>([]);
   const [taskError, setTaskError] = useState<string | null>(null);
-  const [taskProjectId, setTaskProjectId] = useState(requestedProjectId || 'all');
   const [query, setQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState<ProjectStatus | 'all'>('all');
   const [customerFilter, setCustomerFilter] = useState<CustomerStatus | 'all'>('all');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(workspaceId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -224,27 +224,6 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(emptyCustomerDraft);
   const [projectDraft, setProjectDraft] = useState<ProjectDraft>(emptyProjectDraft);
   const requestVersion = useRef(0);
-
-  useEffect(() => {
-    const nextView =
-      requestedView === 'tasks' || requestedView === 'customers'
-        ? requestedView
-        : requestedTaskId
-          ? 'tasks'
-          : requestedProjectId
-            ? 'projects'
-            : null;
-    if (nextView) setView(nextView);
-    if (requestedProjectId) setTaskProjectId(requestedProjectId);
-  }, [requestedProjectId, requestedTaskId, requestedView]);
-
-  useEffect(() => {
-    if (!requestedProjectId || view === 'tasks' || !projects.length) return;
-    const timer = window.setTimeout(() => {
-      document.getElementById('nexus-project-' + requestedProjectId)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [projects.length, requestedProjectId, view]);
 
   const canCreate = workspaceRole === 'owner' || workspaceRole === 'admin';
   const canEdit = canCreate || workspaceRole === 'member';
@@ -345,7 +324,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
   }, [tasks]);
 
   const openTasks = (projectId = 'all') => {
-    setTaskProjectId(projectId); setView('tasks');
+    setSearchParams(businessSearch(workspaceId, { view: 'tasks', projectId: projectId === 'all' ? undefined : projectId }));
   };
 
   const normalizedQuery = query.trim().toLocaleLowerCase('de-DE');
@@ -356,6 +335,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
       project.title.toLocaleLowerCase('de-DE').includes(normalizedQuery) ||
       customer?.name.toLocaleLowerCase('de-DE').includes(normalizedQuery) ||
       project.description?.toLocaleLowerCase('de-DE').includes(normalizedQuery);
+    if (requestedProjectId) return project.id === requestedProjectId;
     return matchesQuery && (projectFilter === 'all' || project.status === projectFilter);
   });
 
@@ -558,8 +538,8 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
       {!workspaceId ? (
         <div className="panel business-empty-state">
           <Building2 size={34} />
-          <b>Kein Workspace ausgewählt</b>
-          <span>Lege in den Einstellungen einen Workspace an oder wähle links einen bestehenden aus.</span>
+          <b>{workspaceLoading ? 'Workspaces werden geladen…' : workspaceError ? 'Workspace nicht verfügbar' : 'Kein Workspace ausgewählt'}</b>
+          <span>{workspaceError || (!workspaceLoading && 'Lege in den Einstellungen einen Workspace an oder wähle einen bestehenden aus.')}</span>
         </div>
       ) : (
         <>
@@ -616,7 +596,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
                 Aufgaben <span>{tasks.length}</span>
               </button>
             </div>
-            {view !== 'tasks' && <div className="business-filters">
+            {view !== 'tasks' && !requestedProjectId && <div className="business-filters">
               <label className="business-search">
                 <Search size={15} />
                 <input
@@ -649,21 +629,23 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
             </div>}
           </div>
 
-          {view === 'tasks' ? <ProjectTasksPanel key={`${workspaceId}:${taskProjectId}`} workspaceId={workspaceId} currentUserId={currentUserId} tasks={tasks} projects={projects} members={members} defaultProjectId={taskProjectId} initialTaskId={requestedTaskId} loading={loading} loadError={taskError} onRefresh={() => refresh(false)} /> : loading && customers.length === 0 && projects.length === 0 ? (
+          {view === 'projects' && requestedProjectId && <div className="business-focus-note" role="status"><span>Geöffnetes Projekt</span><button className="secondary" onClick={() => setView('projects')}>Alle Projekte anzeigen</button></div>}
+
+          {view === 'tasks' ? <ProjectTasksPanel key={`${workspaceId}:${taskProjectId}:${requestedTaskId ?? ''}`} workspaceId={workspaceId} currentUserId={currentUserId} tasks={tasks} projects={projects} members={members} defaultProjectId={taskProjectId} initialTaskId={requestedTaskId} onClearTaskFocus={() => openTasks(taskProjectId)} loading={loading} loadError={taskError || error} onRefresh={() => refresh(false)} /> : loading && customers.length === 0 && projects.length === 0 ? (
             <div className="panel business-loading">Business-Daten werden geladen…</div>
-          ) : view === 'projects' ? (
+          ) : error && !projects.length && !customers.length ? <div className="panel business-empty-state">Business-Daten derzeit nicht verfügbar.</div> : view === 'projects' ? (
             visibleProjects.length === 0 ? (
               <div className="panel business-empty-state">
                 <FolderKanban size={32} />
-                <b>{projects.length ? 'Keine passenden Projekte' : 'Noch keine Projekte'}</b>
+                <b>{requestedProjectId ? 'Projekt nicht mehr verfügbar' : projects.length ? 'Keine passenden Projekte' : 'Noch keine Projekte'}</b>
                 <span>
-                  {projects.length
+                  {requestedProjectId ? 'Das Projekt wurde entfernt oder ist für dich nicht mehr zugänglich.' : projects.length
                     ? 'Ändere Suche oder Filter.'
                     : canCreate
                       ? 'Lege den ersten echten Auftrag für diesen Workspace an.'
                       : 'Owner oder Admin können hier Projekte anlegen.'}
                 </span>
-                {!projects.length && canCreate && (
+                {!requestedProjectId && !projects.length && canCreate && (
                   <button className="primary" onClick={openNewProject}><Plus size={15} /> Erstes Projekt</button>
                 )}
               </div>

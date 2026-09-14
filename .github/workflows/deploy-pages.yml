@@ -17,6 +17,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      script: ${{ steps.assets.outputs.script }}
     env:
       VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
@@ -41,6 +44,25 @@ jobs:
       - name: Build
         run: npm run build
 
+
+      - name: Set up browser checks
+        uses: ./.github/actions/setup-browser
+      - name: Browser workflows
+        run: node tests/browser/briefing.mjs
+        env:
+          NEXUS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/nexus-browser/node_modules/playwright/index.mjs
+      - name: Browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-results
+          path: browser-results/
+          retention-days: 7
+
+      - name: Identify release asset
+        id: assets
+        run: node tests/browser/release-assets.mjs >> "$GITHUB_OUTPUT"
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
@@ -52,7 +74,30 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
+    timeout-minutes: 15
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Set up browser checks
+        uses: ./.github/actions/setup-browser
+      - name: Verify published Nexus
+        run: node tests/browser/live.mjs
+        env:
+          NEXUS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/nexus-browser/node_modules/playwright/index.mjs
+          NEXUS_LIVE_URL: ${{ steps.deployment.outputs.page_url }}
+          NEXUS_EXPECTED_SCRIPT: ${{ needs.build.outputs.script }}
+      - name: Live screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-browser-results
+          path: browser-results/
+          retention-days: 7

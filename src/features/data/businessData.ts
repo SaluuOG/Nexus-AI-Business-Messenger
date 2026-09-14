@@ -145,18 +145,14 @@ export async function loadBusinessWorkspace(workspaceId: string) {
       .select(customerColumns)
       .eq('workspace_id', workspaceId)
       .order('updated_at', { ascending: false }),
-    supabase
-      .from('projects')
-      .select(projectColumns)
-      .eq('workspace_id', workspaceId)
-      .order('updated_at', { ascending: false }),
+    loadWorkspaceProjects(workspaceId),
     loadProjectTasks(workspaceId),
     loadWorkspaceMembers(workspaceId),
   ]);
 
   return {
     customers: (customerResult.data ?? []) as NexusCustomer[],
-    projects: ((projectResult.data ?? []) as DatabaseProject[]).map(normalizeProject),
+    projects: ((projectResult.data ?? []) as DatabaseProject[]).map(normalizeProject).sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? '') || a.id.localeCompare(b.id)),
     tasks: (taskResult.data ?? []) as NexusProjectTask[],
     members: memberResult.data,
     taskError: taskResult.error || (memberResult.error ? 'Das Team konnte nicht geladen werden. Bitte aktualisieren.' : null),
@@ -165,6 +161,33 @@ export async function loadBusinessWorkspace(workspaceId: string) {
       publicBusinessError(projectResult.error?.message, 'Projekte konnten nicht geladen werden.') ||
       null,
   };
+}
+
+async function loadWorkspaceProjects(workspaceId: string) {
+  const projects: DatabaseProject[] = [];
+  if (!supabase) return { data: projects, error: { message: 'Supabase ist nicht konfiguriert.' } };
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await supabase.from('projects').select(projectColumns)
+      .eq('workspace_id', workspaceId).order('id').range(offset, offset + 499);
+    if (error) return { data: [] as DatabaseProject[], error };
+    projects.push(...(data ?? []) as DatabaseProject[]);
+    if (!data || data.length < 500) return { data: projects, error: null };
+  }
+}
+
+export async function loadBriefingWorkspace(workspaceId: string, currentUserId: string) {
+  const empty = { projects: [] as NexusProject[], tasks: [] as NexusProjectTask[] };
+  if (!supabase) return { ...empty, error: 'Supabase ist nicht konfiguriert.' };
+  const [projectResult, taskResult, memberResult] = await Promise.all([
+    loadWorkspaceProjects(workspaceId), loadProjectTasks(workspaceId), loadWorkspaceMembers(workspaceId),
+  ]);
+  const error = publicBusinessError(projectResult.error?.message, 'Projekte konnten nicht geladen werden.') ||
+    taskResult.error || (memberResult.error ? 'Dein Workspace-Zugriff konnte nicht geprüft werden.' : null);
+  if (error) return { ...empty, error };
+  if (!memberResult.data.some(member => member.user_id === currentUserId)) {
+    return { ...empty, error: 'Du hast keinen Zugriff mehr auf diesen Workspace.' };
+  }
+  return { projects: projectResult.data.map(normalizeProject), tasks: taskResult.data, error: null };
 }
 
 async function loadProjectTasks(workspaceId: string) {
@@ -387,9 +410,12 @@ export async function deleteProjectTask(workspaceId: string, task: NexusProjectT
   };
 }
 
-export function subscribeToBusinessWorkspace(workspaceId: string, onChanged: () => void) {
+export type BusinessConnection = 'connecting' | 'connected' | 'disconnected';
+
+export function subscribeToBusinessWorkspace(workspaceId: string, onChanged: () => void, onConnection?: (state: BusinessConnection) => void) {
   if (!supabase) return null;
 
+  onConnection?.('connecting');
   const channel = supabase.channel(`business-workspace:${workspaceId}:${crypto.randomUUID()}`);
   for (const table of ['customers', 'projects', 'project_tasks', 'workspace_members']) {
     channel
@@ -399,7 +425,10 @@ export function subscribeToBusinessWorkspace(workspaceId: string, onChanged: () 
       // authorized API; never depend on an unavailable workspace_id filter.
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table }, onChanged);
   }
-  return channel.subscribe(status => { if (status === 'SUBSCRIBED') onChanged(); });
+  return channel.subscribe(status => {
+    if (status === 'SUBSCRIBED') { onConnection?.('connected'); onChanged(); }
+    else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) onConnection?.('disconnected');
+  });
 }
 
 export async function unsubscribeBusinessWorkspace(channel: RealtimeChannel | null) {

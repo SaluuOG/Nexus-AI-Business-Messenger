@@ -28,6 +28,7 @@ import {
 } from '../features/data/nexusData';
 import type { IdentityMode } from '../types';
 import { routes } from './routes';
+import { businessSearch } from './businessNavigation';
 
 type ManageableRole = Exclude<WorkspaceRole, 'owner'>;
 
@@ -72,7 +73,7 @@ function AppShell() {
   const [businessProfiles, setBusinessProfiles] = useState<NexusBusinessProfile[]>([]);
   const [workspaces, setWorkspaces] = useState<NexusWorkspace[]>([]);
   const [memberships, setMemberships] = useState<NexusWorkspaceMembership[]>([]);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const [preferredWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [workspaceMembers, setWorkspaceMembers] = useState<NexusWorkspaceMember[]>([]);
   const [workspaceInvitations, setWorkspaceInvitations] = useState<NexusWorkspaceInvitation[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
@@ -80,6 +81,14 @@ function AppShell() {
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState<string | null>(null);
   const [requestedConversationId, setRequestedConversationId] = useState<string | null>(null);
+  const linkedWorkspaceId = location.pathname === routes.business ? new URLSearchParams(location.search).get('workspace') : null;
+  const selectedWorkspaceId = linkedWorkspaceId
+    ? workspaces.some(workspace => workspace.id === linkedWorkspaceId) ? linkedWorkspaceId : null
+    : preferredWorkspaceId;
+  useEffect(() => {
+    if (linkedWorkspaceId && selectedWorkspaceId) setSelectedWorkspaceId(selectedWorkspaceId);
+  }, [linkedWorkspaceId, selectedWorkspaceId]);
+
 
   useEffect(() => {
     const userId = auth.user?.id;
@@ -193,26 +202,24 @@ function AppShell() {
   const signOut = async () => { await auth.signOut(); navigate(routes.auth, { replace: true }); };
 
   return <div className="app">
-    <Sidebar workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onWorkspaceChange={setSelectedWorkspaceId} workspaceRole={currentWorkspaceRole} workspaceLoading={dataLoading} identity={identity} accountName={accountName} accountSubtitle={accountSubtitle} />
+    <Sidebar workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onWorkspaceChange={workspaceId => {
+      setSelectedWorkspaceId(workspaceId);
+      if (location.pathname === routes.business) navigate(routes.business + '?' + businessSearch(workspaceId));
+    }} workspaceRole={currentWorkspaceRole} workspaceLoading={dataLoading} identity={identity} accountName={accountName} accountSubtitle={accountSubtitle} />
     <main><Routes>
       <Route path="/" element={<Navigate to={routes.briefing} replace />} />
       <Route
         path={routes.briefing}
         element={
           <BriefingPage
-            openChat={() => navigate(routes.chats)}
-            openBusiness={(target) => {
-              const params = new URLSearchParams();
-              if (target?.view) params.set('view', target.view);
-              if (target?.projectId) params.set('project', target.projectId);
-              if (target?.taskId) params.set('task', target.taskId);
-              const query = params.toString();
-              navigate(routes.business + (query ? '?' + query : ''));
-            }}
+            key={auth.user?.id + ':' + selectedWorkspaceId}
+            openBusiness={target => navigate(routes.business + '?' + businessSearch(selectedWorkspaceId, target))}
             displayName={accountName}
             workspaceId={selectedWorkspaceId}
-            workspaceName={workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.name}
+            workspaceName={workspaces.find(workspace => workspace.id === selectedWorkspaceId)?.name}
             currentUserId={auth.user?.id}
+            workspaceLoading={dataLoading}
+            workspaceError={dataError}
           />
         }
       />
@@ -223,10 +230,12 @@ function AppShell() {
         path={routes.business}
         element={
           <BusinessPage
-            key={selectedWorkspaceId}
+            key={auth.user?.id + ':' + selectedWorkspaceId}
             workspaceId={selectedWorkspaceId}
             workspaceName={workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.name}
             workspaceRole={currentWorkspaceRole}
+            workspaceLoading={dataLoading}
+            workspaceError={dataError || (!dataLoading && linkedWorkspaceId && !selectedWorkspaceId ? 'Der verknüpfte Workspace ist nicht verfügbar oder du hast keinen Zugriff.' : null)}
             currentUserId={auth.user?.id}
           />
         }

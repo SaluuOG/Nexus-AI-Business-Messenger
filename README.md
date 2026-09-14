@@ -168,6 +168,23 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Funktionstests für Filter, Rollen, Datenzugriff, Seitengrenzen, Konflikte und gerenderte Oberfläche
 - `tests/sql/project-tasks-rls.sql` prüft Owner/Admin/Member/Guest, Workspace-Trennung und Löschketten in einer vollständig zurückgerollten Transaktion
 
+### Phase 3.3 — Tagesbriefing & Prioritäten
+- persönliche heute fällige und überfällige Aufgaben, getrennt vom Handlungsbedarf des gesamten Teams
+- vollständige Zähler unabhängig von der Anzahl angezeigter Zeilen; weitere Einträge nachladen
+- überfällige Projekte zuerst, anschließend kommende Deadlines und Projekte ohne Termin
+- Sieben-Tage-Zeitraum umfasst heute bis einschließlich sechs Kalendertage später; lokaler Tageswechsel wird automatisch berücksichtigt
+- Projektfortschritt entspricht dem in der Projektverwaltung gepflegten Wert
+- direkte Detailansichten mit Workspace, Projekt und Aufgabe in der URL; funktionieren nach Neuladen und für lesende Gäste
+- leere, ladende, fehlgeschlagene und nicht mehr zugängliche Daten werden getrennt angezeigt
+- Realtime, Aktualisieren-Schaltfläche, Rückkehr zum Tab und periodischer Abgleich halten den Stand aktuell
+- automatische Prüfungen für Fristen, Zähler, Seitengrenzen, Berechtigungen sowie Browserabläufe in Chromium und WebKit
+- Browserprüfungen verwenden ausschließlich isolierte Testdaten; sie ändern keine Produktionsdaten
+- Veröffentlichung prüft zusätzlich das konkrete veröffentlichte JavaScript-Paket und den echten Login in beiden Browsern
+
+Browserprüfungen laufen in GitHub Actions mit Playwright 1.55.1 in einem separaten Laufzeitverzeichnis. Lokal: Playwright installieren, Chromium/WebKit mit `playwright install --with-deps chromium webkit` bereitstellen und `NEXUS_PLAYWRIGHT_MODULE` auf den absoluten Pfad zu `playwright/index.mjs` setzen. Danach `node tests/browser/briefing.mjs` ausführen. Screenshots landen unter `browser-results/`.
+
+Offene Nutzerabnahme: abschließender manueller Durchlauf mit zwei echten Konten. Browserprüfungen mit Testdaten ersetzen diese Abnahme nicht.
+
 ## Routen
 - `#/auth`
 - `#/auth/reset-password`
