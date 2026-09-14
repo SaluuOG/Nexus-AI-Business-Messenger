@@ -88,8 +88,10 @@ try {
       await page.locator('.business-project-card').getByRole('heading', { name: 'Überfälliges Projekt', exact: true }).waitFor();
       assert.equal(await page.locator('.business-project-card').count(), 1);
       await page.getByRole('button', { name: 'Alle Projekte anzeigen', exact: true }).click();
+      await page.locator('.business-project-card').getByRole('heading', { name: 'Kommendes Projekt', exact: true }).waitFor();
       assert.equal(await page.locator('.business-project-card').count(), 3);
       await page.getByRole('tab', { name: /Aufgaben/ }).click();
+      await page.waitForURL(url => url.hash.includes('view=tasks'));
       assert.equal(new URL(page.url().split('#')[1], 'https://example.invalid').searchParams.has('task'), false);
       await page.getByRole('button', { name: 'Briefing', exact: true }).click();
       await today.getByRole('button', { name: /Meine morgige Aufgabe/ }).waitFor();
@@ -120,6 +122,8 @@ try {
     } catch (error) {
       await page.screenshot({ path: 'browser-results/' + name + '-failure.png', fullPage: true });
       console.error('Browser errors:', errors);
+      console.error('Test URL:', page.url());
+      console.error('Test UI:', (await page.locator('body').innerText()).slice(0, 6000));
       throw error;
     } finally { await context.close(); await browser.close(); }
   }
