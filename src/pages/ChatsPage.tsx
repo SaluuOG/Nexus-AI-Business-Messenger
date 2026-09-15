@@ -203,7 +203,6 @@ export function ChatsPage({
   const pendingScrollRef = useRef<PendingScroll | null>(null);
   const scrollLockRef = useRef<ScrollLock | null>(null);
   const scrollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markReadInFlightRef = useRef(new Set<string>());
   const lastMarkReadRef = useRef(new Map<string, number>());
   const markReadTimerRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -320,8 +319,6 @@ export function ChatsPage({
       };
       scheduleScrollLockChecks();
       setHighlightedMessageId(instruction.messageId);
-      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-      highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 4200);
       return;
     }
 
@@ -690,7 +687,6 @@ export function ChatsPage({
 
   useEffect(() => () => {
     if (recordTimerRef.current) clearInterval(recordTimerRef.current);
-    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     clearScrollTimers();
     for (const timer of markReadTimerRef.current.values()) clearTimeout(timer);
     markReadTimerRef.current.clear();

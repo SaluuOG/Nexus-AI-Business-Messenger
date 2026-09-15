@@ -187,7 +187,6 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   const pendingScrollActionRef = useRef<PendingScrollAction | null>(null);
   const scrollLockRef = useRef<MessageScrollLock | null>(null);
   const scrollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewHasNewerRef = useRef(false);
   const messageContextRef = useRef(false);
   const draftRef = useRef('');
@@ -661,8 +660,6 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
         expiresAt: Date.now() + 1200,
       };
       scheduleScrollLockChecks();
-      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-      highlightTimerRef.current = setTimeout(() => setHighlightedMessageId((current) => current === action.messageId ? null : current), 5000);
       return;
     }
     scrollLockRef.current = {
@@ -678,7 +675,6 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     if (typingStopRef.current) clearTimeout(typingStopRef.current);
     if (typingRecheckRef.current) clearTimeout(typingRecheckRef.current);
-    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     clearScrollTimers();
     markReadTimersRef.current.forEach((timer) => clearTimeout(timer));
     markReadTimersRef.current.clear();

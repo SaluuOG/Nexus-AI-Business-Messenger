@@ -192,7 +192,7 @@ try {
       assert.equal(await page.locator('.message-search-result').count(), 1);
       const groupResult = page.locator('.message-search-result').filter({ hasText: 'Meilenstein Gruppe vertraulich' });
       await groupResult.locator('.message-search-open').click();
-      await page.locator('[data-message-id="gm-search-anchor"][data-highlighted="true"]').waitFor({ state: 'attached' });
+      await page.locator('[data-message-id="gm-search-anchor"][data-highlighted="true"]').waitFor();
       assert.match(page.url(), /#\/app\/groups\?group=g1&message=gm-search-anchor$/);
 
       // The group list also reacts to a message in a non-selected group.
