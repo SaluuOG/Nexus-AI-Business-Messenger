@@ -61,11 +61,12 @@ try {
       );
     };
     const waitForGlobalMessageSubscription = table => page.waitForFunction(expectedTable => {
-      const channels = window.nexusTest.channels.filter(channel => channel.entries.some(entry =>
+      const expectedChannel = expectedTable === 'direct_messages' ? 'direct-message-list' : 'group-message-list';
+      const channels = window.nexusTest.channels.filter(channel => channel.name === expectedChannel && channel.entries.some(entry =>
         entry.filter?.table === expectedTable && entry.filter.filter == null));
       // The development build deliberately remounts effects once in StrictMode.
-      // Wait for the surviving generation so its debounced refresh is not cleared
-      // by the probe generation's cleanup immediately after this assertion.
+      // Wait for the surviving generation so the event cannot be delivered to
+      // the probe generation immediately before its cleanup.
       return channels.length >= 2 && channels.filter(channel => channel.active).length === 1;
     }, table);
     const noHorizontalOverflow = () => page.evaluate(() => ({
@@ -207,14 +208,15 @@ try {
       // The group list also reacts to a message in a non-selected group.
       await waitForGlobalMessageSubscription('group_messages');
       const previousGroupListLoads = await page.evaluate(() => window.nexusTest.groupChatListLoads);
-      await page.evaluate(() => {
+      const deliveredGroupEvents = await page.evaluate(() => {
         const group = window.nexusTest.groupChats.find(item => item.group_id === 'g2');
         group.last_message = 'Live-Vorschau aus anderer Gruppe';
         group.last_message_at = '2026-03-12T09:00:00.000Z';
-        window.nexusTest.emit('group_messages', 'INSERT', {
+        return window.nexusTest.emit('group_messages', 'INSERT', {
           new: { group_id: 'g2', id: 'remote-group' }, old: null,
         });
       });
+      assert.ok(deliveredGroupEvents > 0, 'The active group list channel must receive the realtime event');
       await page.waitForFunction(previous => window.nexusTest.groupChatListLoads > previous, previousGroupListLoads);
       await page.locator('.chat').filter({ hasText: 'Zweite Gruppe' }).getByText('Live-Vorschau aus anderer Gruppe', { exact: true }).waitFor();
 

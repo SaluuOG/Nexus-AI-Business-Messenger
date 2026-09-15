@@ -77,6 +77,7 @@ export const supabaseConfig = { url: 'https://example.invalid', publishableKey: 
 export const initialAuthCallback = { isRecovery: false, hasError: false, hasPkceCode: false, marker: null };
 
 state.emit = (table = 'project_tasks', event = 'UPDATE', payload = null) => {
+  let delivered = 0;
   for (const channel of state.channels.filter(c => c.active)) {
     for (const entry of channel.entries) {
       if (entry.filter.table !== table || (entry.filter.event !== event && entry.filter.event !== '*')) continue;
@@ -86,8 +87,10 @@ state.emit = (table = 'project_tasks', event = 'UPDATE', payload = null) => {
         if (match && String(row?.[match[1]]) !== match[2]) continue;
       }
       entry.callback(payload ?? {});
+      delivered++;
     }
   }
+  return delivered;
 };
 state.connection = status => {
   for (const channel of state.channels.filter(c => c.active)) channel.statusCallback?.(status);
@@ -501,9 +504,9 @@ export const supabase = {
     };
     return { data: [], error: null };
   },
-  channel() {
+  channel(name) {
     const channel = {
-      active: true, entries: [],
+      name, active: true, entries: [],
       on(type, filter, callback) { this.entries.push({ filter, callback }); return this; },
       subscribe(callback) { this.statusCallback = callback; queueMicrotask(() => { if (this.active) callback?.('SUBSCRIBED'); }); return this; },
     };

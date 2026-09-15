@@ -198,7 +198,9 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   const lastMarkReadRef = useRef(new Map<string, number>());
   const markReadTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const refreshGroupsRef = useRef<(preferred?: string | null, silent?: boolean) => Promise<GroupChat[] | null>>(async () => null);
-  const groupListRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const groupListRefreshInFlightRef = useRef(false);
+  const groupListRefreshQueuedRef = useRef(false);
+  const groupListHistoryChangedRef = useRef(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const avatarRef = useRef<HTMLInputElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -600,18 +602,35 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   }, [selectedId]);
 
   useEffect(() => {
+    let active = true;
+    const runRefresh = () => {
+      groupListRefreshInFlightRef.current = true;
+      const historyChanged = groupListHistoryChangedRef.current;
+      groupListHistoryChangedRef.current = false;
+      const selectedBeforeRefresh = selectedRef.current;
+      const refresh = refreshGroupsRef.current(selectedBeforeRefresh, true);
+      void refresh.then((nextGroups) => {
+        if (!active) return;
+        if (selectedBeforeRefresh && nextGroups && !nextGroups.some((group) => group.group_id === selectedBeforeRefresh)) {
+          setChatSearch({}, { replace: true });
+        }
+      }).catch(() => null).finally(() => {
+        if (!active) return;
+        if (historyChanged) setGroupListRevision((revision) => revision + 1);
+        groupListRefreshInFlightRef.current = false;
+        if (groupListRefreshQueuedRef.current) {
+          groupListRefreshQueuedRef.current = false;
+          runRefresh();
+        }
+      });
+    };
     const scheduleRefresh = (historyChanged = false) => {
-      if (historyChanged) setGroupListRevision((revision) => revision + 1);
-      if (groupListRefreshTimerRef.current) return;
-      groupListRefreshTimerRef.current = setTimeout(() => {
-        groupListRefreshTimerRef.current = null;
-        const selectedBeforeRefresh = selectedRef.current;
-        void refreshGroupsRef.current(selectedBeforeRefresh, true).then((nextGroups) => {
-          if (selectedBeforeRefresh && nextGroups && !nextGroups.some((group) => group.group_id === selectedBeforeRefresh)) {
-            setChatSearch({}, { replace: true });
-          }
-        });
-      }, 120);
+      if (historyChanged) groupListHistoryChangedRef.current = true;
+      if (groupListRefreshInFlightRef.current) {
+        groupListRefreshQueuedRef.current = true;
+        return;
+      }
+      runRefresh();
     };
     const channel = subscribeToGroupMessagesRealtime(() => scheduleRefresh(true));
     const onFocus = () => {
@@ -629,11 +648,11 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      active = false;
       window.clearInterval(interval);
-      if (groupListRefreshTimerRef.current) {
-        clearTimeout(groupListRefreshTimerRef.current);
-        groupListRefreshTimerRef.current = null;
-      }
+      groupListRefreshInFlightRef.current = false;
+      groupListRefreshQueuedRef.current = false;
+      groupListHistoryChangedRef.current = false;
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
       void unsubscribeGroupRealtime(channel);
