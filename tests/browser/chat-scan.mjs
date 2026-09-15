@@ -158,7 +158,7 @@ try {
       assert.deepEqual(await page.evaluate(() => window.nexusTest.chatScanCalls.at(-1).body), { action: 'scan', kind: 'group', chatId: 'g1' });
       const beforeBlur = await scanCount();
       await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-      await dialog.getByText('Die Auswertung wurde beim Verlassen des Fensters geschlossen. Du kannst den aktuellen Verlauf erneut auswerten.', { exact: true }).waitFor();
+      await dialog.getByText('Die Auswertung wurde zurückgesetzt. Bitte werte den aktuellen Verlauf erneut aus.', { exact: true }).waitFor();
       await waitReady();
       assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0, 'Leaving the window must clear private output');
       assert.equal(await scanCount(), beforeBlur, 'Returning to the window must not trigger a new scan');
