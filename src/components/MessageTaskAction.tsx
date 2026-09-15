@@ -1,5 +1,5 @@
 import { CheckSquare2, X } from 'lucide-react';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { businessSearch } from '../app/businessNavigation';
@@ -21,6 +21,7 @@ export function MessageTaskAction(props: Props) {
 
 function MessageTaskDialog({ source, currentUserId, workspaceId: preferredWorkspaceId, onClose }: Props & { currentUserId: string; onClose: () => void }) {
   const navigate = useNavigate();
+  const fieldId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const busy = useRef(false);
   const mounted = useRef(false);
@@ -42,7 +43,7 @@ function MessageTaskDialog({ source, currentUserId, workspaceId: preferredWorksp
   const assignableMembers = members.filter(m => m.role !== 'guest');
   const invalidAssignee = Boolean(draft.assigned_to && !assignableMembers.some(m => m.user_id === draft.assigned_to));
   const tooLong = Array.from(draft.description ?? '').length > 4000;
-  const ready = Boolean(currentScope && !currentScope.error && canWrite && selectedProject && !invalidAssignee && !tooLong);
+  const ready = Boolean(!loadingWorkspaces && workspaces.some(w => w.id === workspaceId) && currentScope && !currentScope.error && canWrite && selectedProject && !invalidAssignee && !tooLong);
 
   useEffect(() => { mounted.current = true; dialog.current?.showModal(); return () => { mounted.current = false; }; }, []);
   useEffect(() => {
@@ -91,16 +92,16 @@ function MessageTaskDialog({ source, currentUserId, workspaceId: preferredWorksp
       {(error || currentScope?.error) && <div className="data-alert" role="alert">{error || currentScope?.error}<button type="button" className="secondary" disabled={saving} onClick={() => setRevision(r => r + 1)}>Auswahl aktualisieren</button></div>}
       {loadingWorkspaces ? <p role="status">Workspaces werden geladen…</p> : !workspaces.length && !error ? <p role="status">Du brauchst einen Workspace mit Schreibrecht, um eine Aufgabe anzulegen.</p> : null}
       <fieldset className="business-form-grid task-fieldset" disabled={saving || loadingWorkspaces}>
-        <label className="wide"><span>Workspace *</span><select required value={workspaceId} onChange={e => { setWorkspaceId(e.target.value); setDraft(d => ({ ...d, project_id: '', assigned_to: null })); setError(null); }}><option value="" disabled>Workspace auswählen</option>{workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+        <label className="wide"><span id={fieldId + '-workspace'}>Workspace *</span><select aria-labelledby={fieldId + '-workspace'} required value={workspaceId} onChange={e => { setWorkspaceId(e.target.value); setDraft(d => ({ ...d, project_id: '', assigned_to: null })); setError(null); }}><option value="" disabled>Workspace auswählen</option>{workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
         {workspaceId && !currentScope && <p className="wide" role="status">Projekte und Team werden geladen…</p>}
         {currentScope && !currentScope.error && !canWrite && <p className="wide data-alert" role="alert">Du hast in diesem Workspace kein Schreibrecht mehr.</p>}
         {currentScope && !currentScope.error && canWrite && !projects.length && <p className="wide" role="status">Lege zuerst im Business-Bereich ein Projekt für diesen Workspace an.</p>}
-        <label className="wide"><span>Projekt *</span><select required value={draft.project_id} disabled={!canWrite || !projects.length} onChange={e => setDraft(d => ({ ...d, project_id: e.target.value }))}><option value="" disabled>Projekt auswählen</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select></label>
-        <label className="wide"><span>Aufgabentitel *</span><input required minLength={2} maxLength={180} value={draft.title} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} /></label>
-        <label><span>Priorität</span><select value={draft.priority} onChange={e => setDraft(d => ({ ...d, priority: e.target.value as typeof d.priority }))}>{projectPriorities.map(p => <option key={p} value={p}>{taskPriorityLabels[p]}</option>)}</select></label>
-        <label><span>Deadline</span><input type="date" value={draft.due_date ?? ''} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value || null }))} /></label>
-        <label className="wide"><span>Verantwortliche Person</span><select value={draft.assigned_to ?? ''} disabled={!canWrite} onChange={e => setDraft(d => ({ ...d, assigned_to: e.target.value || null }))}><option value="">Nicht zugewiesen</option>{assignableMembers.map(m => <option key={m.user_id} value={m.user_id}>{taskMemberName(m)}</option>)}</select></label>
-        <label className="wide"><span>Beschreibung</span><textarea maxLength={4000} value={draft.description ?? ''} onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} /></label>
+        <label className="wide"><span id={fieldId + '-project'}>Projekt *</span><select aria-labelledby={fieldId + '-project'} required value={draft.project_id} disabled={!canWrite || !projects.length} onChange={e => setDraft(d => ({ ...d, project_id: e.target.value }))}><option value="" disabled>Projekt auswählen</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select></label>
+        <label className="wide"><span id={fieldId + '-title'}>Aufgabentitel *</span><input aria-labelledby={fieldId + '-title'} required minLength={2} maxLength={180} value={draft.title} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} /></label>
+        <label><span id={fieldId + '-priority'}>Priorität</span><select aria-labelledby={fieldId + '-priority'} value={draft.priority} onChange={e => setDraft(d => ({ ...d, priority: e.target.value as typeof d.priority }))}>{projectPriorities.map(p => <option key={p} value={p}>{taskPriorityLabels[p]}</option>)}</select></label>
+        <label><span id={fieldId + '-due'}>Deadline</span><input aria-labelledby={fieldId + '-due'} type="date" value={draft.due_date ?? ''} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value || null }))} /></label>
+        <label className="wide"><span id={fieldId + '-assignee'}>Verantwortliche Person</span><select aria-labelledby={fieldId + '-assignee'} value={draft.assigned_to ?? ''} disabled={!canWrite} onChange={e => setDraft(d => ({ ...d, assigned_to: e.target.value || null }))}><option value="">Nicht zugewiesen</option>{assignableMembers.map(m => <option key={m.user_id} value={m.user_id}>{taskMemberName(m)}</option>)}</select></label>
+        <label className="wide"><span id={fieldId + '-description'}>Beschreibung</span><textarea aria-labelledby={fieldId + '-description'} maxLength={4000} value={draft.description ?? ''} onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} /></label>
       </fieldset>
       {tooLong && <p className="data-alert" role="alert">Die Nachricht ist länger als 4.000 Zeichen. Kürze die Beschreibung vor der Übernahme; die Ursprungsnachricht bleibt verknüpft.</p>}
       {draft.due_date && selectedProject?.deadline && draft.due_date > selectedProject.deadline && <p className="task-deadline-note">Die Aufgaben-Deadline liegt nach der Projekt-Deadline ({selectedProject.deadline}).</p>}
