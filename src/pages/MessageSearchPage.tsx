@@ -246,7 +246,7 @@ export function MessageSearchPage() {
         <div className="message-search-filters">
           <label>
             <span>Chat-Art</span>
-            <select value={kind} onChange={(event) => setKind(event.target.value as KindFilter)}>
+            <select aria-label="Chat-Art" value={kind} onChange={(event) => setKind(event.target.value as KindFilter)}>
               <option value="all">Alle Chats</option>
               <option value="direct">Direktchats</option>
               <option value="group">Gruppenchats</option>
