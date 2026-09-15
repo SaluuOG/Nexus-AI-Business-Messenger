@@ -233,25 +233,29 @@ const scenarios = [
     await page.locator('.newer-messages-notice').waitFor();
     assert.match(page.url(), /#\/app\/chats\?conversation=c1&message=dm-history-008$/);
 
-    // Both common phone widths remain operable without page overflow. Viewport
-    // screenshots avoid rasterising an unnecessarily tall virtual history page.
-    await page.setViewportSize({ width: 390, height: 844 });
-    let dimensions = await noHorizontalOverflow(page);
-    assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= dimensions.viewport + 1, JSON.stringify(dimensions));
-    await page.screenshot({ path: `browser-results/${name}-message-history-mobile-chat.png`, fullPage: false });
-    await openSearch(page);
-    for (const width of [390, 320]) {
-      await page.setViewportSize({ width, height: 844 });
-      dimensions = await noHorizontalOverflow(page);
-      assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= dimensions.viewport + 1,
-        `Search overflows at ${width}px: ${JSON.stringify(dimensions)}`);
-      const bounds = await page.locator('.message-search-form').boundingBox();
-      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1,
-        `Search form does not fit ${width}px`);
-    }
-    await page.screenshot({ path: `browser-results/${name}-message-search-320.png`, fullPage: false });
-    console.log(`${name}: isolated direct search, deep-link, highlight and 390/320px layouts passed`);
+    console.log(`${name}: isolated direct search, deep-link and highlight passed`);
   }],
+  ...[390, 320].map(width => [`direct-mobile-${width}`, async (page, name) => {
+    // Create each browser at the target device width. Resizing a live WebKit
+    // renderer while its anchored history is settling can crash that renderer;
+    // a fresh viewport still exercises the actual responsive page and controls.
+    await page.goto(`${baseUrl}/#/app/chats?conversation=c1&message=dm-history-008`);
+    await page.locator('[data-message-id="dm-history-008"][aria-current="true"]').waitFor();
+    let dimensions = await noHorizontalOverflow(page);
+    assert.equal(dimensions.viewport, width);
+    assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= width + 1,
+      `Direct chat overflows at ${width}px: ${JSON.stringify(dimensions)}`);
+    await page.screenshot({ path: `browser-results/${name}-message-history-chat-${width}.png`, fullPage: false });
+    await openSearch(page);
+    dimensions = await noHorizontalOverflow(page);
+    assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= width + 1,
+      `Search overflows at ${width}px: ${JSON.stringify(dimensions)}`);
+    const bounds = await page.locator('.message-search-form').boundingBox();
+    assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1,
+      `Search form does not fit ${width}px`);
+    await page.screenshot({ path: `browser-results/${name}-message-search-${width}.png`, fullPage: false });
+    console.log(`${name}: isolated ${width}px direct chat and search layouts passed`);
+  }, { width, height: 844 }]),
   ['retired-direct-subscriptions', async (page, name) => {
     // Start directly at the anchored history view so retired-callback checks
     // do not depend on the search and mobile-layout scenario's renderer state.
@@ -412,10 +416,10 @@ const scenarios = [
   }],
 ];
 
-const runIsolatedScenario = async (name, engine, scenarioName, scenario) => {
+const runIsolatedScenario = async (name, engine, scenarioName, scenario, viewport = { width: 1440, height: 1000 }) => {
   const browser = await engine.launch();
   const context = await browser.newContext({
-    viewport: { width: 1440, height: 1000 },
+    viewport,
     timezoneId: 'Europe/Berlin',
   });
   await context.route('**/*', route => route.request().url().startsWith(baseUrl) ? route.continue() : route.abort());
@@ -451,10 +455,10 @@ const runIsolatedScenario = async (name, engine, scenarioName, scenario) => {
 
 try {
   for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
-    for (const [scenarioName, scenario] of scenarios) {
+    for (const [scenarioName, scenario, viewport] of scenarios) {
       // A fresh browser process per scenario prevents renderer state from the
       // 130-message history flow leaking into later WebKit navigation/screenshots.
-      await runIsolatedScenario(name, engine, scenarioName, scenario);
+      await runIsolatedScenario(name, engine, scenarioName, scenario, viewport);
     }
     console.log(`${name}: all isolated Phase 3.7 message-history scenarios passed`);
   }
