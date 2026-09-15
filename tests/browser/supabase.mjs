@@ -10,6 +10,29 @@ const task = (id, title, patch = {}) => ({
   assigned_to: 'me', due_date: '2026-09-14', description: 'Details <script>window.unsafe = true</script>',
   created_at: '2026-09-14T08:00:00Z', updated_at: '2026-09-14T08:00:00Z', completed_at: null, ...patch,
 });
+const messageHistoryFixture = sessionStorage.getItem('nexusTest.messageHistoryFixture') === '1';
+const historyConversations = [
+  { conversation_id: 'c1', contact_user_id: 'other', full_name: 'Test Kontakt', username: 'test', avatar_url: null, unread_count: 0, last_message: 'Historie 129', last_message_at: '2026-01-01T02:09:00.000Z' },
+  { conversation_id: 'c2', contact_user_id: 'second', full_name: 'Zweiter Kontakt', username: 'second', avatar_url: null, unread_count: 2, last_message: 'Vorherige Vorschau', last_message_at: '2026-03-10T09:00:00.000Z' },
+];
+const historyDirectMessages = [
+  ...Array.from({ length: 130 }, (_, index) => ({
+    message_id: `dm-history-${String(index).padStart(3, '0')}`,
+    conversation_id: 'c1', sender_id: index % 2 ? 'me' : 'other',
+    body: index === 8 ? 'Meilenstein Direkt vertraulich' : `Historie ${index}`,
+    created_at: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+    edited_at: null, deleted_at: null, read_at: null, attachments: [],
+  })),
+  { message_id: 'dm-second-search', conversation_id: 'c2', sender_id: 'second', body: 'Meilenstein Zweitgespräch', created_at: '2026-03-10T09:00:00.000Z', edited_at: null, deleted_at: null, read_at: null, attachments: [] },
+];
+const historyGroupChats = [
+  { group_id: 'g1', name: 'Projektgruppe', role: 'member', member_count: 2, unread_count: 0, last_message: 'Gruppenverlauf', last_message_at: '2026-02-15T10:00:00.000Z' },
+  { group_id: 'g2', name: 'Zweite Gruppe', role: 'member', member_count: 2, unread_count: 1, last_message: 'Alte Gruppenvorschau', last_message_at: '2026-02-16T10:00:00.000Z' },
+];
+const historyGroupMessages = [
+  { message_id: 'gm-search-anchor', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', sender_username: 'team', body: 'Meilenstein Gruppe vertraulich', created_at: '2026-02-15T10:00:00.000Z', deleted_at: null, attachments: [] },
+  { message_id: 'gm-second', group_id: 'g2', sender_id: 'other', sender_full_name: 'Zweiter Kontakt', sender_username: 'second', body: 'Nachricht in zweiter Gruppe', created_at: '2026-02-16T10:00:00.000Z', deleted_at: null, attachments: [] },
+];
 const state = {
   projects: [project('p1', 'Überfälliges Projekt', 'w1', '2026-09-13'), project('p2', 'Kommendes Projekt', 'w1', '2026-09-16'), project('p3', 'Abgeschlossenes Projekt', 'w1', null, 'completed'), project('p4', 'Zweites Team', 'w2', null)],
   tasks: [
@@ -33,9 +56,12 @@ const state = {
   chatScanCacheDeferred: false, chatScanCachePending: [],
   chatScanRecords: JSON.parse(sessionStorage.getItem('nexusTest.chatScanRecords') || '{}'),
   chatHistoryRevisions: JSON.parse(sessionStorage.getItem('nexusTest.chatHistoryRevisions') || '{}'),
-  conversations: [{ conversation_id: 'c1', contact_user_id: 'other', full_name: 'Test Kontakt', username: 'test', unread_count: 0, last_message: 'Bitte das Angebot prüfen!' }],
-  directMessages: [{ message_id: 'dm1', sender_id: 'other', body: 'Bitte das Angebot prüfen!\nDetails für das Team.', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
-  groupMessages: [{ message_id: 'gm1', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', body: 'Startseite für den Kunden vorbereiten!', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
+  conversations: messageHistoryFixture ? historyConversations : [{ conversation_id: 'c1', contact_user_id: 'other', full_name: 'Test Kontakt', username: 'test', unread_count: 0, last_message: 'Bitte das Angebot prüfen!' }],
+  directMessages: messageHistoryFixture ? historyDirectMessages : [{ message_id: 'dm1', conversation_id: 'c1', sender_id: 'other', body: 'Bitte das Angebot prüfen!\nDetails für das Team.', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
+  groupChats: messageHistoryFixture ? historyGroupChats : [{ group_id: 'g1', name: 'Projektgruppe', role: 'member', member_count: 2, unread_count: 0, last_message: 'Startseite vorbereiten' }],
+  groupMessages: messageHistoryFixture ? historyGroupMessages : [{ message_id: 'gm1', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', body: 'Startseite für den Kunden vorbereiten!', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
+  searchCalls: [], textSendCalls: [], textSendWrites: 0, loseTextSendResponse: false,
+  uploadCalls: [], failAttachmentUpload: false,
 };
 state.projects.push(project('p5', 'Drittes Projekt', 'w3', null));
 state.tasks.push(...JSON.parse(sessionStorage.getItem('nexusTest.created') || '[]'));
@@ -49,9 +75,17 @@ export const backendConfigured = true;
 export const supabaseConfig = { url: 'https://example.invalid', publishableKey: 'test-only' };
 export const initialAuthCallback = { isRecovery: false, hasError: false, hasPkceCode: false, marker: null };
 
-state.emit = (table = 'project_tasks', event = 'UPDATE') => {
+state.emit = (table = 'project_tasks', event = 'UPDATE', payload = null) => {
   for (const channel of state.channels.filter(c => c.active)) {
-    for (const entry of channel.entries) if (entry.filter.table === table && (entry.filter.event === event || entry.filter.event === '*')) entry.callback({});
+    for (const entry of channel.entries) {
+      if (entry.filter.table !== table || (entry.filter.event !== event && entry.filter.event !== '*')) continue;
+      if (payload && entry.filter.filter) {
+        const match = /^([^=]+)=eq\.(.+)$/.exec(entry.filter.filter);
+        const row = event === 'DELETE' ? payload.old : payload.new;
+        if (match && String(row?.[match[1]]) !== match[2]) continue;
+      }
+      entry.callback(payload ?? {});
+    }
   }
 };
 state.connection = status => {
@@ -130,6 +164,137 @@ const chatScanResult = (kind, chatId) => ({
   coverage: { messageCount: 250, from: '2025-01-01T09:00:00Z', to: '2025-09-14T08:00:00Z', attachmentsExcluded: 2, complete: true },
 });
 
+const messageOrder = (left, right) => {
+  const byTime = new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+  return byTime || String(left.message_id).localeCompare(String(right.message_id));
+};
+const beforeCursor = (message, createdAt, messageId) => !createdAt || messageOrder(message, { created_at: createdAt, message_id: messageId }) < 0;
+const directChatId = message => message.conversation_id ?? 'c1';
+const normalizedDirectMessage = message => ({
+  reply_to_message_id: null, reply_sender_id: null, reply_body: null,
+  edited_at: null, deleted_at: null, read_at: null, attachments: [],
+  ...message,
+});
+const normalizedGroupMessage = message => ({
+  sender_full_name: null, sender_username: null, sender_avatar_url: null,
+  edited_at: null, deleted_at: null, reply_to_message_id: null,
+  reply_body: null, reply_sender_id: null, reply_sender_name: null,
+  attachments: [], read_count: 0, recipient_count: 1,
+  ...message,
+});
+const messagePage = (rows, args, chatKey) => {
+  const chatId = args.p_conversation_id ?? args.p_group_id;
+  const limit = Math.max(1, Math.min(Number(args.p_limit ?? 100), 200));
+  const eligible = rows
+    .filter(message => chatKey(message) === chatId)
+    .filter(message => beforeCursor(message, args.p_before_created_at, args.p_before_message_id))
+    .sort(messageOrder)
+    .reverse();
+  const newestFirst = eligible.slice(0, limit);
+  const messages = newestFirst.reverse();
+  const oldest = messages[0];
+  return {
+    messages: structuredClone(messages),
+    has_more: eligible.length > limit,
+    next_cursor: oldest ? { created_at: oldest.created_at, message_id: oldest.message_id } : null,
+  };
+};
+const messageContext = (rows, args, chatKey) => {
+  const chatId = args.p_conversation_id ?? args.p_group_id;
+  const radius = Math.max(1, Math.min(Number(args.p_radius ?? 30), 50));
+  const all = rows.filter(message => chatKey(message) === chatId).sort(messageOrder);
+  const target = all.findIndex(message => message.message_id === args.p_message_id);
+  if (target < 0) return { data: null, error: { message: 'Nachricht nicht gefunden oder kein Zugriff.' } };
+  const from = Math.max(0, target - radius);
+  const to = Math.min(all.length, target + radius + 1);
+  const messages = all.slice(from, to);
+  return { data: structuredClone({
+    messages,
+    anchor_message_id: args.p_message_id,
+    has_older: from > 0,
+    has_newer: to < all.length,
+    oldest_cursor: messages[0] ? { created_at: messages[0].created_at, message_id: messages[0].message_id } : null,
+    newest_cursor: messages.at(-1) ? { created_at: messages.at(-1).created_at, message_id: messages.at(-1).message_id } : null,
+  }), error: null };
+};
+const conversationName = id => state.conversations.find(conversation => conversation.conversation_id === id)?.full_name ?? 'Direktchat';
+const directSender = message => message.sender_id === 'me'
+  ? { name: 'Test Nutzer', username: 'nexus-test' }
+  : { name: conversationName(directChatId(message)), username: state.conversations.find(conversation => conversation.conversation_id === directChatId(message))?.username ?? 'test' };
+const searchMessages = args => {
+  const needle = String(args.p_query ?? '').trim().toLocaleLowerCase('de');
+  const terms = needle.split(/\s+/).filter(Boolean);
+  const kind = args.p_kind && args.p_kind !== 'all' ? args.p_kind : null;
+  const scope = String(args.p_scope_query ?? args.p_sender_query ?? '').trim().toLocaleLowerCase('de');
+  const matchesText = message => terms.length > 0 && terms.every(term => message.body.toLocaleLowerCase('de').includes(term));
+  const matchesDate = message => (!args.p_from_date || new Date(message.created_at).getTime() >= new Date(args.p_from_date).getTime())
+    && (!args.p_to_date || new Date(message.created_at).getTime() < new Date(args.p_to_date).getTime());
+  const direct = kind === 'group' ? [] : state.directMessages.flatMap(message => {
+    const sender = directSender(message);
+    const chatId = directChatId(message);
+    const haystack = `${sender.name} ${sender.username} ${conversationName(chatId)}`.toLocaleLowerCase('de');
+    if (message.deleted_at || !message.body?.trim() || !matchesText(message) || !matchesDate(message)
+      || (args.p_chat_id && args.p_chat_id !== chatId) || (args.p_sender_id && args.p_sender_id !== message.sender_id)
+      || (scope && !haystack.includes(scope))) return [];
+    return [{ kind: 'direct', chat_id: chatId, chat_name: conversationName(chatId), message_id: message.message_id,
+      sender_id: message.sender_id, sender_name: sender.name, sender_username: sender.username,
+      body: message.body, created_at: message.created_at, edited_at: message.edited_at ?? null }];
+  });
+  const group = kind === 'direct' ? [] : state.groupMessages.flatMap(message => {
+    const chat = state.groupChats.find(item => item.group_id === message.group_id);
+    const senderName = message.sender_full_name ?? (message.sender_id === 'me' ? 'Test Nutzer' : 'Team Kontakt');
+    const senderUsername = message.sender_username ?? (message.sender_id === 'me' ? 'nexus-test' : 'team');
+    const haystack = `${senderName} ${senderUsername} ${chat?.name ?? ''}`.toLocaleLowerCase('de');
+    if (message.deleted_at || !message.body?.trim() || !matchesText(message) || !matchesDate(message)
+      || (args.p_chat_id && args.p_chat_id !== message.group_id) || (args.p_sender_id && args.p_sender_id !== message.sender_id)
+      || (scope && !haystack.includes(scope))) return [];
+    return [{ kind: 'group', chat_id: message.group_id, chat_name: chat?.name ?? 'Gruppe', message_id: message.message_id,
+      sender_id: message.sender_id, sender_name: senderName, sender_username: senderUsername,
+      body: message.body, created_at: message.created_at, edited_at: message.edited_at ?? null }];
+  });
+  const limit = Math.max(1, Math.min(Number(args.p_limit ?? 50), 100));
+  const eligible = [...direct, ...group]
+    .filter(message => beforeCursor(message, args.p_before_created_at, args.p_before_message_id))
+    .sort(messageOrder)
+    .reverse();
+  const results = eligible.slice(0, limit);
+  const oldest = results.at(-1);
+  return { results: structuredClone(results), has_more: eligible.length > limit,
+    next_cursor: oldest ? { created_at: oldest.created_at, message_id: oldest.message_id } : null };
+};
+const sendTextMessage = (kind, args) => {
+  const chatId = args.p_conversation_id ?? args.p_group_id;
+  const clientRequestId = args.p_client_request_id;
+  state.textSendCalls.push({ kind, args: structuredClone(args), userId: user.id });
+  const rows = kind === 'direct' ? state.directMessages : state.groupMessages;
+  const existing = rows.find(message => message.sender_id === user.id && message.client_request_id === clientRequestId);
+  if (existing) return { data: existing.message_id, error: null };
+  const messageId = `${kind}-sent-${state.textSendWrites + 1}`;
+  const createdAt = new Date(Date.UTC(2026, 8, 15, 12, 0, state.textSendWrites)).toISOString();
+  const message = kind === 'direct'
+    ? normalizedDirectMessage({ message_id: messageId, conversation_id: chatId, sender_id: user.id,
+      body: String(args.p_body ?? '').trim(), created_at: createdAt, client_request_id: clientRequestId,
+      reply_to_message_id: args.p_reply_to_message_id ?? null })
+    : normalizedGroupMessage({ message_id: messageId, group_id: chatId, sender_id: user.id,
+      sender_full_name: 'Test Nutzer', sender_username: 'nexus-test', body: String(args.p_body ?? '').trim(),
+      created_at: createdAt, client_request_id: clientRequestId, reply_to_message_id: args.p_reply_to_message_id ?? null });
+  rows.push(message);
+  state.textSendWrites++;
+  if (kind === 'direct') {
+    const chat = state.conversations.find(item => item.conversation_id === chatId);
+    if (chat) Object.assign(chat, { last_message: message.body, last_message_at: createdAt });
+  } else {
+    const chat = state.groupChats.find(item => item.group_id === chatId);
+    if (chat) Object.assign(chat, { last_message: message.body, last_message_at: createdAt });
+  }
+  queueMicrotask(() => state.emit(kind === 'direct' ? 'direct_messages' : 'group_messages', 'INSERT'));
+  if (state.loseTextSendResponse) {
+    state.loseTextSendResponse = false;
+    return { data: null, error: { message: 'Verbindung wurde nach dem Senden unterbrochen.' } };
+  }
+  return { data: messageId, error: null };
+};
+
 export const supabase = {
   functions: {
     async invoke(name, { body, signal } = {}) {
@@ -158,6 +323,19 @@ export const supabase = {
           last_scanned_at: new Date().toISOString(), scannedHistory: chatHistoryRevision(body.kind, body.chatId), result });
       }
       return { data: result, error: null };
+    },
+  },
+  storage: {
+    from(bucket) {
+      return {
+        async createSignedUrl(path) { return { data: { signedUrl: `https://files.example.invalid/${bucket}/${path}` }, error: null }; },
+        async upload(path, file) {
+          state.uploadCalls.push({ bucket, path, name: file.name, type: file.type, size: file.size });
+          if (state.failAttachmentUpload) return { data: null, error: { message: 'Simulierter Uploadfehler' } };
+          return { data: { path }, error: null };
+        },
+        async remove(paths) { return { data: paths, error: null }; },
+      };
     },
   },
   auth: {
@@ -226,7 +404,9 @@ export const supabase = {
       const current = args.p_chat_id ? state.chatScanState(args.p_kind, args.p_chat_id, userId) : null;
       let data;
       if (name === 'get_my_chat_scan_states') {
-        const ids = args.p_kind === 'direct' ? state.conversations.map(c => c.conversation_id) : ['g1'];
+        const ids = args.p_kind === 'direct'
+          ? state.conversations.map(c => c.conversation_id)
+          : state.groupChats.map(group => group.group_id);
         data = ids.map(id => state.chatScanState(args.p_kind, id, userId));
       } else if (name === 'set_my_chat_scan_done') {
         if (args.p_expected_revision !== current.revision) return { data: null, error: { message: 'status_changed', code: 'P0001' } };
@@ -266,10 +446,28 @@ export const supabase = {
       state.persistNotifications(); state.emit('notification_preferences');
       return { data: null, error: null };
     }
-    if (name === 'get_direct_conversations') return { data: state.conversations, error: null };
-    if (name === 'get_direct_messages') return { data: state.hideRecentSource ? [] : state.directMessages, error: null };
-    if (name === 'get_my_group_chats') return { data: [{ group_id: 'g1', name: 'Projektgruppe', role: 'member', member_count: 2, unread_count: 0, last_message: 'Startseite vorbereiten' }], error: null };
-    if (name === 'get_group_messages') return { data: state.hideRecentSource ? [] : state.groupMessages, error: null };
+    if (name === 'get_direct_conversations') return { data: structuredClone(state.conversations), error: null };
+    if (name === 'get_direct_messages') return { data: state.hideRecentSource ? [] : structuredClone(state.directMessages.filter(message => directChatId(message) === args.p_conversation_id).map(normalizedDirectMessage)), error: null };
+    if (name === 'get_direct_message_page') return { data: state.hideRecentSource
+      ? { messages: [], has_more: false, next_cursor: null }
+      : messagePage(state.directMessages.map(normalizedDirectMessage), args, directChatId), error: null };
+    if (name === 'get_direct_message_context') return state.hideRecentSource
+      ? { data: null, error: { message: 'Nachricht nicht gefunden oder kein Zugriff.' } }
+      : messageContext(state.directMessages.map(normalizedDirectMessage), args, directChatId);
+    if (name === 'get_my_group_chats') return { data: structuredClone(state.groupChats), error: null };
+    if (name === 'get_group_messages') return { data: state.hideRecentSource ? [] : structuredClone(state.groupMessages.filter(message => message.group_id === args.p_group_id).map(normalizedGroupMessage)), error: null };
+    if (name === 'get_group_message_page') return { data: state.hideRecentSource
+      ? { messages: [], has_more: false, next_cursor: null }
+      : messagePage(state.groupMessages.map(normalizedGroupMessage), args, message => message.group_id), error: null };
+    if (name === 'get_group_message_context') return state.hideRecentSource
+      ? { data: null, error: { message: 'Nachricht nicht gefunden oder kein Zugriff.' } }
+      : messageContext(state.groupMessages.map(normalizedGroupMessage), args, message => message.group_id);
+    if (name === 'search_accessible_messages') {
+      state.searchCalls.push(structuredClone(args));
+      return { data: searchMessages(args), error: null };
+    }
+    if (name === 'send_direct_message_v3') return sendTextMessage('direct', args);
+    if (name === 'send_group_message_v2') return sendTextMessage('group', args);
     if (name === 'get_group_members') return { data: [{ user_id: 'me', full_name: 'Test Nutzer', role: 'member' }, { user_id: 'other', full_name: 'Team Kontakt', role: 'owner' }], error: null };
     if (name === 'get_task_message_source') {
       if (state.failure === name) return { data: null, error: { message: 'offline' } };

@@ -20,6 +20,8 @@ import './group-management.css';
 import './chat-layout-fixed.css';
 import './chat-scan.css';
 import './chat-status.css';
+import './message-search.css';
+import './message-history.css';
 
 if ('scrollRestoration' in window.history) {
   window.history.scrollRestoration = 'manual';
@@ -50,17 +52,6 @@ window.addEventListener('pageshow', syncVisibleViewport, { passive: true });
 window.visualViewport?.addEventListener('resize', syncVisibleViewport, { passive: true });
 window.visualViewport?.addEventListener('scroll', syncVisibleViewport, { passive: true });
 desktopPointer.addEventListener?.('change', syncVisibleViewport);
-
-const nativeScrollIntoView = Element.prototype.scrollIntoView;
-Element.prototype.scrollIntoView = function scrollIntoViewInsideNexus(arg?: boolean | ScrollIntoViewOptions) {
-  const messageScroller = this.closest?.('.real-chat-layout .messages') as HTMLElement | null;
-  if (messageScroller) {
-    const behavior = typeof arg === 'object' && arg?.behavior ? arg.behavior : 'auto';
-    messageScroller.scrollTo({ top: messageScroller.scrollHeight, behavior });
-    return;
-  }
-  (nativeScrollIntoView as (arg?: boolean | ScrollIntoViewOptions) => void).call(this, arg);
-};
 
 window.addEventListener('scroll', () => {
   if (document.querySelector('.real-chat-layout') && (window.scrollX !== 0 || window.scrollY !== 0)) {

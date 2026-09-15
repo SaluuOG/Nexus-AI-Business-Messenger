@@ -5,6 +5,7 @@ import {
   ContactRound,
   House,
   MessageCircle,
+  Search,
   Settings,
   Sparkles,
   UsersRound,
@@ -31,6 +32,7 @@ const navigation = [
   [routes.briefing, House, 'Briefing'],
   [routes.chats, MessageCircle, 'Chats'],
   [routes.groups, UsersRound, 'Gruppen'],
+  [routes.search, Search, 'Suche'],
   [routes.contacts, ContactRound, 'Kontakte'],
   [routes.business, BriefcaseBusiness, 'Business'],
   [routes.ai, Bot, 'AI Assistent'],
@@ -82,12 +84,14 @@ export function Sidebar({
         </Link>
       </div>
 
-      <nav>
+      <nav aria-label="Hauptnavigation">
         {navigation.map(([path, Icon, label]) => (
           <button
+            type="button"
             key={path}
             className={location.pathname === path ? 'active' : ''}
             onClick={() => navigate(path)}
+            aria-current={location.pathname === path ? 'page' : undefined}
           >
             <Icon size={19} />
             <span>{label}</span>

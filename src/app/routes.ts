@@ -4,6 +4,7 @@ export const routes = {
   briefing: '/app/briefing',
   chats: '/app/chats',
   groups: '/app/groups',
+  search: '/app/search',
   contacts: '/app/contacts',
   business: '/app/business',
   ai: '/app/ai',

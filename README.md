@@ -223,6 +223,20 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - **Aktivierung ausstehend:** Anbieterzugang, Modell und Kostenrahmen sind noch einzurichten; bisherige KI-Prüfungen verwenden simulierte Antworten
 - Einrichtung und Grenzen: [docs/chat-scan-setup.md](docs/chat-scan-setup.md)
 
+### Phase 3.7 — Vollständiger Verlauf, Suche & sichere Entwürfe ✅
+- ältere Direkt- und Gruppennachrichten seitenweise nachladen, ohne dass die sichtbare Stelle im Verlauf springt
+- globale, serverseitige Nachrichtensuche über alle aktuell zugänglichen Chats; Filter nach Chat-Art, Gespräch oder Person und lokalem Datumsbereich
+- Suchtreffer öffnen exakt die betreffende Nachricht im richtigen Direkt- oder Gruppenchat und heben sie sichtbar hervor
+- gelöschte Nachrichten und Anhänge werden serverseitig geschwärzt; entfernte Zugriffe verschwinden unmittelbar aus Suche und Verlauf
+- Textentwürfe bleiben pro Konto, Chat und Chat-Art in diesem Browser erhalten, auch nach Chatwechsel oder Neuladen
+- fehlgeschlagene Textsendungen werden ausschließlich nach bewusster Bestätigung mit derselben Anfrage-ID wiederholt; ein verlorenes Serverergebnis erzeugt dadurch keine doppelte Nachricht
+- Dateien und Sprachnachrichten werden niemals automatisch erneut hochgeladen
+- Chatlisten reagieren per Realtime auch auf neue Nachrichten in nicht geöffneten Unterhaltungen; Fokus- und 30-Sekunden-Abgleich dienen als Ausfallsicherung
+- tiefe Verlaufsansichten setzen keine ungesehenen neueren Nachrichten versehentlich auf gelesen und bieten jederzeit den Sprung zum aktuellen Ende
+- Migration `20260915182541_phase_three_seven_message_history_search.sql` mit stabilen Cursor-Indizes, zugriffsgeschützten RPCs und explizit gesperrtem anonymem Zugriff
+- automatisierte Daten-, Sicherheits- und Browserprüfungen decken Cursor-Kollisionen, RLS-Isolation, Suche, Deep-Links, Entwürfe, Wiederholung und 320-/390-Pixel-Ansichten ab
+- diese Phase benötigt keinen KI-Anbieter und verursacht keine OpenAI-API-Aufrufe; die KI-Anbindung aus Phase 3.6 bleibt bis zur bewussten Aktivierung ausgeschaltet
+
 ### Einstellungen nach Kategorien
 - Allgemein: Startansicht sowie private oder geschäftliche Identität; die Auswahl wird pro Konto in diesem Browser gespeichert
 - Profil & Business: Name, Username, Bio und Business-Profil
@@ -234,7 +248,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - direkte Aufgaben- und Chatlinks haben Vorrang vor der gewählten Startansicht
 - Testfälle für Kontentrennung und nicht verfügbaren Browserspeicher sowie vollständige Browserabläufe mit isolierten Auth-Testdaten
 
-Browserprüfungen laufen in GitHub Actions mit Playwright 1.55.1 in einem separaten Laufzeitverzeichnis. Lokal: Playwright installieren, Chromium/WebKit mit `playwright install --with-deps chromium webkit` bereitstellen und `NEXUS_PLAYWRIGHT_MODULE` auf den absoluten Pfad zu `playwright/index.mjs` setzen. Danach `node tests/browser/briefing.mjs`, `node tests/browser/message-tasks.mjs` und `node tests/browser/settings.mjs` ausführen. Screenshots landen unter `browser-results/`. `node tests/browser/preview.mjs` startet eine separate Vorschau mit synthetischen Testdaten; diese werden nicht mit der App veröffentlicht.
+Browserprüfungen laufen in GitHub Actions mit Playwright 1.55.1 in einem separaten Laufzeitverzeichnis. Lokal: Playwright installieren, Chromium/WebKit mit `playwright install --with-deps chromium webkit` bereitstellen und `NEXUS_PLAYWRIGHT_MODULE` auf den absoluten Pfad zu `playwright/index.mjs` setzen. Danach die Skripte in `tests/browser/` ausführen; Phase 3.7 wird mit `node tests/browser/message-history.mjs` geprüft. Screenshots landen unter `browser-results/`. `node tests/browser/preview.mjs` startet eine separate Vorschau mit synthetischen Testdaten; diese werden nicht mit der App veröffentlicht.
 
 Offene Nutzerabnahme: abschließender manueller Durchlauf mit zwei echten Konten. Browserprüfungen mit Testdaten ersetzen diese Abnahme nicht.
 
@@ -244,6 +258,7 @@ Offene Nutzerabnahme: abschließender manueller Durchlauf mit zwei echten Konten
 - `#/app/briefing`
 - `#/app/chats`
 - `#/app/groups`
+- `#/app/search`
 - `#/app/contacts`
 - `#/app/business`
 - `#/app/ai`

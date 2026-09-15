@@ -1,6 +1,10 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
+import { createTextClientRequestId } from '../drafts/textSendRetry';
 import { validateChatAttachment } from './chatData';
+import type { MessageCursor } from './messageSearchData';
+
+export type { MessageCursor } from './messageSearchData';
 
 const ATTACHMENT_BUCKET = 'nexus-chat-attachments';
 const GROUP_AVATAR_BUCKET = 'nexus-group-avatars';
@@ -67,6 +71,21 @@ export type GroupMessage = {
   recipient_count: number;
 };
 
+export type GroupMessagePage = {
+  messages: GroupMessage[];
+  has_more: boolean;
+  next_cursor: MessageCursor | null;
+};
+
+export type GroupMessageContext = {
+  messages: GroupMessage[];
+  anchor_message_id: string;
+  has_older: boolean;
+  has_newer: boolean;
+  oldest_cursor: MessageCursor | null;
+  newest_cursor: MessageCursor | null;
+};
+
 function extensionForFile(file: File) {
   const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
   return ext && ext.length <= 10 ? `.${ext}` : '';
@@ -118,6 +137,80 @@ async function signGroupAttachments(messages: GroupMessage[]) {
   }));
 }
 
+function normalizeCursor(value: unknown): MessageCursor | null {
+  if (!value || typeof value !== 'object') return null;
+  const cursor = value as Partial<MessageCursor>;
+  return typeof cursor.created_at === 'string' && Number.isFinite(Date.parse(cursor.created_at))
+    && typeof cursor.message_id === 'string' && cursor.message_id.length > 0
+    ? { created_at: cursor.created_at, message_id: cursor.message_id }
+    : null;
+}
+
+function normalizeGroupMessages(value: unknown): GroupMessage[] | null {
+  if (!Array.isArray(value)) return null;
+  const normalized: GroupMessage[] = [];
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object') return null;
+    const message = candidate as Partial<GroupMessage> & { read_count?: number | string; recipient_count?: number | string };
+    if ((typeof message.read_count !== 'number' && typeof message.read_count !== 'string')
+      || (typeof message.recipient_count !== 'number' && typeof message.recipient_count !== 'string')) return null;
+    const readCount = Number(message.read_count);
+    const recipientCount = Number(message.recipient_count);
+    if (typeof message.message_id !== 'string' || !message.message_id || typeof message.group_id !== 'string' || !message.group_id
+      || typeof message.sender_id !== 'string' || !message.sender_id || typeof message.body !== 'string'
+      || typeof message.created_at !== 'string' || !Number.isFinite(Date.parse(message.created_at))
+      || !Number.isFinite(readCount) || !Number.isFinite(recipientCount)
+      || !Array.isArray(message.attachments)) return null;
+
+    const attachments: GroupAttachment[] = [];
+    for (const item of message.attachments) {
+      if (!item || typeof item !== 'object') return null;
+      const attachment = item as Partial<GroupAttachment> & { file_size?: number | string };
+      if (typeof attachment.file_size !== 'number' && typeof attachment.file_size !== 'string') return null;
+      const fileSize = Number(attachment.file_size);
+      if (typeof attachment.attachment_id !== 'string' || !attachment.attachment_id || typeof attachment.storage_path !== 'string' || !attachment.storage_path
+        || typeof attachment.file_name !== 'string' || typeof attachment.mime_type !== 'string'
+        || !Number.isFinite(fileSize) || fileSize < 1) return null;
+      attachments.push({
+        attachment_id: attachment.attachment_id,
+        storage_path: attachment.storage_path,
+        file_name: attachment.file_name,
+        mime_type: attachment.mime_type,
+        file_size: fileSize,
+        signed_url: null,
+      });
+    }
+    normalized.push({
+      message_id: message.message_id,
+      group_id: message.group_id,
+      sender_id: message.sender_id,
+      sender_full_name: typeof message.sender_full_name === 'string' ? message.sender_full_name : null,
+      sender_username: typeof message.sender_username === 'string' ? message.sender_username : null,
+      sender_avatar_url: typeof message.sender_avatar_url === 'string' ? message.sender_avatar_url : null,
+      body: message.body,
+      created_at: message.created_at,
+      edited_at: typeof message.edited_at === 'string' && Number.isFinite(Date.parse(message.edited_at)) ? message.edited_at : null,
+      deleted_at: typeof message.deleted_at === 'string' && Number.isFinite(Date.parse(message.deleted_at)) ? message.deleted_at : null,
+      reply_to_message_id: typeof message.reply_to_message_id === 'string' ? message.reply_to_message_id : null,
+      reply_body: typeof message.reply_body === 'string' ? message.reply_body : null,
+      reply_sender_id: typeof message.reply_sender_id === 'string' ? message.reply_sender_id : null,
+      reply_sender_name: typeof message.reply_sender_name === 'string' ? message.reply_sender_name : null,
+      attachments,
+      read_count: readCount,
+      recipient_count: recipientCount,
+    });
+  }
+  return normalized;
+}
+
+const emptyGroupMessagePage = (): GroupMessagePage => ({ messages: [], has_more: false, next_cursor: null });
+
+function boundedInteger(value: number, fallback: number, maximum: number) {
+  return Number.isFinite(value) ? Math.max(1, Math.min(Math.trunc(value), maximum)) : fallback;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export async function createGroupChat(name: string, memberIds: string[]) {
   if (!supabase) return { data: null as string | null, error: 'Supabase ist nicht konfiguriert.' };
   const { data, error } = await supabase.rpc('create_group_chat', { p_name: name.trim(), p_member_ids: memberIds });
@@ -153,18 +246,83 @@ export async function loadGroupMessages(groupId: string) {
   if (!supabase) return { data: [] as GroupMessage[], error: 'Supabase ist nicht konfiguriert.' };
   const { data, error } = await supabase.rpc('get_group_messages', { p_group_id: groupId, p_limit: 200 });
   if (error) return { data: [] as GroupMessage[], error: error.message };
-  const normalized = ((data ?? []) as Array<Omit<GroupMessage, 'attachments' | 'read_count' | 'recipient_count'> & { attachments?: GroupAttachment[] | null; read_count?: number | string; recipient_count?: number | string }>).map((message) => ({
-    ...message,
-    read_count: Number(message.read_count || 0),
-    recipient_count: Number(message.recipient_count || 0),
-    attachments: Array.isArray(message.attachments) ? message.attachments.map((attachment) => ({ ...attachment, file_size: Number(attachment.file_size || 0), signed_url: null })) : [],
-  }));
-  return { data: await signGroupAttachments(normalized), error: null as string | null };
+  const messages = normalizeGroupMessages(data);
+  if (!messages) return { data: [] as GroupMessage[], error: 'Die Nachrichten konnten nicht sicher geladen werden.' };
+  return { data: await signGroupAttachments(messages), error: null as string | null };
 }
 
-export async function sendGroupMessage(groupId: string, body: string, replyToMessageId?: string | null) {
+export async function loadGroupMessagePage(groupId: string, cursor: MessageCursor | null = null, limit = 100) {
+  if (!supabase) return { data: emptyGroupMessagePage(), error: 'Supabase ist nicht konfiguriert.' };
+  const normalizedCursor = cursor === null ? null : normalizeCursor(cursor);
+  if (cursor && !normalizedCursor) return { data: emptyGroupMessagePage(), error: 'Der Nachrichten-Cursor ist ungültig.' };
+  const { data, error } = await supabase.rpc('get_group_message_page', {
+    p_group_id: groupId,
+    p_before_created_at: normalizedCursor?.created_at ?? null,
+    p_before_message_id: normalizedCursor?.message_id ?? null,
+    p_limit: boundedInteger(limit, 100, 200),
+  });
+  if (error) return { data: emptyGroupMessagePage(), error: error.message };
+  if (!data || typeof data !== 'object') return { data: emptyGroupMessagePage(), error: 'Die Nachrichten konnten nicht sicher geladen werden.' };
+  const value = data as Partial<GroupMessagePage>;
+  const messages = normalizeGroupMessages(value.messages);
+  const nextCursor = value.next_cursor === null ? null : normalizeCursor(value.next_cursor);
+  if (!messages || typeof value.has_more !== 'boolean' || (value.next_cursor !== null && !nextCursor)
+    || (messages.length > 0 && !nextCursor) || (messages.length === 0 && nextCursor !== null)
+    || (value.has_more && !nextCursor)) {
+    return { data: emptyGroupMessagePage(), error: 'Die Nachrichten konnten nicht sicher geladen werden.' };
+  }
+  return {
+    data: {
+      messages: await signGroupAttachments(messages),
+      has_more: value.has_more,
+      next_cursor: nextCursor,
+    },
+    error: null as string | null,
+  };
+}
+
+export async function loadGroupMessageContext(groupId: string, messageId: string, radius = 30) {
+  if (!supabase) return { data: null as GroupMessageContext | null, error: 'Supabase ist nicht konfiguriert.' };
+  const { data, error } = await supabase.rpc('get_group_message_context', {
+    p_group_id: groupId,
+    p_message_id: messageId,
+    p_radius: boundedInteger(radius, 30, 50),
+  });
+  if (error || !data || typeof data !== 'object') {
+    return { data: null as GroupMessageContext | null, error: error?.message ?? 'Die Nachricht konnte nicht geladen werden.' };
+  }
+  const value = data as Partial<GroupMessageContext>;
+  const messages = normalizeGroupMessages(value.messages);
+  const oldestCursor = value.oldest_cursor === null ? null : normalizeCursor(value.oldest_cursor);
+  const newestCursor = value.newest_cursor === null ? null : normalizeCursor(value.newest_cursor);
+  if (!messages || value.anchor_message_id !== messageId || !messages.some((message) => message.message_id === messageId)
+    || typeof value.has_older !== 'boolean' || typeof value.has_newer !== 'boolean'
+    || !oldestCursor || !newestCursor) {
+    return { data: null as GroupMessageContext | null, error: 'Die Nachricht konnte nicht sicher geladen werden.' };
+  }
+  return {
+    data: {
+      messages: await signGroupAttachments(messages),
+      anchor_message_id: messageId,
+      has_older: value.has_older,
+      has_newer: value.has_newer,
+      oldest_cursor: oldestCursor,
+      newest_cursor: newestCursor,
+    },
+    error: null as string | null,
+  };
+}
+
+export async function sendGroupMessage(groupId: string, body: string, replyToMessageId?: string | null, clientRequestId?: string) {
   if (!supabase) return { data: null as string | null, error: 'Supabase ist nicht konfiguriert.' };
-  const { data, error } = await supabase.rpc('send_group_message', { p_group_id: groupId, p_body: body, p_reply_to_message_id: replyToMessageId ?? null });
+  const requestId = clientRequestId ?? createTextClientRequestId();
+  if (!UUID_PATTERN.test(requestId)) return { data: null as string | null, error: 'Die Nachricht konnte nicht sicher gesendet werden.' };
+  const { data, error } = await supabase.rpc('send_group_message_v2', {
+    p_group_id: groupId,
+    p_body: body,
+    p_client_request_id: requestId,
+    p_reply_to_message_id: replyToMessageId ?? null,
+  });
   return { data: (data as string | null) ?? null, error: error?.message ?? null };
 }
 
@@ -356,6 +514,16 @@ export function subscribeToGroupRealtime(groupId: string, handlers: {
   }
 
   return channel;
+}
+
+export function subscribeToGroupMessagesRealtime(onChanged: () => void): RealtimeChannel | null {
+  if (!supabase) return null;
+  return supabase.channel('group-message-list')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages' }, onChanged)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_reads' }, onChanged)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_conversations' }, onChanged)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, onChanged)
+    .subscribe();
 }
 
 export async function unsubscribeGroupRealtime(channel: RealtimeChannel | null) {

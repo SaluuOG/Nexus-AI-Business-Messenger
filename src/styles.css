@@ -4,11 +4,11 @@
 @media(max-width:900px){
   .app{grid-template-columns:minmax(0,1fr)}
   .side{min-width:0}
-  .side nav{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .side nav{grid-template-columns:repeat(auto-fit,minmax(54px,1fr))}
   .side nav button{min-width:0}
 }
 @media(max-width:650px){
-  .side nav{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .side nav{grid-template-columns:repeat(auto-fit,minmax(88px,1fr))}
   .side nav button{gap:5px;padding:9px 4px;font-size:11px}
   .side nav button svg{flex-shrink:0;width:17px;height:17px}
   .side nav button span{min-width:0;overflow-wrap:anywhere}
