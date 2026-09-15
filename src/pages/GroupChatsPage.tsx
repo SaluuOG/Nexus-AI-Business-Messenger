@@ -602,8 +602,9 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   useEffect(() => {
     const scheduleRefresh = (historyChanged = false) => {
       if (historyChanged) setGroupListRevision((revision) => revision + 1);
-      if (groupListRefreshTimerRef.current) clearTimeout(groupListRefreshTimerRef.current);
+      if (groupListRefreshTimerRef.current) return;
       groupListRefreshTimerRef.current = setTimeout(() => {
+        groupListRefreshTimerRef.current = null;
         const selectedBeforeRefresh = selectedRef.current;
         void refreshGroupsRef.current(selectedBeforeRefresh, true).then((nextGroups) => {
           if (selectedBeforeRefresh && nextGroups && !nextGroups.some((group) => group.group_id === selectedBeforeRefresh)) {
@@ -629,7 +630,10 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.clearInterval(interval);
-      if (groupListRefreshTimerRef.current) clearTimeout(groupListRefreshTimerRef.current);
+      if (groupListRefreshTimerRef.current) {
+        clearTimeout(groupListRefreshTimerRef.current);
+        groupListRefreshTimerRef.current = null;
+      }
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
       void unsubscribeGroupRealtime(channel);

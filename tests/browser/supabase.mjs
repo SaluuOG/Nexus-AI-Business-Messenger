@@ -61,6 +61,7 @@ const state = {
   groupChats: messageHistoryFixture ? historyGroupChats : [{ group_id: 'g1', name: 'Projektgruppe', role: 'member', member_count: 2, unread_count: 0, last_message: 'Startseite vorbereiten' }],
   groupMessages: messageHistoryFixture ? historyGroupMessages : [{ message_id: 'gm1', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', body: 'Startseite für den Kunden vorbereiten!', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
   searchCalls: [], textSendCalls: [], textSendWrites: 0, loseTextSendResponse: false,
+  groupChatListLoads: 0,
   uploadCalls: [], failAttachmentUpload: false,
 };
 state.projects.push(project('p5', 'Drittes Projekt', 'w3', null));
@@ -454,7 +455,10 @@ export const supabase = {
     if (name === 'get_direct_message_context') return state.hideRecentSource
       ? { data: null, error: { message: 'Nachricht nicht gefunden oder kein Zugriff.' } }
       : messageContext(state.directMessages.map(normalizedDirectMessage), args, directChatId);
-    if (name === 'get_my_group_chats') return { data: structuredClone(state.groupChats), error: null };
+    if (name === 'get_my_group_chats') {
+      state.groupChatListLoads++;
+      return { data: structuredClone(state.groupChats), error: null };
+    }
     if (name === 'get_group_messages') return { data: state.hideRecentSource ? [] : structuredClone(state.groupMessages.filter(message => message.group_id === args.p_group_id).map(normalizedGroupMessage)), error: null };
     if (name === 'get_group_message_page') return { data: state.hideRecentSource
       ? { messages: [], has_more: false, next_cursor: null }

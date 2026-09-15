@@ -206,6 +206,7 @@ try {
 
       // The group list also reacts to a message in a non-selected group.
       await waitForGlobalMessageSubscription('group_messages');
+      const previousGroupListLoads = await page.evaluate(() => window.nexusTest.groupChatListLoads);
       await page.evaluate(() => {
         const group = window.nexusTest.groupChats.find(item => item.group_id === 'g2');
         group.last_message = 'Live-Vorschau aus anderer Gruppe';
@@ -214,6 +215,7 @@ try {
           new: { group_id: 'g2', id: 'remote-group' }, old: null,
         });
       });
+      await page.waitForFunction(previous => window.nexusTest.groupChatListLoads > previous, previousGroupListLoads);
       await page.locator('.chat').filter({ hasText: 'Zweite Gruppe' }).getByText('Live-Vorschau aus anderer Gruppe', { exact: true }).waitFor();
 
       await openSearch();
