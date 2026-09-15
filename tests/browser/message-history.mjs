@@ -192,7 +192,7 @@ try {
       assert.equal(await page.locator('.message-search-result').count(), 1);
       const groupResult = page.locator('.message-search-result').filter({ hasText: 'Meilenstein Gruppe vertraulich' });
       await groupResult.locator('.message-search-open').click();
-      await page.locator('[data-message-id="gm-search-anchor"][data-highlighted="true"]').waitFor();
+      await page.locator('[data-message-id="gm-search-anchor"][data-highlighted="true"]').waitFor({ state: 'attached' });
       assert.match(page.url(), /#\/app\/groups\?group=g1&message=gm-search-anchor$/);
 
       // The group list also reacts to a message in a non-selected group.
@@ -244,15 +244,15 @@ try {
     } catch (error) {
       console.error('Browser errors:', errors);
       try {
-        await page.screenshot({ path: `browser-results/${name}-message-history-failure.png`, fullPage: false });
-      } catch (diagnosticError) {
-        console.error('Failure screenshot unavailable:', diagnosticError instanceof Error ? diagnosticError.message : diagnosticError);
-      }
-      try {
         console.error('Test URL:', page.url());
         console.error('Test UI:', (await page.locator('body').innerText()).slice(0, 9000));
       } catch (diagnosticError) {
         console.error('Failure page state unavailable:', diagnosticError instanceof Error ? diagnosticError.message : diagnosticError);
+      }
+      try {
+        await page.screenshot({ path: `browser-results/${name}-message-history-failure.png`, fullPage: false });
+      } catch (diagnosticError) {
+        console.error('Failure screenshot unavailable:', diagnosticError instanceof Error ? diagnosticError.message : diagnosticError);
       }
       throw error;
     } finally {
