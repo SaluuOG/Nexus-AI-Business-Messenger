@@ -18,6 +18,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { routes } from '../app/routes';
 import { Header } from '../components/Header';
 import { PasswordInput, PasswordStrengthHint } from '../components/PasswordInput';
+import { WorkspaceLifecyclePanel } from '../components/WorkspaceLifecyclePanel';
 import { WorkspaceTeamPanel } from '../components/WorkspaceTeamPanel';
 import { NotificationPreferences } from '../components/NotificationPreferences';
 import type { NotificationsModel } from '../features/notifications/useNotifications';
@@ -35,6 +36,11 @@ import type { IdentityMode } from '../types';
 
 type ProfilePatch = Partial<Pick<NexusProfile, 'full_name' | 'username' | 'bio'>>;
 type ManageableRole = Exclude<WorkspaceRole, 'owner'>;
+type WorkspaceLifecycleFeedback = {
+  workspaceId: string;
+  message: string;
+  error: boolean;
+};
 
 type SettingsPageProps = {
   notifications?: NotificationsModel;
@@ -56,6 +62,8 @@ type SettingsPageProps = {
   workspaceInvitations: NexusWorkspaceInvitation[];
   teamLoading: boolean;
   teamError?: string | null;
+  workspaceLifecycleBusy?: boolean;
+  workspaceLifecycleFeedback?: WorkspaceLifecycleFeedback | null;
   dataLoading: boolean;
   dataError?: string | null;
   onSaveProfile: (patch: ProfilePatch) => Promise<{ error: string | null }>;
@@ -69,6 +77,10 @@ type SettingsPageProps = {
   onRemoveWorkspaceMember: (userId: string) => Promise<{ error: string | null }>;
   onRevokeWorkspaceInvitation: (invitationId: string) => Promise<{ error: string | null }>;
   onRefreshWorkspaceTeam: () => Promise<void>;
+  onRenameWorkspace: (name: string) => Promise<{ error: string | null }>;
+  onLeaveWorkspace: () => Promise<{ error: string | null }>;
+  onTransferWorkspaceOwnership: (newOwnerId: string) => Promise<{ error: string | null }>;
+  onDeleteWorkspace: (confirmation: string) => Promise<{ error: string | null }>;
   onAcceptWorkspaceInvitation: (
     token: string,
   ) => Promise<{ error: string | null; workspaceName?: string }>;
@@ -112,6 +124,8 @@ export function SettingsPage({
   workspaceInvitations,
   teamLoading,
   teamError,
+  workspaceLifecycleBusy,
+  workspaceLifecycleFeedback,
   dataLoading,
   dataError,
   onSaveProfile,
@@ -122,6 +136,10 @@ export function SettingsPage({
   onRemoveWorkspaceMember,
   onRevokeWorkspaceInvitation,
   onRefreshWorkspaceTeam,
+  onRenameWorkspace,
+  onLeaveWorkspace,
+  onTransferWorkspaceOwnership,
+  onDeleteWorkspace,
   onAcceptWorkspaceInvitation,
   onUpdatePassword,
   onRequestPasswordReset,
@@ -385,7 +403,7 @@ export function SettingsPage({
               <p>Hier wählst du das Team aus, dessen Projekte, Aufgaben und Mitglieder du verwalten möchtest.</p>
               <div className="settings-form">
                 <label htmlFor="settings-workspace">Workspace auswählen</label>
-                <select id="settings-workspace" value={selectedWorkspaceId ?? ''} disabled={dataLoading || !workspaces.length} onChange={event => onWorkspaceChange(event.target.value)}>
+                <select id="settings-workspace" value={selectedWorkspaceId ?? ''} disabled={dataLoading || workspaceLifecycleBusy || !workspaces.length} onChange={event => onWorkspaceChange(event.target.value)}>
                   <option value="" disabled>Workspace auswählen</option>
                   {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
                 </select>
@@ -398,11 +416,24 @@ export function SettingsPage({
               <p>Lege einen eigenen Arbeitsbereich für ein neues Team an.</p>
               <form className="settings-form" onSubmit={submitWorkspace}>
                 <label>Neuer Workspace<input aria-label="Neuer Workspace" required value={workspaceName} onChange={event => setWorkspaceName(event.target.value)} placeholder="Workspace-Name" /></label>
-                <button className="primary" disabled={workspaceSaving || dataLoading}><Plus size={15} />{workspaceSaving ? 'Erstellt…' : 'Workspace erstellen'}</button>
+                <button className="primary" disabled={workspaceSaving || dataLoading || workspaceLifecycleBusy}><Plus size={15} />{workspaceSaving ? 'Erstellt…' : 'Workspace erstellen'}</button>
                 {workspaceFeedback && <small className="form-feedback" role="status">{workspaceFeedback}</small>}
               </form>
             </div>
             <WorkspaceTeamPanel key={selectedWorkspaceId} workspace={selectedWorkspace} currentRole={currentWorkspaceRole} currentUserId={currentUserId} members={workspaceMembers} invitations={workspaceInvitations} loading={teamLoading} error={teamError} onInvite={onInviteWorkspaceMember} onUpdateRole={onUpdateWorkspaceMemberRole} onRemoveMember={onRemoveWorkspaceMember} onRevokeInvitation={onRevokeWorkspaceInvitation} onRefresh={onRefreshWorkspaceTeam} />
+            <WorkspaceLifecyclePanel
+              key={`lifecycle:${selectedWorkspaceId ?? 'none'}`}
+              selectedWorkspace={selectedWorkspace}
+              currentUserId={currentUserId}
+              currentRole={currentWorkspaceRole}
+              members={workspaceMembers}
+              busy={workspaceLifecycleBusy}
+              feedback={workspaceLifecycleFeedback}
+              onRename={onRenameWorkspace}
+              onLeave={onLeaveWorkspace}
+              onTransfer={onTransferWorkspaceOwnership}
+              onDelete={onDeleteWorkspace}
+            />
           </div>}
 
           {category.id === 'notifications' && notifications && <NotificationPreferences model={notifications} />}

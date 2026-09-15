@@ -105,8 +105,8 @@
 }
 
 @keyframes messageAnchorPulse {
-  0%, 35% { filter: drop-shadow(0 0 9px rgba(143, 135, 255, .55)); }
-  100% { filter: none; }
+  0%, 35% { box-shadow: 0 0 0 4px rgba(143, 135, 255, .32); }
+  100% { box-shadow: 0 0 0 4px rgba(143, 135, 255, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {

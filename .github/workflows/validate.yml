@@ -36,6 +36,8 @@ jobs:
         uses: ./.github/actions/setup-browser
       - name: Browser workflows
         run: |
+          node tests/browser/workspace-lifecycle.mjs
+          node tests/browser/message-history.mjs
           node tests/browser/briefing.mjs
           node tests/browser/message-tasks.mjs
           node tests/browser/settings.mjs

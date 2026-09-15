@@ -49,6 +49,12 @@ const waitForGlobalMessageSubscription = (page, table) => page.waitForFunction(e
   return channels.length >= 2 && channels.filter(channel => channel.active).length === 1;
 }, table);
 
+const waitForScopedMessageSubscription = (page, channelName, table) => page.waitForFunction(({ expectedChannel, expectedTable }) => {
+  const channels = window.nexusTest.channels.filter(channel => channel.name === expectedChannel && channel.entries.some(entry =>
+    entry.filter?.table === expectedTable && entry.filter.filter != null));
+  return channels.some(channel => channel.active);
+}, { expectedChannel: channelName, expectedTable: table });
+
 const noHorizontalOverflow = page => page.evaluate(() => ({
   viewport: window.innerWidth,
   documentWidth: document.documentElement.scrollWidth,
@@ -96,6 +102,41 @@ const scenarios = [
       `The visible history anchor moved (${JSON.stringify({ beforeHistory, afterHistory })})`);
     assert.ok(afterHistory.top + afterHistory.viewport < afterHistory.height - 20,
       'Loading older messages must not force the viewport to the bottom');
+
+    // UPDATE events for rows outside the newest 100-message page reconcile
+    // edits and logical deletes without resetting pagination or presenting the
+    // change as a newly arrived message.
+    await waitForScopedMessageSubscription(page, 'direct-conversation:c1', 'direct_messages');
+    let delivered = await page.evaluate(() => {
+      const message = window.nexusTest.directMessages.find(item => item.message_id === 'dm-history-008');
+      message.body = 'Ältere Direktnachricht live bearbeitet';
+      message.edited_at = '2026-03-10T12:00:00.000Z';
+      return window.nexusTest.emit('direct_messages', 'UPDATE', {
+        eventType: 'UPDATE',
+        new: { conversation_id: 'c1', id: message.message_id },
+        old: { conversation_id: 'c1', id: message.message_id },
+      });
+    });
+    assert.ok(delivered > 0, 'The selected direct chat must receive the old-message UPDATE');
+    const oldDirectMessage = page.locator('[data-message-id="dm-history-008"]');
+    await oldDirectMessage.getByText('Ältere Direktnachricht live bearbeitet', { exact: true }).waitFor();
+    await oldDirectMessage.getByText('bearbeitet', { exact: true }).waitFor();
+    assert.equal(await page.locator('.messages-history-button').count(), 0,
+      'A targeted UPDATE must not reset the loaded history page');
+    assert.equal(await page.locator('.newer-messages-notice').count(), 0,
+      'Editing an old loaded message must not be presented as a new message');
+
+    delivered = await page.evaluate(() => {
+      const message = window.nexusTest.directMessages.find(item => item.message_id === 'dm-history-008');
+      message.deleted_at = '2026-03-10T12:01:00.000Z';
+      return window.nexusTest.emit('direct_messages', 'UPDATE', {
+        eventType: 'UPDATE',
+        new: { conversation_id: 'c1', id: message.message_id },
+        old: { conversation_id: 'c1', id: message.message_id },
+      });
+    });
+    assert.ok(delivered > 0, 'The selected direct chat must receive the logical delete UPDATE');
+    await oldDirectMessage.getByText('Nachricht gelöscht', { exact: true }).waitFor();
 
     // Drafts follow account + chat, survive switching and a full reload, and
     // are not mixed between two conversations.
@@ -192,24 +233,88 @@ const scenarios = [
     await page.locator('.newer-messages-notice').waitFor();
     assert.match(page.url(), /#\/app\/chats\?conversation=c1&message=dm-history-008$/);
 
-    // Both common phone widths remain operable without page overflow. Viewport
-    // screenshots avoid rasterising an unnecessarily tall virtual history page.
-    await page.setViewportSize({ width: 390, height: 844 });
+    console.log(`${name}: isolated direct search, deep-link and highlight passed`);
+  }],
+  ...[390, 320].map(width => [`direct-mobile-${width}`, async (page, name) => {
+    // Create each browser at the target device width. Resizing a live WebKit
+    // renderer while its anchored history is settling can crash that renderer;
+    // a fresh viewport still exercises the actual responsive page and controls.
+    await page.goto(`${baseUrl}/#/app/chats?conversation=c1&message=dm-history-008`);
+    await page.locator('[data-message-id="dm-history-008"][aria-current="true"]').waitFor();
     let dimensions = await noHorizontalOverflow(page);
-    assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= dimensions.viewport + 1, JSON.stringify(dimensions));
-    await page.screenshot({ path: `browser-results/${name}-message-history-mobile-chat.png`, fullPage: false });
+    assert.equal(dimensions.viewport, width);
+    assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= width + 1,
+      `Direct chat overflows at ${width}px: ${JSON.stringify(dimensions)}`);
+    await page.screenshot({ path: `browser-results/${name}-message-history-chat-${width}.png`, fullPage: false });
     await openSearch(page);
-    for (const width of [390, 320]) {
-      await page.setViewportSize({ width, height: 844 });
-      dimensions = await noHorizontalOverflow(page);
-      assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= dimensions.viewport + 1,
-        `Search overflows at ${width}px: ${JSON.stringify(dimensions)}`);
-      const bounds = await page.locator('.message-search-form').boundingBox();
-      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1,
-        `Search form does not fit ${width}px`);
-    }
-    await page.screenshot({ path: `browser-results/${name}-message-search-320.png`, fullPage: false });
-    console.log(`${name}: isolated direct search, deep-link, highlight and 390/320px layouts passed`);
+    dimensions = await noHorizontalOverflow(page);
+    assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= width + 1,
+      `Search overflows at ${width}px: ${JSON.stringify(dimensions)}`);
+    const bounds = await page.locator('.message-search-form').boundingBox();
+    assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1,
+      `Search form does not fit ${width}px`);
+    await page.screenshot({ path: `browser-results/${name}-message-search-${width}.png`, fullPage: false });
+    console.log(`${name}: isolated ${width}px direct chat and search layouts passed`);
+  }, { width, height: 844 }]),
+  ['retired-direct-subscriptions', async (page, name) => {
+    // Start directly at the anchored history view so retired-callback checks
+    // do not depend on the search and mobile-layout scenario's renderer state.
+    await page.goto(`${baseUrl}/#/app/chats?conversation=c1&message=dm-history-008`);
+    await page.locator('[data-message-id="dm-history-008"][aria-current="true"]').waitFor();
+    await waitForScopedMessageSubscription(page, 'direct-conversation:c1', 'direct_messages');
+
+    // A read callback retained by the previous channel must become inert as
+    // soon as another chat is selected. Without the scope + generation guard,
+    // its delayed refresh supersedes the new chat request and leaves c2 empty
+    // in a permanent loading state.
+    await page.evaluate(() => {
+      window.nexusTest.directMessageDelay = 350;
+      location.hash = '#/app/chats?conversation=c2';
+    });
+    await page.locator('.chat-head').getByText('Zweiter Kontakt', { exact: true }).waitFor();
+    await waitForScopedMessageSubscription(page, 'direct-conversation:c2', 'direct_messages');
+    const staleReadDelivered = await page.evaluate(() => {
+      const oldChannel = window.nexusTest.channels.find(channel => channel.name === 'direct-conversation:c1' && !channel.active);
+      const entry = oldChannel?.entries.find(item => item.filter.table === 'direct_conversation_reads');
+      entry?.callback({
+        eventType: 'UPDATE',
+        new: { conversation_id: 'c1', user_id: 'other' },
+        old: { conversation_id: 'c1', user_id: 'other' },
+      });
+      return Boolean(entry);
+    });
+    assert.equal(staleReadDelivered, true, 'The regression fixture must retain the retired read callback');
+    await page.locator('[data-message-id="dm-second-search"]').waitFor();
+    await page.evaluate(() => { window.nexusTest.directMessageDelay = 0; });
+    assert.equal(await page.getByText('Nachrichten werden geladen…', { exact: true }).count(), 0,
+      'The selected chat must not remain empty/loading after a retired read callback');
+
+    // The retired message callback is covered separately because it also
+    // invalidates the scan revision when it is allowed to cross chat scope.
+    const newerNoticeCountBeforeStaleCallback = await page.locator('.newer-messages-notice').count();
+    const scanCallsBeforeStaleCallback = await page.evaluate(() => window.nexusTest.chatScanStateCalls.filter(call => (
+      call.name === 'get_my_chat_scan_state' && call.args.p_chat_id === 'c2'
+    )).length);
+    const staleCallbackDelivered = await page.evaluate(() => {
+      const oldChannel = window.nexusTest.channels.find(channel => channel.name === 'direct-conversation:c1' && !channel.active);
+      const entry = oldChannel?.entries.find(item => item.filter.table === 'direct_messages' && item.filter.event === 'INSERT');
+      entry?.callback({
+        eventType: 'INSERT',
+        new: { conversation_id: 'c1', id: 'stale-c1-event' },
+        old: {},
+      });
+      return Boolean(entry);
+    });
+    assert.equal(staleCallbackDelivered, true, 'The regression fixture must retain the retired channel callback');
+    await page.waitForTimeout(150);
+    assert.equal(await page.locator('.newer-messages-notice').count(), newerNoticeCountBeforeStaleCallback,
+      'A retired chat callback must not mutate the newly selected chat');
+    assert.equal(await page.evaluate(() => window.nexusTest.chatScanStateCalls.filter(call => (
+      call.name === 'get_my_chat_scan_state' && call.args.p_chat_id === 'c2'
+    )).length), scanCallsBeforeStaleCallback,
+    'A retired chat callback must not invalidate the newly selected chat scan');
+
+    console.log(`${name}: isolated retired direct read/message callbacks preserve the new chat and scan state`);
   }],
   ['group-search-and-live-list', async (page, name) => {
     await page.goto(`${baseUrl}/#/app/search`);
@@ -231,6 +336,68 @@ const scenarios = [
     await page.locator('[data-message-id="gm-search-anchor"][data-highlighted="true"]').waitFor({ state: 'attached' });
     assert.match(page.url(), /#\/app\/groups\?group=g1&message=gm-search-anchor$/);
 
+    // The exact loaded group row is reconciled even when the user is viewing
+    // an older search context. This becomes an out-of-latest-page regression
+    // as soon as the group fixture contains more than one page of messages.
+    await waitForScopedMessageSubscription(page, 'group-chat:g1', 'group_messages');
+    let delivered = await page.evaluate(() => {
+      const message = window.nexusTest.groupMessages.find(item => item.message_id === 'gm-search-anchor');
+      message.body = 'Ältere Gruppennachricht live bearbeitet';
+      message.edited_at = '2026-03-12T11:00:00.000Z';
+      return window.nexusTest.emit('group_messages', 'UPDATE', {
+        eventType: 'UPDATE',
+        new: { group_id: 'g1', id: message.message_id },
+        old: { group_id: 'g1', id: message.message_id },
+      });
+    });
+    assert.ok(delivered > 0, 'The selected group must receive the old-message UPDATE');
+    const oldGroupMessage = page.locator('[data-message-id="gm-search-anchor"]');
+    await oldGroupMessage.getByText('Ältere Gruppennachricht live bearbeitet', { exact: true }).waitFor();
+    await oldGroupMessage.getByText('bearbeitet', { exact: true }).waitFor();
+
+    delivered = await page.evaluate(() => {
+      const message = window.nexusTest.groupMessages.find(item => item.message_id === 'gm-search-anchor');
+      message.deleted_at = '2026-03-12T11:01:00.000Z';
+      return window.nexusTest.emit('group_messages', 'UPDATE', {
+        eventType: 'UPDATE',
+        new: { group_id: 'g1', id: message.message_id },
+        old: { group_id: 'g1', id: message.message_id },
+      });
+    });
+    assert.ok(delivered > 0, 'The selected group must receive the logical delete UPDATE');
+    await oldGroupMessage.getByText('Nachricht gelöscht', { exact: true }).waitFor();
+
+    // A retained members callback from g1 must not win a delayed group-list
+    // race after g2 has become current. It previously selected g1 again and
+    // could leave the new group empty/loading.
+    await page.evaluate(() => { window.nexusTest.groupChatListDelay = 350; });
+    await page.locator('.chat').filter({ hasText: 'Zweite Gruppe' }).click();
+    await page.locator('.chat-head').getByText('Zweite Gruppe', { exact: true }).waitFor();
+    await waitForScopedMessageSubscription(page, 'group-chat:g2', 'group_messages');
+    const staleMembersDelivered = await page.evaluate(() => {
+      const oldChannel = window.nexusTest.channels.find(channel => channel.name === 'group-chat:g1' && !channel.active);
+      const entry = oldChannel?.entries.find(item => item.filter.table === 'group_members');
+      entry?.callback({
+        eventType: 'UPDATE',
+        new: { group_id: 'g1', user_id: 'other' },
+        old: { group_id: 'g1', user_id: 'other' },
+      });
+      return Boolean(entry);
+    });
+    assert.equal(staleMembersDelivered, true, 'The regression fixture must retain the retired members callback');
+    await page.evaluate(() => { window.nexusTest.groupChatListDelay = 0; });
+    await page.waitForTimeout(500);
+    await page.locator('[data-message-id="gm-second"]').waitFor();
+    assert.match(page.url(), /#\/app\/groups\?group=g2$/);
+    await page.locator('.chat-head').getByText('Zweite Gruppe', { exact: true }).waitFor();
+    assert.equal(await page.getByText('Gruppennachrichten werden geladen…', { exact: true }).count(), 0,
+      'The selected group must not remain empty/loading after a retired members callback');
+
+    // Return to g1 so the global-list regression below still exercises a
+    // message arriving in a non-selected group.
+    await page.locator('.chat').filter({ hasText: 'Projektgruppe' }).click();
+    await page.locator('.chat-head').getByText('Projektgruppe', { exact: true }).waitFor();
+
     // The group list also reacts to a message in a non-selected group.
     await waitForGlobalMessageSubscription(page, 'group_messages');
     const previousGroupListLoads = await page.evaluate(() => window.nexusTest.groupChatListLoads);
@@ -249,10 +416,10 @@ const scenarios = [
   }],
 ];
 
-const runIsolatedScenario = async (name, engine, scenarioName, scenario) => {
+const runIsolatedScenario = async (name, engine, scenarioName, scenario, viewport = { width: 1440, height: 1000 }) => {
   const browser = await engine.launch();
   const context = await browser.newContext({
-    viewport: { width: 1440, height: 1000 },
+    viewport,
     timezoneId: 'Europe/Berlin',
   });
   await context.route('**/*', route => route.request().url().startsWith(baseUrl) ? route.continue() : route.abort());
@@ -261,6 +428,7 @@ const runIsolatedScenario = async (name, engine, scenarioName, scenario) => {
   page.setDefaultTimeout(15_000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
+  page.on('crash', () => console.error(`${name}/${scenarioName}: browser renderer crashed`));
 
   try {
     await scenario(page, name);
@@ -287,10 +455,10 @@ const runIsolatedScenario = async (name, engine, scenarioName, scenario) => {
 
 try {
   for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
-    for (const [scenarioName, scenario] of scenarios) {
+    for (const [scenarioName, scenario, viewport] of scenarios) {
       // A fresh browser process per scenario prevents renderer state from the
       // 130-message history flow leaking into later WebKit navigation/screenshots.
-      await runIsolatedScenario(name, engine, scenarioName, scenario);
+      await runIsolatedScenario(name, engine, scenarioName, scenario, viewport);
     }
     console.log(`${name}: all isolated Phase 3.7 message-history scenarios passed`);
   }

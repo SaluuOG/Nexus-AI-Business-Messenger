@@ -8,6 +8,8 @@ import {
   createBusinessProfile,
   createWorkspace,
   createWorkspaceInvitation,
+  deleteWorkspace,
+  leaveWorkspace,
   loadBusinessProfiles,
   loadOwnProfile,
   loadWorkspaceInvitations,
@@ -15,7 +17,9 @@ import {
   loadWorkspaceMembers,
   loadWorkspaces,
   removeWorkspaceMember,
+  renameWorkspace,
   revokeWorkspaceInvitation,
+  transferWorkspaceOwnership,
   updateOwnProfile,
   updateWorkspaceMemberRole,
   type NexusBusinessProfile,
@@ -34,6 +38,11 @@ import { startRoute } from '../features/settings/preferences';
 import { useNotifications } from '../features/notifications/useNotifications';
 
 type ManageableRole = Exclude<WorkspaceRole, 'owner'>;
+type WorkspaceLifecycleFeedback = {
+  workspaceId: string;
+  message: string;
+  error: boolean;
+};
 
 const AIPage = lazy(() => import('../pages/AIPage').then((module) => ({ default: module.AIPage })));
 const AuthPage = lazy(() => import('../pages/AuthPage').then((module) => ({ default: module.AuthPage })));
@@ -90,6 +99,10 @@ function AppShell() {
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamWorkspaceId, setTeamWorkspaceId] = useState<string | null>(null);
   const [teamError, setTeamError] = useState<string | null>(null);
+  const [teamRefreshVersion, setTeamRefreshVersion] = useState(0);
+  const [workspaceLifecycleBusy, setWorkspaceLifecycleBusy] = useState(false);
+  const [workspaceLifecycleFeedback, setWorkspaceLifecycleFeedback] = useState<WorkspaceLifecycleFeedback | null>(null);
+  const workspaceLifecycleLock = useRef(false);
   const [requestedConversationId, setRequestedConversationId] = useState<string | null>(null);
   const linkedWorkspaceId = location.pathname === routes.business ? new URLSearchParams(location.search).get('workspace') : null;
   const selectedWorkspaceId = linkedWorkspaceId
@@ -155,7 +168,7 @@ function AppShell() {
       setTeamWorkspaceId(workspaceId); setWorkspaceMembers(memberResult.data); setWorkspaceInvitations(invitationResult.data); setTeamError(memberResult.error || invitationResult.error || null); setTeamLoading(false);
     })();
     return () => { active = false; };
-  }, [auth.user?.id, currentWorkspaceRole, selectedWorkspaceId]);
+  }, [auth.user?.id, currentWorkspaceRole, selectedWorkspaceId, teamRefreshVersion]);
 
   useEffect(() => {
     if (!auth.user) return;
@@ -187,6 +200,155 @@ function AppShell() {
     setTeamWorkspaceId(selectedWorkspaceId); setWorkspaceMembers(memberResult.data); setWorkspaceInvitations(invitationResult.data); setTeamError(memberResult.error || invitationResult.error || null); setTeamLoading(false);
   };
 
+  const clearWorkspaceScopedState = (nextWorkspaceId: string | null) => {
+    selectedWorkspaceRef.current = nextWorkspaceId;
+    setSelectedWorkspaceId(nextWorkspaceId);
+    setWorkspaceMembers([]);
+    setWorkspaceInvitations([]);
+    setTeamWorkspaceId(null);
+    setTeamError(null);
+    setTeamLoading(Boolean(nextWorkspaceId));
+    setRequestedConversationId(null);
+  };
+
+  const selectWorkspace = (workspaceId: string | null) => {
+    if (workspaceLifecycleLock.current) return false;
+    setWorkspaceLifecycleFeedback(null);
+    if (workspaceId === selectedWorkspaceRef.current) return true;
+    clearWorkspaceScopedState(workspaceId);
+    return true;
+  };
+
+  const reloadWorkspaceState = async (preferredId: string | null = selectedWorkspaceRef.current) => {
+    const userId = auth.user?.id;
+    if (!userId) return { error: 'Du bist nicht angemeldet.', nextWorkspaceId: null as string | null };
+
+    setDataLoading(true);
+    setDataError(null);
+    try {
+      const [workspaceResult, membershipResult] = await Promise.all([
+        loadWorkspaces(),
+        loadWorkspaceMemberships(userId),
+      ]);
+      const error = workspaceResult.error || membershipResult.error;
+      if (error) {
+        setDataError(error);
+        return { error, nextWorkspaceId: selectedWorkspaceRef.current };
+      }
+
+      const membershipIds = new Set(membershipResult.data.map((membership) => membership.workspace_id));
+      const availableWorkspaces = workspaceResult.data.filter((workspace) => membershipIds.has(workspace.id));
+      const nextWorkspaceId = preferredId && availableWorkspaces.some((workspace) => workspace.id === preferredId)
+        ? preferredId
+        : availableWorkspaces[0]?.id ?? null;
+
+      setWorkspaces(availableWorkspaces);
+      setMemberships(membershipResult.data);
+      clearWorkspaceScopedState(nextWorkspaceId);
+      setTeamRefreshVersion((version) => version + 1);
+
+      return { error: null, nextWorkspaceId };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Workspace-Daten konnten nicht neu geladen werden.';
+      setDataError(message);
+      return { error: message, nextWorkspaceId: selectedWorkspaceRef.current };
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  const runWorkspaceLifecycle = async (
+    action: (workspaceId: string) => Promise<{ error: string | null }>,
+    successMessage: string,
+    applyLocalSuccess?: (workspaceId: string) => string | null,
+  ) => {
+    if (workspaceLifecycleLock.current) return { error: 'Eine Workspace-Aktion läuft bereits.' };
+    const workspaceId = selectedWorkspaceRef.current;
+    if (!workspaceId) return { error: 'Bitte zuerst einen Workspace auswählen.' };
+
+    workspaceLifecycleLock.current = true;
+    setWorkspaceLifecycleBusy(true);
+    setWorkspaceLifecycleFeedback(null);
+    try {
+      const result = await action(workspaceId);
+      if (result.error) {
+        setWorkspaceLifecycleFeedback({ workspaceId, message: result.error, error: true });
+        return result;
+      }
+
+      const preferredId = applyLocalSuccess ? applyLocalSuccess(workspaceId) : workspaceId;
+      const reloadResult = await reloadWorkspaceState(preferredId);
+      setWorkspaceLifecycleFeedback({
+        workspaceId,
+        message: reloadResult.error
+          ? `${successMessage} Die aktualisierten Workspace-Daten konnten noch nicht geladen werden: ${reloadResult.error}`
+          : successMessage,
+        error: Boolean(reloadResult.error),
+      });
+
+      // Die Mutation war erfolgreich. Ein anschließender Ladefehler wird separat
+      // angezeigt und darf nicht dazu führen, dass eine destruktive Aktion erneut
+      // abgesendet wird.
+      return { error: null };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Die Workspace-Aktion ist fehlgeschlagen.';
+      setWorkspaceLifecycleFeedback({ workspaceId, message, error: true });
+      return { error: message };
+    } finally {
+      workspaceLifecycleLock.current = false;
+      setWorkspaceLifecycleBusy(false);
+    }
+  };
+
+  const renameSelectedWorkspace = async (name: string) => runWorkspaceLifecycle(
+    (workspaceId) => renameWorkspace(workspaceId, name),
+    'Workspace umbenannt.',
+    (workspaceId) => {
+      setWorkspaces((current) => current.map((workspace) => workspace.id === workspaceId
+        ? { ...workspace, name: name.trim() }
+        : workspace));
+      return workspaceId;
+    },
+  );
+
+  const leaveSelectedWorkspace = async () => runWorkspaceLifecycle(
+    (workspaceId) => leaveWorkspace(workspaceId),
+    'Workspace verlassen.',
+    (workspaceId) => {
+      const nextWorkspaceId = workspaces.find((workspace) => workspace.id !== workspaceId)?.id ?? null;
+      setWorkspaces((current) => current.filter((workspace) => workspace.id !== workspaceId));
+      setMemberships((current) => current.filter((membership) => membership.workspace_id !== workspaceId));
+      clearWorkspaceScopedState(nextWorkspaceId);
+      return nextWorkspaceId;
+    },
+  );
+
+  const transferSelectedWorkspaceOwnership = async (newOwnerId: string) => runWorkspaceLifecycle(
+    (workspaceId) => transferWorkspaceOwnership(workspaceId, newOwnerId),
+    'Ownership übertragen.',
+    (workspaceId) => {
+      setWorkspaces((current) => current.map((workspace) => workspace.id === workspaceId
+        ? { ...workspace, owner_id: newOwnerId }
+        : workspace));
+      setMemberships((current) => current.map((membership) => membership.workspace_id === workspaceId && membership.user_id === auth.user?.id
+        ? { ...membership, role: 'admin' }
+        : membership));
+      return workspaceId;
+    },
+  );
+
+  const deleteSelectedWorkspace = async (confirmation: string) => runWorkspaceLifecycle(
+    (workspaceId) => deleteWorkspace(workspaceId, confirmation),
+    'Workspace gelöscht.',
+    (workspaceId) => {
+      const nextWorkspaceId = workspaces.find((workspace) => workspace.id !== workspaceId)?.id ?? null;
+      setWorkspaces((current) => current.filter((workspace) => workspace.id !== workspaceId));
+      setMemberships((current) => current.filter((membership) => membership.workspace_id !== workspaceId));
+      clearWorkspaceScopedState(nextWorkspaceId);
+      return nextWorkspaceId;
+    },
+  );
+
   const saveProfile = async (patch: Partial<Pick<NexusProfile, 'full_name' | 'username' | 'bio'>>) => {
     if (!auth.user) return { error: 'Du bist nicht angemeldet.' };
     const result = await updateOwnProfile(auth.user.id, patch); if (result.data) setProfile(result.data); return { error: result.error };
@@ -194,7 +356,7 @@ function AppShell() {
   const addWorkspace = async (name: string) => {
     if (!auth.user) return { error: 'Du bist nicht angemeldet.' };
     const result = await createWorkspace(name, auth.user.id);
-    if (result.data) { setWorkspaces((current) => [...current, result.data!]); setSelectedWorkspaceId(result.data.id); const membershipResult = await loadWorkspaceMemberships(auth.user.id); if (!membershipResult.error) setMemberships(membershipResult.data); }
+    if (result.data) { setWorkspaces((current) => [...current, result.data!]); selectWorkspace(result.data.id); const membershipResult = await loadWorkspaceMemberships(auth.user.id); if (!membershipResult.error) setMemberships(membershipResult.data); }
     return { error: result.error };
   };
   const addBusinessProfile = async (name: string, handle: string) => {
@@ -210,7 +372,7 @@ function AppShell() {
     const result = await acceptWorkspaceInvitation(token); if (result.error || !result.data) return { error: result.error || 'Einladung konnte nicht angenommen werden.' };
     const [workspaceResult, membershipResult] = await Promise.all([loadWorkspaces(), loadWorkspaceMemberships(auth.user.id)]);
     if (workspaceResult.error || membershipResult.error) return { error: workspaceResult.error || membershipResult.error || 'Workspace konnte nicht neu geladen werden.' };
-    setWorkspaces(workspaceResult.data); setMemberships(membershipResult.data); setSelectedWorkspaceId(result.data.workspace_id); return { error: null, workspaceName: result.data.workspace_name };
+    setWorkspaces(workspaceResult.data); setMemberships(membershipResult.data); selectWorkspace(result.data.workspace_id); return { error: null, workspaceName: result.data.workspace_name };
   };
   const signOut = async () => {
     const result = await auth.signOut();
@@ -220,9 +382,9 @@ function AppShell() {
 
   return <div className="app">
     <Sidebar unreadNotifications={notifications.error ? null : notifications.unread_count} notificationsLoading={notifications.loading} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onWorkspaceChange={workspaceId => {
-      setSelectedWorkspaceId(workspaceId);
-      if (location.pathname === routes.business) navigate(routes.business + '?' + businessSearch(workspaceId));
-    }} workspaceRole={currentWorkspaceRole} workspaceLoading={dataLoading} identity={identity} accountName={accountName} accountSubtitle={accountSubtitle} />
+      const changed = selectWorkspace(workspaceId);
+      if (changed && location.pathname === routes.business) navigate(routes.business + '?' + businessSearch(workspaceId));
+    }} workspaceRole={currentWorkspaceRole} workspaceLoading={dataLoading} workspaceSwitchDisabled={workspaceLifecycleBusy} identity={identity} accountName={accountName} accountSubtitle={accountSubtitle} />
     <main><Routes>
       <Route path="/" element={preferencesReady ? <Navigate to={defaultRoute} replace /> : <AppLoading />} />
       <Route
@@ -260,7 +422,7 @@ function AppShell() {
       />
       <Route path={routes.ai} element={<AIPage />} />
       <Route path={routes.notifications} element={<NotificationsPage model={notifications} />} />
-      <Route path={routes.settings} element={<SettingsPage key={auth.user?.id} notifications={notifications} identity={identity} setIdentity={setIdentity} startView={preferences.startView} onStartViewChange={startView => updatePreferences({ startView })} preferencesError={preferencesError} onWorkspaceChange={setSelectedWorkspaceId} backendConfigured={auth.configured} accountEmail={auth.user?.email} currentUserId={auth.user?.id} profile={profile} businessProfiles={businessProfiles} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} currentWorkspaceRole={currentWorkspaceRole} workspaceMembers={teamWorkspaceId === selectedWorkspaceId ? workspaceMembers : []} workspaceInvitations={teamWorkspaceId === selectedWorkspaceId ? workspaceInvitations : []} teamLoading={teamLoading || teamWorkspaceId !== selectedWorkspaceId} teamError={teamWorkspaceId === selectedWorkspaceId ? teamError : null} dataLoading={dataLoading} dataError={dataError} onSaveProfile={saveProfile} onCreateWorkspace={addWorkspace} onCreateBusinessProfile={addBusinessProfile} onInviteWorkspaceMember={inviteWorkspaceMember} onUpdateWorkspaceMemberRole={changeWorkspaceMemberRole} onRemoveWorkspaceMember={deleteWorkspaceMember} onRevokeWorkspaceInvitation={revokeInvitation} onRefreshWorkspaceTeam={refreshWorkspaceTeam} onAcceptWorkspaceInvitation={acceptInvitation} onUpdatePassword={auth.configured ? auth.updatePassword : undefined} onRequestPasswordReset={auth.configured ? auth.requestPasswordReset : undefined} onSignOut={auth.configured ? signOut : undefined} />} />
+      <Route path={routes.settings} element={<SettingsPage key={auth.user?.id} notifications={notifications} identity={identity} setIdentity={setIdentity} startView={preferences.startView} onStartViewChange={startView => updatePreferences({ startView })} preferencesError={preferencesError} onWorkspaceChange={selectWorkspace} backendConfigured={auth.configured} accountEmail={auth.user?.email} currentUserId={auth.user?.id} profile={profile} businessProfiles={businessProfiles} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} currentWorkspaceRole={currentWorkspaceRole} workspaceMembers={teamWorkspaceId === selectedWorkspaceId ? workspaceMembers : []} workspaceInvitations={teamWorkspaceId === selectedWorkspaceId ? workspaceInvitations : []} teamLoading={teamLoading || teamWorkspaceId !== selectedWorkspaceId} teamError={teamWorkspaceId === selectedWorkspaceId ? teamError : null} dataLoading={dataLoading} dataError={dataError} workspaceLifecycleBusy={workspaceLifecycleBusy} workspaceLifecycleFeedback={workspaceLifecycleFeedback} onSaveProfile={saveProfile} onCreateWorkspace={addWorkspace} onCreateBusinessProfile={addBusinessProfile} onInviteWorkspaceMember={inviteWorkspaceMember} onUpdateWorkspaceMemberRole={changeWorkspaceMemberRole} onRemoveWorkspaceMember={deleteWorkspaceMember} onRevokeWorkspaceInvitation={revokeInvitation} onRefreshWorkspaceTeam={refreshWorkspaceTeam} onAcceptWorkspaceInvitation={acceptInvitation} onRenameWorkspace={renameSelectedWorkspace} onLeaveWorkspace={leaveSelectedWorkspace} onTransferWorkspaceOwnership={transferSelectedWorkspaceOwnership} onDeleteWorkspace={deleteSelectedWorkspace} onUpdatePassword={auth.configured ? auth.updatePassword : undefined} onRequestPasswordReset={auth.configured ? auth.requestPasswordReset : undefined} onSignOut={auth.configured ? signOut : undefined} />} />
       <Route path={routes.auth} element={<Navigate to={routes.briefing} replace />} /><Route path="*" element={<Navigate to={routes.briefing} replace />} />
     </Routes></main>
   </div>;

@@ -188,6 +188,49 @@ export async function createWorkspace(name: string, ownerId: string) {
   return { data: workspace, error: null };
 }
 
+export async function renameWorkspace(workspaceId: string, name: string) {
+  if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
+
+  const { error } = await supabase.rpc('rename_workspace', {
+    p_workspace_id: workspaceId,
+    p_name: name.trim(),
+  });
+
+  return { error: error?.message ?? null };
+}
+
+export async function transferWorkspaceOwnership(workspaceId: string, newOwnerId: string) {
+  if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
+
+  const { error } = await supabase.rpc('transfer_workspace_ownership', {
+    p_workspace_id: workspaceId,
+    p_new_owner_id: newOwnerId,
+  });
+
+  return { error: error?.message ?? null };
+}
+
+export async function leaveWorkspace(workspaceId: string) {
+  if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
+
+  const { error } = await supabase.rpc('leave_workspace', {
+    p_workspace_id: workspaceId,
+  });
+
+  return { error: error?.message ?? null };
+}
+
+export async function deleteWorkspace(workspaceId: string, confirmation: string) {
+  if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
+
+  const { error } = await supabase.rpc('delete_workspace', {
+    p_workspace_id: workspaceId,
+    p_confirmation: confirmation,
+  });
+
+  return { error: error?.message ?? null };
+}
+
 export async function loadWorkspaceMembers(workspaceId: string) {
   if (!supabase) return { data: [], error: 'Supabase ist nicht konfiguriert.' };
 
