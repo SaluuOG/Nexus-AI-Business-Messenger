@@ -29,6 +29,10 @@ const state = {
   notificationDelay: 0, notificationReadDelay: 0, notificationCalls: [],
   chatScanAvailable: true, chatScanCalls: [], chatScanAborts: [], chatScanFailure: null,
   chatScanDeferred: false, chatScanPending: [], chatScanResult: null,
+  chatScanStateCalls: [], chatScanStateDelay: 0, chatScanRejections: [],
+  chatScanCacheDeferred: false, chatScanCachePending: [],
+  chatScanRecords: JSON.parse(sessionStorage.getItem('nexusTest.chatScanRecords') || '{}'),
+  chatHistoryRevisions: JSON.parse(sessionStorage.getItem('nexusTest.chatHistoryRevisions') || '{}'),
   conversations: [{ conversation_id: 'c1', contact_user_id: 'other', full_name: 'Test Kontakt', username: 'test', unread_count: 0, last_message: 'Bitte das Angebot prüfen!' }],
   directMessages: [{ message_id: 'dm1', sender_id: 'other', body: 'Bitte das Angebot prüfen!\nDetails für das Team.', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
   groupMessages: [{ message_id: 'gm1', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', body: 'Startseite für den Kunden vorbereiten!', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
@@ -68,6 +72,46 @@ state.persistNotifications = () => {
 state.finishChatScans = () => {
   for (const finish of state.chatScanPending.splice(0)) finish();
 };
+state.finishChatScanCacheReads = () => {
+  for (const finish of state.chatScanCachePending.splice(0)) finish();
+};
+
+// Synthetic personal workflow state. These records simulate server persistence,
+// so a page reload cannot turn a processed chat into another billable scan.
+const chatHistoryKey = (kind, chatId) => `${kind}:${chatId}`;
+const chatRecordKey = (kind, chatId, userId) => `${userId}:${kind}:${chatId}`;
+const chatHistoryRevision = (kind, chatId) => state.chatHistoryRevisions[chatHistoryKey(kind, chatId)] ?? 1;
+const chatRecord = (kind, chatId, userId) => state.chatScanRecords[chatRecordKey(kind, chatId, userId)] ?? { done: false, version: 0, last_scanned_at: null, scannedHistory: null, result: null };
+const saveChatRecord = (kind, chatId, userId, value) => {
+  state.chatScanRecords[chatRecordKey(kind, chatId, userId)] = value;
+  sessionStorage.setItem('nexusTest.chatScanRecords', JSON.stringify(state.chatScanRecords));
+};
+state.chatScanState = (kind, chatId, userId = user.id) => {
+  const entry = chatRecord(kind, chatId, userId);
+  const history = chatHistoryRevision(kind, chatId);
+  const status = entry.done ? 'done' : entry.scannedHistory === history && entry.result ? 'processed' : entry.last_scanned_at ? 'updated' : 'open';
+  return { chat_id: chatId, status, last_scanned_at: entry.last_scanned_at,
+    revision: history.toString(16).padStart(16, '0') + entry.version.toString(16).padStart(16, '0'),
+    can_scan: status === 'open' || status === 'updated' };
+};
+state.changeChatHistory = (kind, chatId) => {
+  const key = chatHistoryKey(kind, chatId);
+  state.chatHistoryRevisions[key] = chatHistoryRevision(kind, chatId) + 1;
+  sessionStorage.setItem('nexusTest.chatHistoryRevisions', JSON.stringify(state.chatHistoryRevisions));
+  // Changes to older messages outside the viewport must invalidate the scan.
+  state.emit(kind === 'direct' ? 'direct_messages' : 'group_messages');
+};
+state.setChatDone = (kind, chatId, done, userId = user.id) => {
+  const entry = chatRecord(kind, chatId, userId);
+  saveChatRecord(kind, chatId, userId, { ...entry, done, version: entry.version + 1 });
+  state.emit('chat_scan_states');
+  return state.chatScanState(kind, chatId, userId);
+};
+const scanFailure = (code, status = 409) => {
+  state.chatScanRejections.push(code);
+  return { data: null, error: { message: code,
+    context: new Response(JSON.stringify({ error: code, code }), { status, headers: { 'content-type': 'application/json' } }) } };
+};
 
 // The scan deliberately includes an old source outside the one-message chat
 // viewport. UI tests prove that coverage and sources come from the server's
@@ -93,16 +137,27 @@ export const supabase = {
       const call = { name, body: structuredClone(body), userId: user.id };
       state.chatScanCalls.push(call);
       signal?.addEventListener('abort', () => state.chatScanAborts.push(call), { once: true });
+      if (body.action === 'status') return { data: {
+        available: state.chatScanAvailable, providerLabel: 'Test KI',
+        workflow: state.chatScanState(body.kind, body.chatId, call.userId),
+      }, error: null };
+      const initial = state.chatScanState(body.kind, body.chatId, call.userId);
+      if (body.expectedRevision && body.expectedRevision !== initial.revision) return scanFailure('status_changed');
+      if (initial.status === 'done') return scanFailure('chat_done');
+      if (initial.status === 'processed') return { data: structuredClone(chatRecord(body.kind, body.chatId, call.userId).result), error: null };
       const failure = state.chatScanFailure;
-      const result = failure
-        ? { data: null, error: { message: failure, context: new Response(JSON.stringify({ error: failure, code: failure }), { status: 503, headers: { 'content-type': 'application/json' } }) } }
-        : { data: body.action === 'status'
-          ? { available: state.chatScanAvailable, providerLabel: 'Test KI' }
-          : structuredClone(state.chatScanResult ?? chatScanResult(body.kind, body.chatId)), error: null };
-      // Ignore the AbortSignal here on purpose: even an uncooperative late
-      // response must never repopulate a closed dialog or a different chat.
+      const result = structuredClone(state.chatScanResult ?? chatScanResult(body.kind, body.chatId));
+      // Ignore AbortSignal while waiting on purpose: an uncooperative late
+      // transport may still finish, but cancelled work must not restore output.
       if (state.chatScanDeferred) await new Promise(resolve => state.chatScanPending.push(resolve));
-      return result;
+      if (failure) return scanFailure(failure, 503);
+      if (state.chatScanState(body.kind, body.chatId, call.userId).revision !== initial.revision) return scanFailure('status_changed');
+      if (!signal?.aborted) {
+        const entry = chatRecord(body.kind, body.chatId, call.userId);
+        saveChatRecord(body.kind, body.chatId, call.userId, { ...entry, version: entry.version + 1,
+          last_scanned_at: new Date().toISOString(), scannedHistory: chatHistoryRevision(body.kind, body.chatId), result });
+      }
+      return { data: result, error: null };
     },
   },
   auth: {
@@ -156,7 +211,34 @@ export const supabase = {
     };
     return builder;
   },
-  async rpc(name, args) {
+  rpc(name, args) {
+    const query = this.rpcResult(name, args);
+    // The test transport deliberately permits late replies after abort; callers
+    // must also guard scope/revision instead of relying on a cooperative network.
+    query.abortSignal = () => query;
+    return query;
+  },
+  async rpcResult(name, args) {
+    if (['get_my_chat_scan_state', 'get_my_chat_scan_states', 'set_my_chat_scan_done', 'get_my_chat_scan_result'].includes(name)) {
+      const userId = user.id;
+      state.chatScanStateCalls.push({ name, args: structuredClone(args), userId });
+      if (state.failure === name) return { data: null, error: { message: 'offline' } };
+      const current = args.p_chat_id ? state.chatScanState(args.p_kind, args.p_chat_id, userId) : null;
+      let data;
+      if (name === 'get_my_chat_scan_states') {
+        const ids = args.p_kind === 'direct' ? state.conversations.map(c => c.conversation_id) : ['g1'];
+        data = ids.map(id => state.chatScanState(args.p_kind, id, userId));
+      } else if (name === 'set_my_chat_scan_done') {
+        if (args.p_expected_revision !== current.revision) return { data: null, error: { message: 'status_changed', code: 'P0001' } };
+        data = state.setChatDone(args.p_kind, args.p_chat_id, args.p_done, userId);
+      } else if (name === 'get_my_chat_scan_result') {
+        data = current.status === 'processed' ? chatRecord(args.p_kind, args.p_chat_id, userId).result : null;
+      } else data = current;
+      const result = { data: structuredClone(data), error: null };
+      if (name === 'get_my_chat_scan_result' && state.chatScanCacheDeferred) await new Promise(resolve => state.chatScanCachePending.push(resolve));
+      if (state.chatScanStateDelay) await new Promise(resolve => setTimeout(resolve, state.chatScanStateDelay));
+      return result;
+    }
     if (name === 'get_my_notifications') {
       state.notificationCalls.push({ name, args, userId: user.id });
       if (state.failure === name) return { data: null, error: { message: 'offline' } };

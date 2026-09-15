@@ -2,6 +2,8 @@ import { Camera, CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperc
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChatScanAction } from '../components/ChatScanAction';
+import { ChatStatusBadge, ChatStatusFilter, matchesChatStatus, type ChatStatusFilterValue } from '../components/ChatStatusFilter';
+import { useChatScanWorkflows } from '../features/ai/useChatScanWorkflows';
 import { MessageTaskAction } from '../components/MessageTaskAction';
 import { TaskMessageContext } from '../components/TaskMessageContext';
 import { Header } from '../components/Header';
@@ -312,11 +314,14 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     streamRef.current?.getTracks().forEach((track) => track.stop());
   }, []);
 
+  const [statusFilter, setStatusFilter] = useState<ChatStatusFilterValue>('all');
+  const workflowHistoryVersion = JSON.stringify([scanRevision, groups.map(group => [group.group_id, group.last_message_at, group.last_message])]);
+  const workflows = useChatScanWorkflows('group', currentUserId, workflowHistoryVersion);
   const filteredGroups = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return groups;
-    return groups.filter((group) => `${group.name} ${group.last_message || ''}`.toLowerCase().includes(needle));
-  }, [groups, query]);
+    return groups.filter(group => (!needle || `${group.name} ${group.last_message || ''}`.toLowerCase().includes(needle)) &&
+      matchesChatStatus(workflows.states.get(group.group_id), statusFilter));
+  }, [groups, query, workflows.states, statusFilter]);
 
   const scanHistoryVersion = useMemo(() => JSON.stringify([scanRevision, messages.map(message => [message.message_id, message.edited_at, message.deleted_at, message.body])]), [scanRevision, messages]);
   const currentGroup = groups.find((group) => group.group_id === selectedId) || null;
@@ -695,12 +700,14 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
         )}
 
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Gruppen durchsuchen" /></div>
+        <ChatStatusFilter value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
+        {!loading && groups.length > 0 && filteredGroups.length === 0 && <div className="chat-list-empty">Keine Gruppen für diese Auswahl.</div>}
         {loading && groups.length === 0 && <div className="chat-list-empty">Gruppen werden geladen…</div>}
         {!loading && groups.length === 0 && <div className="chat-list-empty"><UsersRound size={24} /><b>Noch keine Gruppen</b><span>Erstelle deine erste Gruppe mit einem Nexus-Kontakt.</span></div>}
         {filteredGroups.map((group) => (
           <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setSelectedId(group.group_id); setChatSearch({}); }} key={group.group_id}>
             <div className="avatar group-avatar"><GroupAvatar group={group} size={16} /></div>
-            <span><b>{group.name}</b><small>{group.member_count} Mitglieder · {roleLabel(group.role)}</small><p>{group.last_message || 'Neue Gruppe'}</p></span>
+            <span><b>{group.name}</b><small>{group.member_count} Mitglieder · {roleLabel(group.role)}</small><p>{group.last_message || 'Neue Gruppe'}</p><ChatStatusBadge state={workflows.states.get(group.group_id)} /></span>
             <em>{formatTime(group.last_message_at)}{group.unread_count > 0 && <i>{group.unread_count > 99 ? '99+' : group.unread_count}</i>}</em>
           </button>
         ))}

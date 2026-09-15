@@ -1,5 +1,6 @@
 // Pure handler factory: tests inject auth/database/provider transports. No keys,
-// chat bodies, provider errors or analysis results are written to logs/storage.
+// chat bodies, provider errors or analysis results are written to logs. Successful
+// results are saved only through the caller-scoped, revision-checked database RPC.
 export const LIMITS = Object.freeze({ messages: 5000, inputChars: 300000, chunkChars: 40000,
   chunks: 8, requestMs: 120000, providerMs: 40000, outputChars: 180000 });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -12,6 +13,10 @@ const errorMessages = {
   rate_limited: 'Ein Scan läuft bereits oder das Scan-Limit ist erreicht. Bitte später erneut versuchen.',
   provider_error: 'Die Analyse konnte nicht vollständig abgeschlossen werden. Bitte erneut versuchen.',
   history_changed: 'Der Chat wurde während der Analyse geändert. Bitte den Scan erneut starten.',
+  chat_done: 'Dieser Chat ist als fertig markiert. Öffne ihn wieder, um ihn erneut auszuwerten.',
+  already_processed: 'Dieser Chat wurde bereits ausgewertet. Öffne das gespeicherte Ergebnis.',
+  status_changed: 'Der Bearbeitungsstand hat sich geändert. Bitte den Chat erneut öffnen.',
+  scan_expired: 'Die Auswertung hat zu lange gedauert. Bitte erneut versuchen.',
 };
 export class ScanError extends Error {
   constructor(code, status = 400) { super(errorMessages[code] || errorMessages.provider_error); this.code = code; this.status = status; }
@@ -98,9 +103,36 @@ export async function callProvider({ messages, partials, allowedIds, config, fet
 function checkRpc(result) {
   if (result.error) {
     const code = Object.keys(errorMessages).find(item => result.error.message === item) || 'provider_error';
-    failure(code, code === 'no_access' ? 403 : code === 'rate_limited' ? 429 : code === 'history_too_large' ? 413 : 409);
+    failure(code, code === 'no_access' ? 403 : code === 'rate_limited' ? 429 : code === 'history_too_large' ? 413 : code === 'provider_error' ? 502 : 409);
   }
   return result.data;
+}
+function checkWorkflow(value, chatId) {
+  if (!value || value.chat_id !== chatId || !['open', 'updated', 'processed', 'done'].includes(value.status)
+    || !/^[0-9a-f]{32}$/i.test(value.revision) || typeof value.can_scan !== 'boolean'
+    || value.can_scan !== ['open', 'updated'].includes(value.status)
+    || !(value.last_scanned_at === null || (typeof value.last_scanned_at === 'string' && Number.isFinite(Date.parse(value.last_scanned_at))))) failure('provider_error', 502);
+  return value;
+}
+function checkSavedResult(value, kind, chatId) {
+  if (!value || value.chatId !== chatId || value.chatKind !== kind || !UUID.test(value.scanId)
+    || !Array.isArray(value.sources) || value.sources.length > 1440 || !value.coverage
+    || value.coverage.complete !== true || !Number.isInteger(value.coverage.messageCount)
+    || value.coverage.messageCount < 1 || value.coverage.messageCount > LIMITS.messages
+    || !Number.isInteger(value.coverage.attachmentsExcluded) || value.coverage.attachmentsExcluded < 0
+    || !['from', 'to'].every(key => typeof value.coverage[key] === 'string' && Number.isFinite(Date.parse(value.coverage[key])))) failure('provider_error', 502);
+  const sources = value.sources.map(source => {
+    if (!source || !UUID.test(source.id) || typeof source.sender !== 'string' || typeof source.excerpt !== 'string'
+      || typeof source.createdAt !== 'string' || !Number.isFinite(Date.parse(source.createdAt))) failure('provider_error', 502);
+    return { id: source.id, sender: source.sender, createdAt: source.createdAt, excerpt: source.excerpt };
+  });
+  const ids = new Set(sources.map(source => source.id));
+  if (ids.size !== sources.length) failure('provider_error', 502);
+  const analysis = validateAnalysis(value, ids);
+  return { scanId: value.scanId, chatKind: kind, chatId, ...analysis, sources, coverage: {
+    messageCount: value.coverage.messageCount, from: value.coverage.from, to: value.coverage.to,
+    attachmentsExcluded: value.coverage.attachmentsExcluded, complete: true,
+  } };
 }
 function checkPage(page) {
   if (!page || !Array.isArray(page.items) || typeof page.snapshot !== 'string' || !Number.isInteger(page.total_count)
@@ -195,13 +227,30 @@ export function createChatScanHandler({ createClient, env, fetcher = fetch }) {
       if (!input || !['status', 'scan'].includes(input.action) || !['direct', 'group'].includes(input.kind) || !UUID.test(input.chatId)) failure('no_access', 400);
       const config = { key: env('OPENAI_API_KEY')?.trim(), model: env('NEXUS_AI_MODEL')?.trim() };
       const available = env('NEXUS_AI_ENABLED') === 'true' && Boolean(config.key) && Boolean(config.model);
-      if (input.action === 'status') return respond({ available, providerLabel: available ? 'OpenAI' : null });
+      const workflowArgs = { p_kind: input.kind, p_chat_id: input.chatId };
+      const workflow = checkWorkflow(checkRpc(await client.rpc('get_my_chat_scan_state', workflowArgs)), input.chatId);
+      if (input.action === 'status') return respond({ available, providerLabel: available ? 'OpenAI' : null, workflow });
+      if (workflow.status === 'done') failure('chat_done', 409);
+      // Current successful results remain available even when the provider is
+      // disabled. Reading a result never reserves quota or starts paid work.
+      if (workflow.status === 'processed') {
+        const saved = checkRpc(await client.rpc('get_my_chat_scan_result', workflowArgs));
+        if (!saved) failure('status_changed', 409);
+        signal.throwIfAborted();
+        return respond({ ...checkSavedResult(saved, input.kind, input.chatId), cached: true });
+      }
       if (!available) failure('ai_not_configured', 503);
       // Load and validate complete accessible history before reserving paid work.
       const history = await readHistory(client, input.kind, input.chatId, signal);
       splitHistory(history.messages);
       scanId = checkRpc(await client.rpc('begin_chat_scan'));
       if (!UUID.test(scanId)) failure('provider_error', 502);
+      // A status change while loading history/reserving quota must not initiate
+      // a provider call. Completion below also checks the same opaque revision.
+      const reservedWorkflow = checkWorkflow(checkRpc(await client.rpc('get_my_chat_scan_state', workflowArgs)), input.chatId);
+      if (reservedWorkflow.status === 'done') failure('chat_done', 409);
+      if (reservedWorkflow.status === 'processed') failure('already_processed', 409);
+      if (reservedWorkflow.revision !== workflow.revision) failure('status_changed', 409);
       const analysis = await analyzeHistory(history, config, fetcher, signal);
       signal.throwIfAborted();
       const currentAuth = await client.auth.getUser(token);
@@ -216,9 +265,18 @@ export function createChatScanHandler({ createClient, env, fetcher = fetch }) {
       const usedIds = new Set(categories.flatMap(category => analysis[category].flatMap(item => item.sourceIds)));
       const sources = history.messages.filter(row => usedIds.has(row.id)).map(row => ({ id: row.id,
         sender: row.sender, createdAt: row.createdAt, excerpt: row.body }));
-      return respond({ scanId, chatKind: input.kind, chatId: input.chatId, ...analysis, sources,
+      const result = { scanId, chatKind: input.kind, chatId: input.chatId, ...analysis, sources,
         coverage: { messageCount: history.messages.length, from: history.messages[0]?.createdAt ?? null,
-          to: history.messages.at(-1)?.createdAt ?? null, attachmentsExcluded: history.attachmentCount, complete: true } });
+          to: history.messages.at(-1)?.createdAt ?? null, attachmentsExcluded: history.attachmentCount, complete: true } };
+      signal.throwIfAborted();
+      // Persist only complete, validated results. The database atomically checks
+      // live access, the entire history, the personal revision and the live lease.
+      const completed = checkWorkflow(checkRpc(await client.rpc('complete_my_chat_scan', {
+        ...workflowArgs, p_snapshot: history.snapshot, p_scan_id: scanId,
+        p_expected_revision: workflow.revision, p_result: result,
+      })), input.chatId);
+      if (completed.status !== 'processed') failure('status_changed', 409);
+      return respond({ ...result, cached: false });
     } catch (error) {
       const safe = error instanceof ScanError ? error : new ScanError('provider_error', 502);
       return respond({ error: safe.message, code: safe.code }, safe.status);

@@ -23,52 +23,70 @@ try {
     page.setDefaultTimeout(15_000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    const trigger = page.getByRole('button', { name: 'Chat mit KI auswerten', exact: true });
+    const toolbar = page.locator('.chat-scan-toolbar');
+    const trigger = toolbar.getByRole('button', { name: 'Chat mit KI auswerten', exact: true });
+    const markDone = toolbar.getByRole('button', { name: 'Als fertig markieren', exact: true });
+    const reopen = toolbar.getByRole('button', { name: 'Wieder öffnen', exact: true });
+    const statusFilter = page.getByRole('combobox', { name: 'Chats nach deinem Status filtern', exact: true });
     const dialog = page.getByRole('dialog', { name: 'Chat auswerten', exact: true });
     const start = dialog.getByRole('button', { name: 'Gesamten Chat auswerten', exact: true });
-    const close = () => dialog.getByRole('button', { name: 'Chat-Auswertung schließen', exact: true }).click();
+    const close = async () => { await dialog.getByRole('button', { name: 'Chat-Auswertung schließen', exact: true }).click(); await dialog.waitFor({ state: 'hidden' }); };
     const scanCount = () => page.evaluate(() => window.nexusTest.chatScanCalls.filter(call => call.body.action === 'scan').length);
     const waitReady = () => start.waitFor();
     const waitResult = () => dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).waitFor();
-    const waitClosed = () => dialog.waitFor({ state: 'hidden' });
+    const waitState = status => toolbar.getByText(status, { exact: true }).waitFor();
+    const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const changeHistory = (kind = 'direct', chatId = 'c1') => page.evaluate(({ kind, chatId }) => window.nexusTest.changeChatHistory(kind, chatId), { kind, chatId });
     try {
       await page.goto('http://127.0.0.1:4179/#/app/chats');
-      await trigger.waitFor();
+      await waitState('Offen');
       assert.equal(await page.locator('.message-body').count(), 1, 'Only one recent message is loaded in the chat fixture');
       assert.equal(await page.evaluate(() => window.nexusTest.chatScanCalls.length), 0, 'Opening a chat must not contact an AI provider');
 
-      // Missing configuration is honest and cannot produce a fake analysis.
+      // Manual completion already works without an AI provider. Done chats stay
+      // excluded even when someone adds a message, until explicitly reopened.
       await page.evaluate(() => { window.nexusTest.chatScanAvailable = false; });
       await trigger.click();
       await dialog.getByRole('heading', { name: 'KI noch nicht eingerichtet', exact: true }).waitFor();
       assert.equal(await scanCount(), 0);
       assert.equal(await start.count(), 0);
-      assert.deepEqual(await page.evaluate(() => window.nexusTest.chatScanCalls[0].body), { action: 'status', kind: 'direct', chatId: 'c1' });
       await page.keyboard.press('Escape');
-      await waitClosed();
+      await dialog.waitFor({ state: 'hidden' });
       await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Chat mit KI auswerten');
-
-      // A ready dialog still waits for a separate, explicit start. Cancel is free.
+      await markDone.click();
+      await waitState('Fertig');
+      assert.equal(await trigger.isEnabled(), false, 'Done chats cannot trigger a paid scan');
+      await statusFilter.selectOption({ label: 'Offen' });
+      assert.equal(await page.locator('.chat-list .chat-status-badge').count(), 0, 'Done chat is excluded from the open list');
+      await statusFilter.selectOption({ label: 'Fertig' });
+      await page.locator('.chat-list .chat-status-badge[data-status="done"]').waitFor();
+      await statusFilter.selectOption({ label: 'Alle' });
+      await changeHistory();
+      await waitState('Fertig');
+      await page.reload();
+      await waitState('Fertig');
+      assert.equal(await scanCount(), 0);
+      await reopen.click();
+      await waitState('Offen');
       await page.evaluate(() => { window.nexusTest.chatScanAvailable = true; });
+
+      // Opening, cancelling, and loading the status are always free. A paid
+      // request requires the second explicit button inside the dialog.
       await trigger.press('Enter');
       await waitReady();
       assert.equal(await scanCount(), 0);
       await close();
-      await waitClosed();
       assert.equal(await scanCount(), 0);
       await trigger.click();
       await waitReady();
       await page.evaluate(() => { window.nexusTest.chatScanDeferred = true; });
       await start.click();
       await page.waitForFunction(() => window.nexusTest.chatScanPending.length === 1);
-      assert.equal(await scanCount(), 1, 'One explicit start must invoke exactly one scan');
+      assert.equal(await scanCount(), 1);
       assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0);
-      if (await start.count()) assert.equal(await start.isEnabled(), false);
       await page.evaluate(() => { window.nexusTest.chatScanDeferred = false; window.nexusTest.finishChatScans(); });
       await waitResult();
-
-      // Whole-history coverage and an old source are shown despite the limited
-      // message viewport. Findings stay separate and never create tasks by magic.
+      await waitState('Ausgewertet');
       await dialog.getByText('250 Nachrichten ausgewertet', { exact: true }).waitFor();
       for (const heading of ['Wichtige Informationen', 'Entscheidungen', 'Aufgaben', 'Offene Fragen']) {
         await dialog.getByRole('heading', { name: heading, exact: true }).waitFor();
@@ -79,94 +97,201 @@ try {
       assert.match(await dialog.innerText(), /2025/);
       assert.equal(await page.evaluate(() => window.nexusTest.writes), 0, 'An analysis never creates or modifies project tasks');
       await page.screenshot({ path: `browser-results/${name}-chat-scan-desktop.png`, fullPage: true });
+      await close();
+      await statusFilter.selectOption({ label: 'Ausgewertet' });
+      await page.locator('.chat-list .chat-status-badge[data-status="processed"]').waitFor();
+      await statusFilter.selectOption({ label: 'Offen' });
+      assert.equal(await page.locator('.chat-list .chat-status-badge').count(), 0, 'Current processed chats are excluded from the open list');
+      await statusFilter.selectOption({ label: 'Alle' });
 
-      // A realtime history change retires obsolete findings immediately.
-      await page.evaluate(() => { window.nexusTest.directMessages[0].body = 'Das Budget muss neu abgestimmt werden.'; window.nexusTest.emit('direct_messages'); });
+      // Persisted current results are reused across dialog openings, reloads,
+      // and finishing/reopening an unchanged chat. No duplicate paid request.
+      const afterScan = await scanCount();
+      await trigger.click();
+      await waitResult();
+      assert.equal(await start.count(), 0);
+      assert.equal(await scanCount(), afterScan);
+      await close();
+      await markDone.click();
+      await waitState('Fertig');
+      await reopen.click();
+      await waitState('Ausgewertet');
+      await trigger.click();
+      await waitResult();
+      assert.equal(await scanCount(), afterScan);
+      await close();
+
+      // A cached RPC also carries private content. A late response after blur
+      // or a hidden tab must stay hidden until the user explicitly resumes.
+      for (const exitMode of ['blur', 'hidden']) {
+        await page.evaluate(() => { window.nexusTest.chatScanCacheDeferred = true; });
+        await trigger.click();
+        await page.waitForFunction(() => window.nexusTest.chatScanCachePending.length === 1);
+        await page.evaluate(mode => {
+          if (mode === 'hidden') {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+            document.dispatchEvent(new Event('visibilitychange'));
+          } else window.dispatchEvent(new Event('blur'));
+        }, exitMode);
+        await dialog.getByText('Die Auswertung wurde ausgeblendet. Öffne sie erneut, um den aktuellen Stand zu prüfen.', { exact: true }).waitFor();
+        await page.evaluate(() => { window.nexusTest.chatScanCacheDeferred = false; window.nexusTest.finishChatScanCacheReads(); });
+        await settle();
+        assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0, `${exitMode} must suppress a late cached result`);
+        await page.evaluate(() => {
+          delete document.visibilityState;
+          document.dispatchEvent(new Event('visibilitychange'));
+          window.dispatchEvent(new Event('focus'));
+        });
+        await settle();
+        assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0, 'Regaining focus cannot automatically reveal cached output');
+        assert.equal(await scanCount(), afterScan);
+        await dialog.getByRole('button', { name: 'Aktuellen Stand prüfen', exact: true }).click();
+        await waitResult();
+        assert.equal(await scanCount(), afterScan, 'Explicit resume reuses the cache instead of invoking AI');
+        await close();
+      }
+      await page.reload();
+      await waitState('Ausgewertet');
+      await trigger.click();
+      await waitResult();
+      assert.equal(await scanCount(), 0, 'Reloading a current cached result never invokes the AI');
+      assert.ok(await page.evaluate(() => window.nexusTest.chatScanStateCalls.some(c => c.name === 'get_my_chat_scan_result')));
+
+      // Editing an older source outside the loaded message viewport invalidates
+      // the saved result; it never silently starts another billable analysis.
+      await changeHistory();
+      await waitState('Neue Nachrichten');
       await dialog.getByText('Der Verlauf hat sich geändert. Bitte erneut auswerten.', { exact: true }).waitFor();
       assert.equal(await dialog.getByText('Das vereinbarte Budget beträgt 2.500 Euro.', { exact: true }).count(), 0);
       await waitReady();
-      await page.evaluate(() => { window.nexusTest.chatScanDeferred = true; });
-      await start.click();
-      await page.waitForFunction(() => window.nexusTest.chatScanPending.length === 1);
-      await page.evaluate(() => { window.nexusTest.directMessages[0].body = 'Die Aufgaben haben sich ebenfalls geändert.'; window.nexusTest.emit('direct_messages'); });
-      await dialog.getByText('Der Verlauf hat sich geändert. Bitte erneut auswerten.', { exact: true }).waitFor();
-      await waitReady();
-      await page.evaluate(() => { window.nexusTest.chatScanDeferred = false; window.nexusTest.finishChatScans(); });
-      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0, 'A changed history invalidates a pending scan as well as a displayed result');
-      await close();
-      await waitClosed();
-
-      // Provider failure is recoverable and cannot masquerade as a result.
-      await trigger.click();
-      await waitReady();
+      assert.equal(await scanCount(), 0);
       await page.evaluate(() => { window.nexusTest.chatScanFailure = 'provider_error'; });
       await start.click();
       await dialog.getByRole('alert').filter({ hasText: 'Die KI konnte den Chat gerade nicht auswerten. Bitte versuche es erneut.' }).waitFor();
       assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0);
+      await waitState('Neue Nachrichten');
       await page.evaluate(() => { window.nexusTest.chatScanFailure = null; });
       await dialog.getByRole('button', { name: 'Erneut versuchen', exact: true }).click();
       await waitResult();
+      await waitState('Ausgewertet');
+      assert.equal(await scanCount(), 2, 'Only explicit start and explicit retry invoke the AI');
       await close();
-      await waitClosed();
 
-      // A transport that returns after cancellation must not restore old output.
+      // A second device can finish a chat while an analysis is pending. Its
+      // late response is discarded, and reopening cannot reveal that result.
+      await changeHistory();
+      await waitState('Neue Nachrichten');
+      await trigger.click();
+      await waitReady();
+      await page.evaluate(() => { window.nexusTest.chatScanDeferred = true; });
+      await start.click();
+      await page.waitForFunction(() => window.nexusTest.chatScanPending.length === 1);
+      await page.evaluate(() => { window.nexusTest.setChatDone('direct', 'c1', true); window.dispatchEvent(new Event('focus')); });
+      await waitState('Fertig');
+      await page.evaluate(() => { window.nexusTest.chatScanDeferred = false; window.nexusTest.finishChatScans(); });
+      await settle();
+      assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0);
+      if (await dialog.isVisible()) await close();
+      await reopen.click();
+      await waitState('Neue Nachrichten');
+
+      // A done/open cycle on another device advances the opaque revision even
+      // if status text ends up unchanged. Its in-flight result must be rejected.
+      await trigger.click();
+      await waitReady();
+      await page.evaluate(() => { window.nexusTest.chatScanDeferred = true; });
+      await start.click();
+      await page.waitForFunction(() => window.nexusTest.chatScanPending.length === 1);
+      await page.evaluate(() => {
+        // Simulate a missed realtime event while a second device changes state.
+        const emit = window.nexusTest.emit;
+        window.nexusTest.emit = () => {};
+        window.nexusTest.setChatDone('direct', 'c1', true);
+        window.nexusTest.setChatDone('direct', 'c1', false);
+        window.nexusTest.emit = emit;
+        window.nexusTest.chatScanDeferred = false;
+        window.nexusTest.finishChatScans();
+      });
+      await page.waitForFunction(() => window.nexusTest.chatScanRejections.at(-1) === 'status_changed');
+      await waitReady();
+      assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0);
+      await close();
+
+      // A cancelled request, and an older reply from another chat/account, must
+      // never repopulate an unrelated dialog with private output.
       await trigger.click();
       await waitReady();
       await page.evaluate(() => { window.nexusTest.chatScanDeferred = true; });
       await start.click();
       await page.waitForFunction(() => window.nexusTest.chatScanPending.length === 1);
       await page.keyboard.press('Escape');
-      await waitClosed();
-      assert.ok(await page.evaluate(() => window.nexusTest.chatScanAborts.some(call => call.body.action === 'scan')), 'Cancel must abort the in-flight request');
-      await page.evaluate(() => { window.nexusTest.chatScanDeferred = false; });
-      await trigger.click();
-      await waitReady();
-      await page.evaluate(() => window.nexusTest.finishChatScans());
-      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0);
-      await close();
-      await waitClosed();
-
-      // Route changes cancel pending work. A second direct chat and a group each
-      // start with a fresh scope, including responses arriving from the old chat.
-      await page.evaluate(() => { window.nexusTest.conversations.push({ conversation_id: 'c2', contact_user_id: 'second', full_name: 'Zweiter Kontakt', username: 'second', unread_count: 0, last_message: 'Neuer Chat' }); });
+      await dialog.waitFor({ state: 'hidden' });
+      assert.ok(await page.evaluate(() => window.nexusTest.chatScanAborts.some(call => call.body.action === 'scan')));
+      await page.evaluate(() => {
+        window.nexusTest.chatScanDeferred = false;
+        window.nexusTest.conversations.push({ conversation_id: 'c2', contact_user_id: 'second', full_name: 'Zweiter Kontakt', username: 'second', unread_count: 0, last_message: 'Neuer Chat' });
+      });
       await page.locator('.chat-refresh').click();
       await page.getByRole('button', { name: /Zweiter Kontakt/ }).waitFor();
-      await trigger.click();
-      await waitReady();
-      await page.evaluate(() => { window.nexusTest.chatScanDeferred = true; });
-      await start.click();
-      await page.waitForFunction(() => window.nexusTest.chatScanPending.length === 1);
-      await page.evaluate(() => { window.nexusTest.chatScanDeferred = false; location.hash = '#/app/chats?conversation=c2'; });
+      await page.evaluate(() => { location.hash = '#/app/chats?conversation=c2'; });
       await page.locator('.chat-head').getByText('Zweiter Kontakt', { exact: true }).waitFor();
-      await waitClosed();
+      await waitState('Offen');
       await trigger.click();
       await waitReady();
       await page.evaluate(() => window.nexusTest.finishChatScans());
-      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await settle();
       assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0);
-      assert.deepEqual(await page.evaluate(() => window.nexusTest.chatScanCalls.at(-1).body), { action: 'status', kind: 'direct', chatId: 'c2' });
       await close();
-      await waitClosed();
+      await markDone.click();
+      await waitState('Fertig');
+      await page.evaluate(() => window.nexusTest.switchUser('another-user'));
+      await waitState('Offen');
+      await page.evaluate(() => window.nexusTest.switchUser('me'));
+      await waitState('Fertig');
+      assert.equal(await page.evaluate(() => window.nexusTest.chatScanState('direct', 'c1').status), 'updated', 'Finishing a different chat must not affect this one');
+
+      // Group workflows remain independently scoped and reuse successful output.
       await page.getByRole('button', { name: 'Gruppen', exact: true }).click();
       await page.locator('.chat-head').getByText('Projektgruppe', { exact: true }).waitFor();
+      await waitState('Offen');
+      await statusFilter.selectOption({ label: 'Fertig' });
+      assert.equal(await page.locator('.chat-list .chat-status-badge').count(), 0);
+      await statusFilter.selectOption({ label: 'Offen' });
+      await page.locator('.chat-list .chat-status-badge[data-status="open"]').waitFor();
+      await statusFilter.selectOption({ label: 'Alle' });
       await trigger.click();
       await waitReady();
+      await page.evaluate(() => { window.nexusTest.chatScanFailure = 'provider_error'; });
       await start.click();
+      await dialog.getByRole('alert').waitFor();
+      await waitState('Offen');
+      await page.evaluate(() => { window.nexusTest.chatScanFailure = null; });
+      await dialog.getByRole('button', { name: 'Erneut versuchen', exact: true }).click();
       await waitResult();
-      assert.deepEqual(await page.evaluate(() => window.nexusTest.chatScanCalls.at(-1).body), { action: 'scan', kind: 'group', chatId: 'g1' });
+      await waitState('Ausgewertet');
+      assert.equal(await page.evaluate(() => window.nexusTest.chatScanCalls.filter(c => c.body.action === 'scan').at(-1).body.kind), 'group');
       const beforeBlur = await scanCount();
       await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-      await dialog.getByText('Die Auswertung wurde zurückgesetzt. Bitte werte den aktuellen Verlauf erneut aus.', { exact: true }).waitFor();
-      await waitReady();
-      assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0, 'Leaving the window must clear private output');
-      assert.equal(await scanCount(), beforeBlur, 'Returning to the window must not trigger a new scan');
-
-      // Model strings and cited excerpts are rendered as text, never executable
-      // HTML. Reuse the server-shaped result with hostile content in all fields.
+      await dialog.getByText('Die Auswertung wurde ausgeblendet. Öffne sie erneut, um den aktuellen Stand zu prüfen.', { exact: true }).waitFor();
+      assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0);
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await settle();
+      assert.equal(await scanCount(), beforeBlur, 'Focus refresh must not invoke the AI');
       await close();
-      await waitClosed();
+
+      // State transport failure disables actions rather than assuming open.
+      await page.evaluate(() => { window.nexusTest.failure = 'get_my_chat_scan_state'; window.dispatchEvent(new Event('offline')); window.dispatchEvent(new Event('focus')); });
+      await toolbar.getByRole('button', { name: 'Chatstatus erneut laden', exact: true }).waitFor();
+      assert.equal(await trigger.isEnabled(), false);
+      await page.evaluate(() => { window.nexusTest.failure = null; });
+      await toolbar.getByRole('button', { name: 'Chatstatus erneut laden', exact: true }).click();
+      await waitState('Ausgewertet');
+      assert.equal(await scanCount(), beforeBlur);
+
+      // Untrusted model text is inert, including persisted sources. Test on a
+      // changed history so this explicit request legitimately needs a new scan.
+      await changeHistory('group', 'g1');
+      await waitState('Neue Nachrichten');
       await page.evaluate(() => {
         const unsafe = '<img src=x onerror="window.chatScanUnsafe=true">';
         window.nexusTest.chatScanResult = {
@@ -184,29 +309,33 @@ try {
       assert.ok(await dialog.getByText('<img src=x onerror="window.chatScanUnsafe=true">', { exact: true }).count() >= 3);
       assert.equal(await dialog.locator('img').count(), 0);
       assert.equal(await page.evaluate(() => window.chatScanUnsafe), undefined);
-
-      // Narrow phones keep the result dialog and corner action within reach.
       for (const width of [390, 320]) {
         await page.setViewportSize({ width, height: 844 });
         const bounds = await dialog.boundingBox();
         assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1, `Dialog must fit ${width}px width`);
-        assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'Result content must not overflow the dialog');
+        assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true);
         assert.equal(await dialog.getByRole('button', { name: 'Chat-Auswertung schließen', exact: true }).isVisible(), true);
         await page.screenshot({ path: `browser-results/${name}-chat-scan-mobile-${width}.png`, fullPage: false });
       }
       await page.keyboard.press('Escape');
-      await waitClosed();
+      await dialog.waitFor({ state: 'hidden' });
       await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Chat mit KI auswerten');
-      const triggerBounds = await trigger.boundingBox();
-      assert.ok(triggerBounds && triggerBounds.x >= 0 && triggerBounds.x + triggerBounds.width <= 321, 'Corner action must fit the narrow chat window');
+      for (const width of [390, 320]) {
+        await page.setViewportSize({ width, height: 844 });
+        for (const action of [trigger, markDone]) {
+          const bounds = await action.boundingBox();
+          assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1, `Both corner actions must fit ${width}px width`);
+        }
+        await page.screenshot({ path: `browser-results/${name}-chat-status-mobile-${width}.png`, fullPage: false });
+      }
       assert.equal(await page.evaluate(() => window.nexusTest.writes), 0);
       assert.deepEqual(errors, []);
-      console.log(name + ': explicit whole-chat scan, unavailable provider, old sources, read-only results, history invalidation, retry, cancellation, cross-chat isolation, direct/group routing, unsafe text, keyboard and 320/390px dialogs passed');
+      console.log(name + ': personal chat status, done exclusion without AI, explicit reopening, persisted cached results, old-history changes, provider failure, cross-device revision races, cancellation, account/chat isolation, direct/group workflows, focus/offline recovery, inert text and 320/390px keyboard-accessible controls passed');
     } catch (error) {
       await page.screenshot({ path: `browser-results/${name}-chat-scan-failure.png`, fullPage: true });
       console.error('Browser errors:', errors);
       console.error('Test URL:', page.url());
-      console.error('Test UI:', (await page.locator('body').innerText()).slice(0, 8000));
+      console.error('Test UI:', (await page.locator('body').innerText()).slice(0, 9000));
       throw error;
     } finally { await context.close(); await browser.close(); }
   }

@@ -19,6 +19,7 @@ import './group-chat.css';
 import './group-management.css';
 import './chat-layout-fixed.css';
 import './chat-scan.css';
+import './chat-status.css';
 
 if ('scrollRestoration' in window.history) {
   window.history.scrollRestoration = 'manual';

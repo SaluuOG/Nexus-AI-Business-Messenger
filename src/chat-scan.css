@@ -1,8 +1,24 @@
-.chat-scan-toolbar{display:flex;flex:0 0 auto;justify-content:flex-end;min-width:0;padding:6px 20px 2px;background:#0d1117}
+.chat-scan-toolbar{display:flex;flex:0 0 auto;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:7px 12px;min-width:0;padding:8px 20px 2px;background:#0d1117}
+.chat-scan-workflow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0;font-size:10px;color:#9da8bb}
+.chat-scan-badge{padding:3px 7px;border:1px solid #364051;border-radius:6px;background:#19212d;color:#c7d0de;font-size:10px;font-weight:600;overflow-wrap:anywhere}
+.chat-scan-badge.updated{border-color:#69542d;background:#2a2519;color:#e6cd94}
+.chat-scan-badge.processed{border-color:#4f4569;background:#231d34;color:#cec0f1}
+.chat-scan-badge.done{border-color:#335949;background:#16271f;color:#a6d9bf}
+.chat-scan-controls{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;min-width:0;margin-left:auto}
+.chat-scan-toggle{display:inline-flex;align-items:center;justify-content:center;gap:6px;max-width:100%;min-height:34px;padding:7px 9px;border:1px solid #344152;border-radius:10px;background:#17202b;color:#b9c5d6;font-size:10px;cursor:pointer}
+.chat-scan-toggle:hover{background:#223043;color:#e6edf7}
+.chat-scan-toggle:disabled{opacity:.45;cursor:not-allowed}
+.chat-scan-toggle svg{flex:0 0 auto}
+.chat-scan-workflow-note,.chat-scan-workflow-error{flex-basis:100%;margin:0;color:#98a8ba;font-size:10px;line-height:1.5}
+.chat-scan-workflow-error{color:#e2b8c4}
+.chat-scan-workflow-error button{margin-left:8px;border:0;padding:0;background:none;color:#c2b2ff;font-size:inherit;text-decoration:underline;cursor:pointer}
+.chat-scan-saved{margin-bottom:16px;padding:12px 14px;border:1px solid #434057;border-radius:12px;background:#1c1d2c}
+.chat-scan-saved h3{margin:0;color:#d6cef5;font-size:14px}
+.chat-scan-saved p{margin:5px 0 0;color:#b4adca;font-size:11px}
 .chat-scan-action{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:34px;max-width:100%;padding:7px 11px;border:1px solid #514878;border-radius:10px;background:#211c36;color:#d9d3ff;font-size:11px;font-weight:650;cursor:pointer}
 .chat-scan-action:hover{background:#2c2548;border-color:#8f80c4;color:#fff}
 .chat-scan-action:disabled{opacity:.45;cursor:not-allowed}
-.chat-scan-action:focus-visible,.chat-scan-dialog button:focus-visible,.chat-scan-dialog summary:focus-visible{outline:2px solid #b4a5ff;outline-offset:3px}
+.chat-scan-toolbar button:focus-visible,.chat-scan-dialog button:focus-visible,.chat-scan-dialog summary:focus-visible{outline:2px solid #b4a5ff;outline-offset:3px}
 .chat-scan-action svg{flex:0 0 auto}
 .chat-scan-dialog{padding:0;margin:auto;width:min(690px,calc(100% - 32px));max-width:690px;max-height:calc(100dvh - 32px);overflow:auto;overscroll-behavior:contain;border:1px solid #414058;border-radius:18px;background:#11171f;color:#eef2f7;box-shadow:0 24px 90px #0009;color-scheme:dark}
 .chat-scan-dialog::backdrop{background:#03060acc;backdrop-filter:blur(5px)}
@@ -48,4 +64,4 @@
 .chat-scan-spinner{animation:chat-scan-spin 1.1s linear infinite}
 @keyframes chat-scan-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.chat-scan-spinner{animation:none}}
-@media(max-width:650px){.chat-scan-toolbar{padding:4px 12px 0}.chat-scan-action{min-height:34px;padding:7px 10px}.chat-scan-dialog{width:calc(100% - 20px);max-height:calc(100dvh - 20px);border-radius:14px}.chat-scan-head{padding:17px 16px 14px}.chat-scan-head h2{font-size:21px}.chat-scan-body{padding:18px 16px 20px}.chat-scan-footer button{width:100%}.chat-scan-disclosure{padding:12px}.chat-scan-state{padding:20px 0}}
+@media(max-width:650px){.chat-scan-toolbar{padding:6px 12px 0;gap:6px}.chat-scan-workflow{flex-basis:100%}.chat-scan-controls{max-width:100%}.chat-scan-action{min-height:34px;padding:7px 10px}.chat-scan-dialog{width:calc(100% - 20px);max-height:calc(100dvh - 20px);border-radius:14px}.chat-scan-head{padding:17px 16px 14px}.chat-scan-head h2{font-size:21px}.chat-scan-body{padding:18px 16px 20px}.chat-scan-footer button{width:100%}.chat-scan-disclosure{padding:12px}.chat-scan-state{padding:20px 0}}

@@ -216,7 +216,10 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Dialog mit Status der KI-Anbindung, bewusstem Start, Fortschrittsanzeige, Abbrechen und verständlichen Fehlerzuständen
 - Dateiinhalte, Bilder und Sprachnachrichten sind noch nicht Teil dieser Textauswertung; keine automatische Aufgabenanlage oder Nachrichtenversendung
 - Ergebnisse sind an Konto, Chat und den ausgewerteten Verlauf gebunden; veraltete oder verspätete Ergebnisse werden verworfen
-- Migration `20260915044932_chat_scan.sql` und Edge Function `chat-scan`; serverseitiger Anbieterzugang, Quellenrechte und begrenzte Nutzung
+- persönliche Chatstatus „Offen“, „Neue Nachrichten“, „Ausgewertet“ und „Fertig“, mit Filtern in Einzel- und Gruppenchats
+- „Fertig“ bleibt bis zum manuellen Wiederöffnen ausgeschlossen; ausgewertete unveränderte Chats öffnen ihr letztes privat gespeichertes Ergebnis ohne neuen KI-Aufruf
+- neue oder geänderte Nachrichten geben einen ausgewerteten Verlauf zur erneuten vollständigen Analyse frei; „Ausgewertet“ setzt keine Aufgaben auf erledigt
+- Migrationen `20260915044932_chat_scan.sql`, `20260915132017_chat_scan_workflow.sql` und Edge Function `chat-scan`; serverseitiger Anbieterzugang, Quellenrechte, Statusrennen und begrenzte Nutzung
 - **Aktivierung ausstehend:** Anbieterzugang, Modell und Kostenrahmen sind noch einzurichten; bisherige KI-Prüfungen verwenden simulierte Antworten
 - Einrichtung und Grenzen: [docs/chat-scan-setup.md](docs/chat-scan-setup.md)
 

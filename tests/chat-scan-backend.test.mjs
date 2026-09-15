@@ -5,6 +5,10 @@ import { createChatScanHandler, readHistory, splitHistory, validateAnalysis, cal
 const uid = '11111111-1111-4111-8111-111111111111';
 const chatId = '22222222-2222-4222-8222-222222222222';
 const scanId = '33333333-3333-4333-8333-333333333333';
+const revision = 'a'.repeat(32);
+const workflow = (status = 'open', rev = revision) => ({ chat_id: chatId, status,
+  last_scanned_at: status === 'processed' || status === 'updated' ? '2026-09-15T00:10:00.000Z' : null,
+  revision: rev, can_scan: ['open', 'updated'].includes(status) });
 const id = n => '44444444-4444-4444-8444-' + String(n).padStart(12, '0');
 const row = (n, body = 'Bitte das Angebot bis Freitag prüfen.') => ({ id: id(n), senderId: uid,
   sender: 'Test Kontakt', createdAt: new Date(Date.UTC(2026, 8, 15, 0, 0, n)).toISOString(), editedAt: null, body, attachmentCount: 0 });
@@ -15,13 +19,34 @@ const providerResponse = value => new Response(JSON.stringify({ status: 'complet
 ] }), { headers: { 'content-type': 'application/json' } });
 function fixture(patch = {}) {
   const state = { rows: [row(1)], authCalls: 0, authError: false, available: true, calls: [], providerCalls: [],
-    snapshot: 'initial', denied: false, rateLimited: false, released: [], ...patch };
+    snapshot: 'initial', denied: false, rateLimited: false, released: [], workflow: workflow(), saved: null, persisted: [], ...patch };
   const rpc = async (name, args) => {
     state.calls.push({ name, args });
-    if (name === 'begin_chat_scan') return state.rateLimited ? { data: null, error: { message: 'rate_limited' } } : { data: scanId, error: null };
+    if (name === 'begin_chat_scan') {
+      state.onBegin?.();
+      return state.rateLimited ? { data: null, error: { message: 'rate_limited' } } : { data: scanId, error: null };
+    }
     if (name === 'finish_chat_scan') { state.released.push(args.p_scan_id); return { data: null, error: null }; }
-    if (name !== 'get_chat_scan_page') throw new Error('unexpected rpc');
     if (state.denied) return { data: null, error: { message: 'no_access' } };
+    if (name === 'get_my_chat_scan_state') return { data: { ...state.workflow }, error: null };
+    if (name === 'get_my_chat_scan_result') {
+      state.onGetSaved?.();
+      return { data: state.workflow.status === 'processed' ? state.saved : null, error: null };
+    }
+    if (name === 'complete_my_chat_scan') {
+      state.onComplete?.();
+      const code = state.completeError || (state.workflow.status === 'done' ? 'chat_done'
+        : state.workflow.status === 'processed' ? 'already_processed'
+          : state.workflow.revision !== args.p_expected_revision ? 'status_changed'
+            : state.snapshot !== args.p_snapshot ? 'history_changed' : null);
+      if (code) return { data: null, error: { message: code } };
+      assert.equal(args.p_scan_id, scanId); assert.equal(args.p_chat_id, chatId);
+      assert.equal(args.p_kind, args.p_result.chatKind);
+      state.saved = structuredClone(args.p_result); state.persisted.push(state.saved);
+      state.workflow = workflow('processed', 'b'.repeat(32));
+      return { data: { ...state.workflow }, error: null };
+    }
+    if (name !== 'get_chat_scan_page') throw new Error('unexpected rpc');
     if (args.p_snapshot && args.p_snapshot !== state.snapshot) return { data: null, error: { message: 'history_changed' } };
     const start = args.p_after_id ? state.rows.findIndex(row => row.id === args.p_after_id) + 1 : 0;
     const items = state.rows.slice(start, start + args.p_limit);
@@ -45,7 +70,7 @@ function fixture(patch = {}) {
   const request = async (action = 'scan', values = {}, headers = {}) => {
     const response = await handler(new Request('https://example.invalid/chat-scan', {
       method: 'POST', headers: { Authorization: 'Bearer test-token', Origin: 'https://saluuog.github.io', 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ action, kind: 'direct', chatId, ...values }),
+      body: JSON.stringify({ action, kind: 'direct', chatId, ...values }), signal: state.requestSignal,
     }));
     return { response, body: await response.json() };
   };
@@ -55,13 +80,14 @@ function fixture(patch = {}) {
 test('Scan status authenticates without history, quota, provider calls or secrets', async () => {
   const f = fixture({ available: false });
   const { body } = await f.request('status');
-  assert.deepEqual(body, { available: false, providerLabel: null });
-  assert.equal(f.state.authCalls, 1); assert.equal(f.state.calls.length, 0); assert.equal(f.state.providerCalls.length, 0);
+  assert.deepEqual(body, { available: false, providerLabel: null, workflow: workflow() });
+  assert.equal(f.state.authCalls, 1); assert.deepEqual(f.state.calls.map(call => call.name), ['get_my_chat_scan_state']); assert.equal(f.state.providerCalls.length, 0);
   const scan = await f.request(); assert.equal(scan.body.code, 'ai_not_configured');
-  assert.equal(f.state.providerCalls.length, 0); assert.equal(f.state.calls.length, 0);
+  assert.equal(f.state.providerCalls.length, 0); assert.ok(f.state.calls.every(call => call.name === 'get_my_chat_scan_state'));
   f.state.available = true;
-  assert.deepEqual((await f.request('status')).body, { available: true, providerLabel: 'OpenAI' });
+  assert.deepEqual((await f.request('status')).body, { available: true, providerLabel: 'OpenAI', workflow: workflow() });
   f.state.env = { NEXUS_AI_MODEL: '' }; assert.equal((await f.request('status')).body.available, false);
+  f.state.denied = true; assert.equal((await f.request('status')).body.code, 'no_access');
 });
 
 test('Entire 501-row history pages past UI limit, preserves source text and counts excluded attachments', async () => {
@@ -73,7 +99,10 @@ test('Entire 501-row history pages past UI limit, preserves source text and coun
   assert.equal(body.sources[0].excerpt, rows[0].body); assert.equal(body.sources[0].sender, 'Test Kontakt');
   assert.equal(body.scanId, scanId); assert.equal(body.chatId, chatId); assert.equal(body.chatKind, 'direct');
   assert.equal(f.state.calls.filter(call => call.name === 'get_chat_scan_page' && call.args.p_limit === 250).length, 3);
-  assert.equal(f.state.calls.at(-2).args.p_snapshot, 'initial'); assert.deepEqual(f.state.released, [scanId]);
+  assert.equal(f.state.calls.at(-3).args.p_snapshot, 'initial'); assert.deepEqual(f.state.released, [scanId]);
+  assert.equal(f.state.calls.at(-2).name, 'complete_my_chat_scan');
+  assert.equal(f.state.calls.at(-2).args.p_expected_revision, revision);
+  assert.equal(f.state.persisted.length, 1); assert.equal(f.state.workflow.status, 'processed'); assert.equal(body.cached, false);
   assert.equal(f.state.authCalls, 2); assert.equal(response.headers.get('cache-control'), 'no-store');
   for (const call of f.state.providerCalls) {
     assert.equal(call.url, 'https://api.openai.com/v1/responses'); assert.equal(call.body.store, false);
@@ -137,7 +166,98 @@ test('Provider failures, refusals, invented citations and malformed output expos
     const f = fixture({ provider }); const answer = await f.request();
     assert.ok(['provider_error', 'rate_limited'].includes(answer.body.code)); assert.equal(JSON.stringify(answer.body).includes('private-test-key'), false);
     assert.equal('coverage' in answer.body, false); assert.deepEqual(f.state.released, [scanId]);
+    assert.equal(f.state.workflow.status, 'open'); assert.equal(f.state.persisted.length, 0);
   }
+});
+
+test('Finished chats skip history, quota and provider even when the provider is disabled', async () => {
+  for (const available of [true, false]) {
+    const f = fixture({ available, workflow: workflow('done') });
+    const { response, body } = await f.request();
+    assert.equal(response.status, 409); assert.equal(body.code, 'chat_done');
+    assert.deepEqual(f.state.calls.map(call => call.name), ['get_my_chat_scan_state']);
+    assert.equal(f.state.providerCalls.length, 0); assert.equal(f.state.persisted.length, 0);
+  }
+});
+
+test('Successful unchanged analysis is reused without quota/history/provider, even after disabling the provider', async () => {
+  const f = fixture(); const first = await f.request();
+  assert.equal(first.response.status, 200); const paidCalls = f.state.providerCalls.length;
+  f.state.calls = []; f.state.available = false; f.state.env = { OPENAI_API_KEY: '', NEXUS_AI_MODEL: '' };
+  const second = await f.request();
+  assert.equal(second.response.status, 200); assert.equal(second.body.cached, true);
+  assert.deepEqual({ ...second.body, cached: false }, first.body);
+  assert.deepEqual(f.state.calls.map(call => call.name), ['get_my_chat_scan_state', 'get_my_chat_scan_result']);
+  assert.equal(f.state.providerCalls.length, paidCalls); assert.equal(f.state.persisted.length, 1);
+});
+
+test('Changed history is eligible again and includes old context as well as the new message', async () => {
+  const f = fixture(); await f.request();
+  f.state.rows.push(row(2, 'Die Frist ist jetzt Montag.')); f.state.snapshot = 'changed';
+  f.state.workflow = workflow('updated', 'c'.repeat(32)); f.state.saved = null;
+  f.state.providerCalls = []; f.state.calls = [];
+  const answer = await f.request(); assert.equal(answer.response.status, 200);
+  assert.equal(answer.body.cached, false); assert.equal(answer.body.coverage.messageCount, 2);
+  const supplied = JSON.parse(f.state.providerCalls[0].body.input[0].content).messages;
+  assert.deepEqual(supplied.map(item => item.id), [id(1), id(2)]);
+  assert.equal(f.state.calls.find(call => call.name === 'complete_my_chat_scan').args.p_expected_revision, 'c'.repeat(32));
+  assert.equal(f.state.persisted.length, 2);
+});
+
+test('A personal status change while reserving the lease prevents a provider call and releases the lease', async () => {
+  for (const [status, code] of [['done', 'chat_done'], ['processed', 'already_processed'], ['open', 'status_changed']]) {
+    const f = fixture(); f.state.onBegin = () => { f.state.workflow = workflow(status, 'c'.repeat(32)); };
+    const answer = await f.request(); assert.equal(answer.body.code, code);
+    assert.equal(f.state.providerCalls.length, 0); assert.equal(f.state.persisted.length, 0);
+    assert.deepEqual(f.state.released, [scanId]);
+  }
+});
+
+test('Finishing or finishing then reopening during generation never persists an obsolete completion', async () => {
+  for (const [status, code] of [['done', 'chat_done'], ['open', 'status_changed']]) {
+    const f = fixture();
+    f.state.provider = async () => { f.state.workflow = workflow(status, 'c'.repeat(32)); return providerResponse(result(id(1))); };
+    const answer = await f.request(); assert.equal(answer.body.code, code); assert.equal('summary' in answer.body, false);
+    assert.equal(f.state.persisted.length, 0); assert.equal(f.state.workflow.status, status);
+    assert.deepEqual(f.state.released, [scanId]);
+  }
+});
+
+test('Status, history and lease are checked atomically at persistence and save failures are surfaced', async () => {
+  for (const code of ['chat_done', 'already_processed', 'status_changed', 'history_changed', 'scan_expired', 'private database failure']) {
+    const f = fixture({ completeError: code }); const answer = await f.request();
+    assert.equal(answer.body.code, code === 'private database failure' ? 'provider_error' : code);
+    assert.equal('summary' in answer.body, false); assert.equal(f.state.persisted.length, 0); assert.equal(f.state.workflow.status, 'open');
+    assert.deepEqual(f.state.released, [scanId]);
+    assert.equal(JSON.stringify(answer.body).includes('private database failure'), false);
+  }
+});
+
+test('Cancelling a scan during provider work never marks the chat processed and still releases its lease', async () => {
+  const controller = new AbortController(), f = fixture({ requestSignal: controller.signal });
+  f.state.provider = async () => { controller.abort(); return providerResponse(result(id(1))); };
+  const answer = await f.request(); assert.equal(answer.body.code, 'provider_error');
+  assert.equal(f.state.persisted.length, 0); assert.equal(f.state.workflow.status, 'open');
+  assert.equal(f.state.calls.some(call => call.name === 'complete_my_chat_scan'), false);
+  assert.deepEqual(f.state.released, [scanId]);
+});
+
+test('A stale saved-result lookup cannot disclose a previous result or fall through to a paid rescan', async () => {
+  const f = fixture(); await f.request();
+  f.state.calls = []; const paidCalls = f.state.providerCalls.length;
+  f.state.onGetSaved = () => { f.state.workflow = workflow('updated', 'c'.repeat(32)); };
+  const answer = await f.request(); assert.equal(answer.body.code, 'status_changed');
+  assert.equal('summary' in answer.body, false); assert.equal(f.state.providerCalls.length, paidCalls);
+  assert.equal(f.state.calls.some(call => call.name === 'begin_chat_scan'), false);
+});
+
+test('Cached responses must retain the requested scope and valid citations', async () => {
+  const f = fixture(); await f.request();
+  f.state.saved.chatId = uid;
+  assert.equal((await f.request()).body.code, 'provider_error');
+  f.state.saved.chatId = chatId; f.state.saved.tasks[0].sourceIds = [id(999)];
+  assert.equal((await f.request()).body.code, 'provider_error');
+  assert.equal(f.state.providerCalls.length, 1);
 });
 
 test('Broken pagination or changing snapshots cannot silently skip or duplicate messages', async () => {

@@ -1,7 +1,7 @@
 # Whole-chat scan backend
 
 This function is intentionally disabled by default. Apply the accompanying
-`chat_scan` migration, deploy `chat-scan` with JWT verification **enabled**, then
+`chat_scan` and `chat_scan_workflow` migrations, deploy `chat-scan` with JWT verification **enabled**, then
 configure these server-only secrets once an owner has selected the provider/model:
 
 - `OPENAI_API_KEY`: API project key; never put it in a `VITE_` variable.
@@ -12,8 +12,18 @@ configure these server-only secrets once an owner has selected the provider/mode
 
 The function uses the Supabase-provided URL and public anon key (or
 `SUPABASE_PUBLISHABLE_KEY`) plus each caller's JWT, never a service-role key. No
-provider/model is selected automatically. `status` authenticates without loading
-messages or contacting OpenAI. A disabled scan sends no conversation data.
+provider/model is selected automatically. `status` authenticates and checks live
+chat access and the personal workflow state without returning messages or
+contacting OpenAI. It returns `{available, providerLabel, workflow}`. A disabled
+scan sends no conversation data to the provider; existing current results can
+still be viewed.
+
+The workflow is personal to each signed-in account. `open` and `updated` chats
+can be scanned; `processed` means a successful current result exists; `done`
+means the account explicitly finished the chat and must reopen it first. New
+messages, edits, deletions and relevant source changes make an existing scan
+outdated, but never reopen a finished chat. Reopening an unchanged finished chat
+with a current saved result restores `processed` without another model request.
 
 `POST {action:"scan",kind:"direct"|"group",chatId:"uuid"}` reads all currently
 accessible undeleted messages with timestamp/UUID keysets, including history older
@@ -22,9 +32,23 @@ The coverage count includes all undeleted messages and explicitly counts exclude
 attachments. Current group members have the same full-history access as the
 existing messenger; losing membership blocks a scan and its result.
 
+Before checking provider configuration or claiming quota, the function calls
+`get_my_chat_scan_state`. Finished chats return `chat_done`. Processed chats read
+`get_my_chat_scan_result` and return the saved response with `cached:true`,
+without loading history, claiming quota or contacting OpenAI. A concurrent
+change that invalidates that result returns `status_changed`, never old data or
+an automatic paid rescan. Freshly completed responses include `cached:false`.
+
 The operation validates a fingerprint on every page and again after generation.
 Edits, deletions, new messages, source metadata changes or access revocation abort
-the result. Chat data is untrusted prompt content, never instructions or tools.
+the result. After reserving the lease it rechecks the personal workflow revision
+before starting provider work. Only validated complete output is passed to
+`complete_my_chat_scan`, which atomically checks the caller's live lease, personal
+revision, current full-history snapshot and access before saving the result and
+marking the chat processed. Finishing/reopening during an in-flight scan rejects
+that old completion. Failures, cancellation and expired leases do not mark a
+chat processed, and persistence failures are surfaced instead of reporting a
+successful result. Chat data is untrusted prompt content, never instructions or tools.
 Model findings carry validated original message IDs; displayed excerpts and sender
 labels come from database input, not from generated fields. Findings are proposals;
 the function never sends messages or creates/changes tasks.
@@ -36,9 +60,13 @@ the operation plus at most 3 seconds for lease cleanup. No automatic provider
 retries. Limits abort explicitly; partial output is never marked complete.
 Database quota: one active 130-second lease per account, 6 attempts/hour and
 20/day, using rolling windows. Attempts that reach the provider retain quota even
-after failure. No raw transcript, generated result or secret is logged or persisted
-by Nexus; `scanId` identifies this ephemeral response only. OpenAI requests specify
-`store:false`; provider-side retention is governed by the selected API account.
+after failure. No chat content, result or secret is logged. Nexus stores the latest
+successful analysis and its cited source excerpts in private account-scoped
+database storage, together with the workflow status and last scan time. It does
+not copy the entire transcript into another store. Source mutations invalidate
+and clear affected cached results; reads always recheck live chat access.
+`scanId` identifies the saved successful scan. OpenAI requests specify `store:false`;
+provider-side retention is governed by the selected API account.
 
 Official references checked during implementation:
 - https://developers.openai.com/api/docs/guides/structured-outputs
@@ -46,6 +74,9 @@ Official references checked during implementation:
 - https://supabase.com/docs/guides/functions/auth-legacy-jwt
 
 Node transport/auth/provider fixture tests run as part of `npm test`. Database
-acceptance is `tests/sql/chat-scan-rls.sql` and uses synthetic rollback-only records.
+acceptance is `tests/sql/chat-scan-rls.sql` plus the workflow SQL acceptance suite
+and uses synthetic rollback-only records. Backend tests cover cache reuse without
+provider configuration, full old-and-new history after changes, finished chats,
+concurrent status changes, expired leases, cancellation and failed persistence.
 A real provider smoke test remains required after model/key configuration, using
 synthetic chat content before owner acceptance with real chats.
