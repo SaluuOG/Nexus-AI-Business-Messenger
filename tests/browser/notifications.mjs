@@ -52,6 +52,7 @@ try {
       await page.getByRole('button', { name: 'Weitere Hinweise laden', exact: true }).click();
       await waitCount(37);
       assert.equal(await page.getByRole('button', { name: 'Weitere Hinweise laden', exact: true }).count(), 0);
+      await page.getByRole('heading', { name: 'Benachrichtigungen', exact: true }).scrollIntoViewIfNeeded();
       await page.screenshot({ path: `browser-results/${name}-notifications-desktop.png`, fullPage: true });
 
       // A failed read does not remove the unread dot or report success.
@@ -127,6 +128,7 @@ try {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await page.screenshot({ path: `browser-results/${name}-notifications-mobile.png`, fullPage: true });
       await page.locator('.notification-settings-link').click();
+      await page.getByRole('switch', { name: 'Nachrichten', exact: true }).waitFor();
       assert.equal(await page.getByRole('switch').count(), 5);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await page.screenshot({ path: `browser-results/${name}-notification-settings-mobile.png`, fullPage: true });

@@ -1,4 +1,5 @@
 import { Bell, Check, CheckCheck, ChevronRight, Clock3, ListTodo, Mail, MessageCircle, RefreshCw, Settings2, UserPlus, UsersRound } from 'lucide-react';
+import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Header } from '../components/Header';
 import { routes } from '../app/routes';
@@ -10,6 +11,10 @@ const dateLabel = (value: string) => new Intl.DateTimeFormat('de-DE', { dateStyl
 
 export function NotificationsPage({ model }: { model: NotificationsModel }) {
   const navigate = useNavigate();
+  useEffect(() => {
+    document.querySelector('.app > main')?.scrollTo({ top: 0 });
+    window.scrollTo({ top: 0 });
+  }, []);
   const open = async (item: NexusNotification) => {
     const target = notificationTarget(item);
     if (target && (item.read_at || await model.markRead(item.id))) navigate(target);
