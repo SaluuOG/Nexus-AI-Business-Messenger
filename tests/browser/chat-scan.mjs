@@ -75,7 +75,7 @@ try {
       }
       await dialog.getByText('Das vereinbarte Budget beträgt 2.500 Euro.', { exact: true }).waitFor();
       await dialog.getByText('Quellen anzeigen (1)', { exact: true }).first().click();
-      await dialog.getByText('Unser Budget beträgt 2.500 Euro. Wer liefert die Produktbilder?', { exact: true }).waitFor();
+      await dialog.locator('details[open] blockquote').filter({ hasText: 'Unser Budget beträgt 2.500 Euro. Wer liefert die Produktbilder?' }).waitFor();
       assert.match(await dialog.innerText(), /2025/);
       assert.equal(await page.evaluate(() => window.nexusTest.writes), 0, 'An analysis never creates or modifies project tasks');
       await page.screenshot({ path: `browser-results/${name}-chat-scan-desktop.png`, fullPage: true });
