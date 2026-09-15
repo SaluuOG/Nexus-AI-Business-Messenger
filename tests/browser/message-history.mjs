@@ -242,10 +242,18 @@ try {
       assert.deepEqual(errors, []);
       console.log(`${name}: history anchoring, scoped drafts, idempotent retry, binary no-retry, global search/deep-links, exact highlights, live lists and 390/320px layouts passed`);
     } catch (error) {
-      await page.screenshot({ path: `browser-results/${name}-message-history-failure.png`, fullPage: true });
       console.error('Browser errors:', errors);
-      console.error('Test URL:', page.url());
-      console.error('Test UI:', (await page.locator('body').innerText()).slice(0, 9000));
+      try {
+        await page.screenshot({ path: `browser-results/${name}-message-history-failure.png`, fullPage: false });
+      } catch (diagnosticError) {
+        console.error('Failure screenshot unavailable:', diagnosticError instanceof Error ? diagnosticError.message : diagnosticError);
+      }
+      try {
+        console.error('Test URL:', page.url());
+        console.error('Test UI:', (await page.locator('body').innerText()).slice(0, 9000));
+      } catch (diagnosticError) {
+        console.error('Failure page state unavailable:', diagnosticError instanceof Error ? diagnosticError.message : diagnosticError);
+      }
       throw error;
     } finally {
       await context.close();
