@@ -232,15 +232,29 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - fehlgeschlagene Textsendungen werden ausschließlich nach bewusster Bestätigung mit derselben Anfrage-ID wiederholt; ein verlorenes Serverergebnis erzeugt dadurch keine doppelte Nachricht
 - Dateien und Sprachnachrichten werden niemals automatisch erneut hochgeladen
 - Chatlisten reagieren per Realtime auch auf neue Nachrichten in nicht geöffneten Unterhaltungen; Fokus- und 30-Sekunden-Abgleich dienen als Ausfallsicherung
+- bereits geladene ältere Nachrichten werden nach externem Bearbeiten oder Löschen gezielt aktualisiert, auch wenn sie außerhalb der neuesten 100 Nachrichten liegen
 - tiefe Verlaufsansichten setzen keine ungesehenen neueren Nachrichten versehentlich auf gelesen und bieten jederzeit den Sprung zum aktuellen Ende
 - Migration `20260915182541_phase_three_seven_message_history_search.sql` mit stabilen Cursor-Indizes, zugriffsgeschützten RPCs und explizit gesperrtem anonymem Zugriff
 - automatisierte Daten-, Sicherheits- und Browserprüfungen decken Cursor-Kollisionen, RLS-Isolation, Suche, Deep-Links, Entwürfe, Wiederholung und 320-/390-Pixel-Ansichten ab
 - diese Phase benötigt keinen KI-Anbieter und verursacht keine OpenAI-API-Aufrufe; die KI-Anbindung aus Phase 3.6 bleibt bis zur bewussten Aktivierung ausgeschaltet
 
+### Phase 3.8 — Workspace-Lebenszyklus & sichere Ownership ✅
+- Owner und Admins können den aktiven Workspace in den Einstellungen umbenennen; Namen werden serverseitig validiert
+- Admins, Member und Gäste können einen Workspace nach ausdrücklicher Bestätigung selbst verlassen; zugewiesene Aufgaben bleiben erhalten und werden sicher freigegeben
+- Owner können die Ownership atomar an einen vorhandenen Admin oder Member übertragen und bleiben anschließend als Admin im Team
+- ein partieller Datenbankindex verhindert dauerhaft mehr als eine Owner-Mitgliedschaft pro Workspace
+- endgültiges Löschen ist ausschließlich für den aktuellen Owner möglich und verlangt den exakten Workspace-Namen sowie einen zweiten Bestätigungsdialog
+- Workspace, Einladungen, Kunden, Projekte, Aufgaben und weitere abhängige Daten werden beim Löschen über die bestehenden Fremdschlüssel kontrolliert entfernt
+- direkte Workspace-Updates und -Löschungen aus dem Browser sind entzogen; sämtliche sensiblen Aktionen laufen über gesperrte, authentifizierte RPCs mit leerem `search_path`
+- nach Verlassen oder Löschen wählt Nexus automatisch den nächsten verfügbaren Workspace oder einen sicheren leeren Zustand
+- Rollen, Nachfolgerauswahl, Busy-/Doppelklickschutz, Fehlermeldungen und Dialoge sind bis 320 Pixel Breite zugänglich bedienbar
+- rollbackfähige SQL-Prüfungen decken Rollen, RLS, anonyme Zugriffe, Owner-Invariante, Aufgabenfreigabe und Löschkaskaden ab; Browserprüfungen testen den vollständigen Ablauf
+- diese Phase benötigt keinen KI-Anbieter und verursacht keine OpenAI-API-Aufrufe
+
 ### Einstellungen nach Kategorien
 - Allgemein: Startansicht sowie private oder geschäftliche Identität; die Auswahl wird pro Konto in diesem Browser gespeichert
 - Profil & Business: Name, Username, Bio und Business-Profil
-- Workspace & Team: aktiven Workspace auch mobil auswählen, Workspace erstellen, Mitglieder, Rollen und Einladungen verwalten
+- Workspace & Team: aktiven Workspace auch mobil auswählen, Workspace erstellen oder umbenennen, Mitglieder, Rollen und Einladungen verwalten sowie Ownership übertragen, verlassen oder sicher löschen
 - Benachrichtigungen: Hinweise nach Art ein-/ausschalten; Auswahl wird pro Konto auf allen Geräten gespeichert
 - Datenschutz & Sicherheit: Passwort ändern, Wiederherstellungslink an die eigene Konto-Adresse senden und abmelden
 - klare Fehlermeldungen und eine Sendepause nach erfolgreicher Reset-Anforderung; Passwort-Sonderzeichen bleiben unverändert erhalten

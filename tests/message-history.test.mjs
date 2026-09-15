@@ -367,31 +367,84 @@ test('Phase 3.7 message history/search data contract is bounded, safe and retrya
       assert.notEqual(generated[0], generated[1]);
     });
 
-    await t.test('global realtime channels observe unopened direct/group list dependencies without row filters', () => {
+    await t.test('selected-chat realtime uses only scoped INSERT and UPDATE message streams', () => {
+      stub.setResponse(() => ({ data: null, error: null }));
+      const directChanges = [];
+      directApi.subscribeToConversationRealtime(uuid(1), {
+        onMessagesChanged: change => directChanges.push(change),
+      });
+      const directMessageSubscriptions = stub.subscriptions.filter(({ filter }) => filter.table === 'direct_messages');
+      assert.deepEqual(directMessageSubscriptions.map(({ filter }) => filter), [{
+        event: 'INSERT', schema: 'public', table: 'direct_messages', filter: `conversation_id=eq.${uuid(1)}`,
+      }, {
+        event: 'UPDATE', schema: 'public', table: 'direct_messages', filter: `conversation_id=eq.${uuid(1)}`,
+      }]);
+      directMessageSubscriptions[0].callback({
+        eventType: 'INSERT', new: { id: uuid(501), conversation_id: uuid(1) }, old: {},
+      });
+      directMessageSubscriptions[1].callback({
+        eventType: 'UPDATE', new: { id: uuid(502) }, old: {},
+      });
+      assert.deepEqual(directChanges, [
+        { event: 'INSERT', messageId: uuid(501), scopeId: uuid(1) },
+        { event: 'UPDATE', messageId: uuid(502), scopeId: uuid(1) },
+      ]);
+
+      stub.setResponse(() => ({ data: null, error: null }));
+      const groupChanges = [];
+      groupApi.subscribeToGroupRealtime(uuid(2), {
+        onMessagesChanged: change => groupChanges.push(change),
+      });
+      const groupMessageSubscriptions = stub.subscriptions.filter(({ filter }) => filter.table === 'group_messages');
+      assert.deepEqual(groupMessageSubscriptions.map(({ filter }) => filter), [{
+        event: 'INSERT', schema: 'public', table: 'group_messages', filter: `group_id=eq.${uuid(2)}`,
+      }, {
+        event: 'UPDATE', schema: 'public', table: 'group_messages', filter: `group_id=eq.${uuid(2)}`,
+      }]);
+      groupMessageSubscriptions[0].callback({
+        eventType: 'INSERT', new: { id: uuid(601), group_id: uuid(2) }, old: {},
+      });
+      groupMessageSubscriptions[1].callback({
+        eventType: 'UPDATE', new: { id: uuid(602) }, old: {},
+      });
+      assert.deepEqual(groupChanges, [
+        { event: 'INSERT', messageId: uuid(601), scopeId: uuid(2) },
+        { event: 'UPDATE', messageId: uuid(602), scopeId: uuid(2) },
+      ]);
+    });
+
+    await t.test('global realtime channels use explicit INSERT and UPDATE list streams without DELETE', () => {
       stub.setResponse(() => ({ data: null, error: null }));
       let directChanges = 0;
       const directChannel = directApi.subscribeToDirectMessagesRealtime(() => { directChanges += 1; });
       assert.equal(directChannel.name, 'direct-message-list');
       assert.deepEqual(stub.subscriptions.map(({ type, filter }) => ({ type, filter })), [
-        { type: 'postgres_changes', filter: { event: '*', schema: 'public', table: 'direct_messages' } },
-        { type: 'postgres_changes', filter: { event: '*', schema: 'public', table: 'direct_conversation_reads' } },
-        { type: 'postgres_changes', filter: { event: '*', schema: 'public', table: 'direct_conversations' } },
+        { type: 'postgres_changes', filter: { event: 'INSERT', schema: 'public', table: 'direct_messages' } },
+        { type: 'postgres_changes', filter: { event: 'UPDATE', schema: 'public', table: 'direct_messages' } },
+        { type: 'postgres_changes', filter: { event: 'INSERT', schema: 'public', table: 'direct_conversation_reads' } },
+        { type: 'postgres_changes', filter: { event: 'UPDATE', schema: 'public', table: 'direct_conversation_reads' } },
+        { type: 'postgres_changes', filter: { event: 'INSERT', schema: 'public', table: 'direct_conversations' } },
+        { type: 'postgres_changes', filter: { event: 'UPDATE', schema: 'public', table: 'direct_conversations' } },
       ]);
       for (const subscription of stub.subscriptions) subscription.callback();
-      assert.equal(directChanges, 3);
+      assert.equal(directChanges, 6);
 
       stub.setResponse(() => ({ data: null, error: null }));
       let groupChanges = 0;
       const groupChannel = groupApi.subscribeToGroupMessagesRealtime(() => { groupChanges += 1; });
       assert.equal(groupChannel.name, 'group-message-list');
       assert.deepEqual(stub.subscriptions.map(({ type, filter }) => ({ type, filter })), [
-        { type: 'postgres_changes', filter: { event: '*', schema: 'public', table: 'group_messages' } },
-        { type: 'postgres_changes', filter: { event: '*', schema: 'public', table: 'group_reads' } },
-        { type: 'postgres_changes', filter: { event: '*', schema: 'public', table: 'group_conversations' } },
-        { type: 'postgres_changes', filter: { event: '*', schema: 'public', table: 'group_members' } },
+        { type: 'postgres_changes', filter: { event: 'INSERT', schema: 'public', table: 'group_messages' } },
+        { type: 'postgres_changes', filter: { event: 'UPDATE', schema: 'public', table: 'group_messages' } },
+        { type: 'postgres_changes', filter: { event: 'INSERT', schema: 'public', table: 'group_reads' } },
+        { type: 'postgres_changes', filter: { event: 'UPDATE', schema: 'public', table: 'group_reads' } },
+        { type: 'postgres_changes', filter: { event: 'INSERT', schema: 'public', table: 'group_conversations' } },
+        { type: 'postgres_changes', filter: { event: 'UPDATE', schema: 'public', table: 'group_conversations' } },
+        { type: 'postgres_changes', filter: { event: 'INSERT', schema: 'public', table: 'group_members' } },
+        { type: 'postgres_changes', filter: { event: 'UPDATE', schema: 'public', table: 'group_members' } },
       ]);
       for (const subscription of stub.subscriptions) subscription.callback();
-      assert.equal(groupChanges, 4);
+      assert.equal(groupChanges, 8);
     });
   } finally {
     if (previousTimezone === undefined) delete process.env.TZ;

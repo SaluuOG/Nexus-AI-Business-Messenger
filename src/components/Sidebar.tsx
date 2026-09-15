@@ -23,6 +23,7 @@ type SidebarProps = {
   onWorkspaceChange: (workspaceId: string | null) => void;
   workspaceRole?: WorkspaceRole;
   workspaceLoading?: boolean;
+  workspaceSwitchDisabled?: boolean;
   identity: IdentityMode;
   accountName?: string;
   accountSubtitle?: string;
@@ -54,6 +55,7 @@ export function Sidebar({
   onWorkspaceChange,
   workspaceRole,
   workspaceLoading,
+  workspaceSwitchDisabled,
   identity,
   accountName,
   accountSubtitle,
@@ -104,7 +106,7 @@ export function Sidebar({
         <select
           value={selectedWorkspaceId ?? ''}
           onChange={(event) => onWorkspaceChange(event.target.value || null)}
-          disabled={workspaceLoading || workspaces.length === 0}
+          disabled={workspaceLoading || workspaceSwitchDisabled || workspaces.length === 0}
         >
           {workspaces.length === 0 && <option value="">Noch kein Workspace</option>}
           {workspaces.map((workspace) => (

@@ -183,6 +183,9 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   const [contextWarning, setContextWarning] = useState<string | null>(null);
   const [failedTextSend, setFailedTextSend] = useState<TextSendRetrySnapshot | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const groupMessagesDataRef = useRef<GroupMessage[]>([]);
+  const realtimeMessageRequestRef = useRef(new Map<string, number>());
+  const realtimeGenerationRef = useRef(0);
   const messageElementsRef = useRef(new Map<string, HTMLDivElement>());
   const pendingScrollActionRef = useRef<PendingScrollAction | null>(null);
   const scrollLockRef = useRef<MessageScrollLock | null>(null);
@@ -193,11 +196,17 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   const retryStoreRef = useRef(createTextSendRetryStore());
   const retryReplyTargetsRef = useRef(new Map<string, string | null>());
   const previousUserRef = useRef<string | undefined>(currentUserId);
+  const replyingToRef = useRef<GroupMessage | null>(null);
+  const editingRef = useRef<GroupMessage | null>(null);
   const markingReadRef = useRef(new Set<string>());
   const queuedReadRef = useRef(new Map<string, boolean>());
   const lastMarkReadRef = useRef(new Map<string, number>());
   const markReadTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const refreshGroupsRef = useRef<(preferred?: string | null, silent?: boolean) => Promise<GroupChat[] | null>>(async () => null);
+  const refreshGroupsRef = useRef<(
+    preferred?: string | null,
+    silent?: boolean,
+    shouldApply?: () => boolean,
+  ) => Promise<GroupChat[] | null>>(async () => null);
   const groupListRefreshInFlightRef = useRef(false);
   const groupListRefreshQueuedRef = useRef(false);
   const groupListHistoryChangedRef = useRef(false);
@@ -216,7 +225,10 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     : null, [currentUserId, selectedId]);
 
   draftRef.current = draft;
+  groupMessagesDataRef.current = messages;
   viewHasNewerRef.current = viewHasNewerMessages;
+  replyingToRef.current = replyingTo;
+  editingRef.current = editing;
   const isMessageContext = Boolean(linkedMessageId && linkedGroupId === selectedId);
   messageContextRef.current = isMessageContext;
 
@@ -232,15 +244,20 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
 
   selectedRef.current = selectedId;
 
-  const refreshGroups = async (preferred?: string | null, silent = false) => {
+  const refreshGroups = async (
+    preferred?: string | null,
+    silent = false,
+    shouldApply?: () => boolean,
+  ) => {
+    if (shouldApply && !shouldApply()) return null;
     const request = ++groupListRequest.current;
     if (!silent) {
       visibleGroupListRequest.current = request;
       setLoading(true);
     }
     const result = await loadGroupChats();
-    if (!silent && visibleGroupListRequest.current === request) setLoading(false);
-    if (request !== groupListRequest.current) return null;
+    if (!silent && visibleGroupListRequest.current === request && (!shouldApply || shouldApply())) setLoading(false);
+    if (request !== groupListRequest.current || (shouldApply && !shouldApply())) return null;
     if (result.error) {
       if (!silent) setError(result.error);
       return null;
@@ -261,10 +278,13 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
 
   useEffect(() => { void refreshGroups(linkedGroupId); }, [linkedGroupId]);
 
-  const refreshActivity = async (groupId: string) => {
+  const refreshActivity = async (groupId: string, shouldApply?: () => boolean) => {
+    if (shouldApply && !shouldApply()) return;
     const request = ++activityRequest.current;
     const result = await loadGroupActivity(groupId);
-    if (selectedRef.current !== groupId || request !== activityRequest.current) return;
+    if (selectedRef.current !== groupId
+      || request !== activityRequest.current
+      || (shouldApply && !shouldApply())) return;
     if (result.error) {
       if (lostGroupAccess(result.error)) {
         setError(null);
@@ -358,15 +378,24 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     replace?: boolean;
     markRead?: boolean;
     scrollToBottom?: boolean;
+    shouldApply?: () => boolean;
   } = {}) => {
-    const { replace = true, markRead = true, scrollToBottom = replace } = options;
+    const {
+      replace = true,
+      markRead = true,
+      scrollToBottom = replace,
+      shouldApply,
+    } = options;
+    if (shouldApply && !shouldApply()) return;
     const request = ++messageRequest.current;
     if (replace) setMessagesLoading(true);
     const [messageResult, memberResult] = await Promise.all([
       loadGroupMessagePage(groupId),
       loadGroupMembers(groupId),
     ]);
-    if (selectedRef.current !== groupId || request !== messageRequest.current) return;
+    if (selectedRef.current !== groupId
+      || request !== messageRequest.current
+      || (shouldApply && !shouldApply())) return;
     setMessagesLoading(false);
     if (messageResult.error || memberResult.error) {
       if (replace) {
@@ -405,7 +434,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
         setOlderCursor(messageResult.data.next_cursor);
       }
     }
-    if (markRead) void markSelectedGroupRead(groupId, scrollToBottom);
+    if (markRead && (!shouldApply || shouldApply())) void markSelectedGroupRead(groupId, scrollToBottom);
   };
 
   const openLinkedGroupMessage = async (groupId: string, messageId: string) => {
@@ -488,6 +517,55 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     setMessages((current) => mergeGroupMessages(result.data.messages, current));
   };
 
+  const clearDeletedMessageContext = (messageId: string) => {
+    if (replyingToRef.current?.message_id === messageId) {
+      replyingToRef.current = null;
+      setReplyingTo(null);
+    }
+    if (editingRef.current?.message_id === messageId) {
+      editingRef.current = null;
+      setEditing(null);
+      const restoredDraft = draftScope ? readChatDraft(draftScope) : '';
+      draftRef.current = restoredDraft;
+      setDraft(restoredDraft);
+    }
+  };
+
+  const removeRealtimeMessage = (messageId: string) => {
+    realtimeMessageRequestRef.current.set(messageId, (realtimeMessageRequestRef.current.get(messageId) ?? 0) + 1);
+    setMessages((current) => {
+      if (!current.some((message) => message.message_id === messageId)) return current;
+      const next = current.filter((message) => message.message_id !== messageId);
+      groupMessagesDataRef.current = next;
+      return next;
+    });
+    setHighlightedMessageId((current) => current === messageId ? null : current);
+    clearDeletedMessageContext(messageId);
+  };
+
+  const refreshLoadedRealtimeMessage = async (groupId: string, messageId: string, generation: number) => {
+    const request = (realtimeMessageRequestRef.current.get(messageId) ?? 0) + 1;
+    realtimeMessageRequestRef.current.set(messageId, request);
+    const result = await loadGroupMessageContext(groupId, messageId, 1);
+    if (selectedRef.current !== groupId
+      || realtimeGenerationRef.current !== generation
+      || realtimeMessageRequestRef.current.get(messageId) !== request
+      || !groupMessagesDataRef.current.some((message) => message.message_id === messageId)) return;
+    if (result.error || !result.data) {
+      if (/Nachricht nicht gefunden|kein Zugriff/i.test(result.error ?? '')) removeRealtimeMessage(messageId);
+      return;
+    }
+    const refreshed = result.data.messages.find((message) => message.message_id === messageId);
+    if (!refreshed) return;
+    setMessages((current) => {
+      if (!current.some((message) => message.message_id === messageId)) return current;
+      const next = mergeGroupMessages(current, [refreshed]);
+      groupMessagesDataRef.current = next;
+      return next;
+    });
+    if (refreshed.deleted_at) clearDeletedMessageContext(messageId);
+  };
+
   useEffect(() => {
     void loadNexusContacts().then((result) => {
       if (result.error) setError(result.error);
@@ -548,49 +626,95 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
 
   useEffect(() => {
     if (!selectedId) return;
+    const realtimeGeneration = ++realtimeGenerationRef.current;
+    const isCurrentRealtime = () => (
+      selectedRef.current === selectedId
+      && realtimeGenerationRef.current === realtimeGeneration
+    );
     const channel = subscribeToGroupRealtime(selectedId, {
-      onMessagesChanged: () => {
+      onMessagesChanged: (change) => {
+        if (!isCurrentRealtime()) return;
+        const loadedMessage = Boolean(change.messageId
+          && groupMessagesDataRef.current.some((message) => message.message_id === change.messageId));
+        const belongsToSelected = change.scopeId ? change.scopeId === selectedId : loadedMessage;
+        if (change.event === 'UPDATE' && !belongsToSelected) return;
         setScanRevision(revision => revision + 1);
+        void refreshGroupsRef.current(selectedId, true, isCurrentRealtime);
+        if (change.event === 'UPDATE' && change.messageId) {
+          if (loadedMessage) void refreshLoadedRealtimeMessage(selectedId, change.messageId, realtimeGeneration);
+          return;
+        }
         const nearBottom = Boolean(messagesRef.current && messagesRef.current.scrollHeight - messagesRef.current.scrollTop - messagesRef.current.clientHeight < 90);
         if (!messageContextRef.current && !viewHasNewerRef.current) {
-          void refreshGroup(selectedId, { replace: false, markRead: nearBottom, scrollToBottom: nearBottom });
+          void refreshGroup(selectedId, {
+            replace: false,
+            markRead: nearBottom,
+            scrollToBottom: nearBottom,
+            shouldApply: isCurrentRealtime,
+          });
           setHasNewMessagesNotice(!nearBottom);
         } else {
           setHasNewMessagesNotice(true);
         }
-        void refreshGroupsRef.current(selectedId, true);
       },
       onReadChanged: () => {
-        if (!messageContextRef.current && !viewHasNewerRef.current) void refreshGroup(selectedId, { replace: false, markRead: false, scrollToBottom: false });
+        if (!isCurrentRealtime()) return;
+        if (!messageContextRef.current && !viewHasNewerRef.current) {
+          void refreshGroup(selectedId, {
+            replace: false,
+            markRead: false,
+            scrollToBottom: false,
+            shouldApply: isCurrentRealtime,
+          });
+        }
       },
       onTypingChanged: () => {
-        void refreshActivity(selectedId);
+        if (!isCurrentRealtime()) return;
+        void refreshActivity(selectedId, isCurrentRealtime);
+        if (!isCurrentRealtime()) return;
         if (typingRecheckRef.current) clearTimeout(typingRecheckRef.current);
-        typingRecheckRef.current = setTimeout(() => void refreshActivity(selectedId), 6500);
+        typingRecheckRef.current = setTimeout(() => {
+          if (!isCurrentRealtime()) return;
+          void refreshActivity(selectedId, isCurrentRealtime);
+        }, 6500);
       },
       onGroupChanged: () => {
-        void refreshGroupsRef.current(selectedId, true);
+        if (!isCurrentRealtime()) return;
+        void refreshGroupsRef.current(selectedId, true, isCurrentRealtime);
       },
       onMembersChanged: () => {
+        if (!isCurrentRealtime()) return;
         setScanRevision(revision => revision + 1);
-        void refreshGroupsRef.current(selectedId, true).then((nextGroups) => {
+        void refreshGroupsRef.current(selectedId, true, isCurrentRealtime).then((nextGroups) => {
+          if (!isCurrentRealtime()) return;
           if (!nextGroups?.some((group) => group.group_id === selectedId)) {
             setChatSearch({}, { replace: true });
             return;
           }
           if (!messageContextRef.current && !viewHasNewerRef.current) {
-            void refreshGroup(selectedId, { replace: false, markRead: false, scrollToBottom: false });
+            void refreshGroup(selectedId, {
+              replace: false,
+              markRead: false,
+              scrollToBottom: false,
+              shouldApply: isCurrentRealtime,
+            });
           } else {
+            if (!isCurrentRealtime()) return;
             void loadGroupMembers(selectedId).then((result) => {
-              if (!result.error && selectedRef.current === selectedId) setMembers(result.data);
+              if (!result.error && isCurrentRealtime()) setMembers(result.data);
             });
           }
-          void refreshActivity(selectedId);
+          if (!isCurrentRealtime()) return;
+          void refreshActivity(selectedId, isCurrentRealtime);
         });
       },
     });
-    const activityInterval = window.setInterval(() => void refreshActivity(selectedId), 20000);
+    const activityInterval = window.setInterval(() => {
+      if (!isCurrentRealtime()) return;
+      void refreshActivity(selectedId, isCurrentRealtime);
+    }, 20000);
     return () => {
+      realtimeGenerationRef.current += 1;
       messageRequest.current++;
       window.clearInterval(activityInterval);
       if (typingStopRef.current) clearTimeout(typingStopRef.current);

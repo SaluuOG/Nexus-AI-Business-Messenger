@@ -1,7 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { createTextClientRequestId } from '../drafts/textSendRetry';
-import { validateChatAttachment } from './chatData';
+import { validateChatAttachment, type MessageRealtimeChange } from './chatData';
 import type { MessageCursor } from './messageSearchData';
 
 export type { MessageCursor } from './messageSearchData';
@@ -144,6 +144,22 @@ function normalizeCursor(value: unknown): MessageCursor | null {
     && typeof cursor.message_id === 'string' && cursor.message_id.length > 0
     ? { created_at: cursor.created_at, message_id: cursor.message_id }
     : null;
+}
+
+function normalizeMessageRealtimeChange(value: unknown): MessageRealtimeChange {
+  if (!value || typeof value !== 'object') return { event: null, messageId: null, scopeId: null };
+  const payload = value as { eventType?: unknown; new?: unknown; old?: unknown };
+  const event = payload.eventType === 'INSERT' || payload.eventType === 'UPDATE'
+    ? payload.eventType
+    : null;
+  const candidate = payload.new;
+  if (!candidate || typeof candidate !== 'object') return { event, messageId: null, scopeId: null };
+  const row = candidate as { id?: unknown; group_id?: unknown };
+  return {
+    event,
+    messageId: typeof row.id === 'string' && row.id.length > 0 ? row.id : null,
+    scopeId: typeof row.group_id === 'string' && row.group_id.length > 0 ? row.group_id : null,
+  };
 }
 
 function normalizeGroupMessages(value: unknown): GroupMessage[] | null {
@@ -493,15 +509,20 @@ export async function deleteGroupChat(groupId: string) {
 }
 
 export function subscribeToGroupRealtime(groupId: string, handlers: {
-  onMessagesChanged?: () => void;
+  onMessagesChanged?: (change: MessageRealtimeChange) => void;
   onReadChanged?: () => void;
   onTypingChanged?: () => void;
   onGroupChanged?: () => void;
   onMembersChanged?: () => void;
 }): RealtimeChannel | null {
   if (!supabase) return null;
+  const scopedChange = (payload: unknown) => {
+    const change = normalizeMessageRealtimeChange(payload);
+    handlers.onMessagesChanged?.({ ...change, scopeId: change.scopeId ?? groupId });
+  };
   const channel = supabase.channel(`group-chat:${groupId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, () => handlers.onMessagesChanged?.())
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, scopedChange)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, scopedChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_reads', filter: `group_id=eq.${groupId}` }, () => handlers.onReadChanged?.())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_typing', filter: `group_id=eq.${groupId}` }, () => handlers.onTypingChanged?.())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_conversations', filter: `id=eq.${groupId}` }, () => handlers.onGroupChanged?.())
@@ -519,10 +540,14 @@ export function subscribeToGroupRealtime(groupId: string, handlers: {
 export function subscribeToGroupMessagesRealtime(onChanged: () => void): RealtimeChannel | null {
   if (!supabase) return null;
   return supabase.channel('group-message-list')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages' }, onChanged)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_reads' }, onChanged)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_conversations' }, onChanged)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, onChanged)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, onChanged)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_messages' }, onChanged)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_reads' }, onChanged)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_reads' }, onChanged)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_conversations' }, onChanged)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_conversations' }, onChanged)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_members' }, onChanged)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_members' }, onChanged)
     .subscribe();
 }
 

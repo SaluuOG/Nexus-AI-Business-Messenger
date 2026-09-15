@@ -11,6 +11,40 @@ const task = (id, title, patch = {}) => ({
   created_at: '2026-09-14T08:00:00Z', updated_at: '2026-09-14T08:00:00Z', completed_at: null, ...patch,
 });
 const messageHistoryFixture = sessionStorage.getItem('nexusTest.messageHistoryFixture') === '1';
+const workspaceLifecycleFixture = sessionStorage.getItem('nexusTest.workspaceLifecycleFixture') === '1';
+const workspace = (id, name, owner_id) => ({
+  id, name, owner_id, slug: `${id}-slug`, avatar_url: null,
+  created_at: '2026-01-01T08:00:00Z', updated_at: '2026-01-01T08:00:00Z',
+});
+const defaultWorkspaces = [
+  workspace('w1', 'Erstes Team', 'owner-one'),
+  workspace('w2', 'Zweites Team', 'owner-two'),
+  workspace('w3', 'Drittes Team', 'owner-three'),
+];
+const lifecycleWorkspaces = [
+  workspace('w-owner', 'Nordstern Studio', 'me'),
+  workspace('w-member', 'Partner Workspace', 'member-owner'),
+  workspace('w-delete', 'Archiv Workspace', 'me'),
+];
+const membership = (workspace_id, user_id, role, full_name, username) => ({
+  workspace_id, user_id, role, full_name, username, avatar_url: null,
+  joined_at: '2026-01-01T08:00:00Z',
+});
+const defaultMemberships = [
+  membership('w1', 'me', 'member', 'Test Nutzer', 'nexus-test'),
+  membership('w2', 'me', 'guest', 'Test Nutzer', 'nexus-test'),
+  membership('w3', 'me', 'admin', 'Test Nutzer', 'nexus-test'),
+];
+const lifecycleMemberships = [
+  membership('w-owner', 'me', 'owner', 'Test Nutzer', 'nexus-test'),
+  membership('w-owner', 'next-owner', 'admin', 'Alex Admin', 'alex-admin'),
+  membership('w-owner', 'team-member', 'member', 'Mira Member', 'mira-member'),
+  membership('w-owner', 'team-guest', 'guest', 'Gast Nutzer', 'gast'),
+  membership('w-member', 'member-owner', 'owner', 'Partner Owner', 'partner-owner'),
+  membership('w-member', 'me', 'member', 'Test Nutzer', 'nexus-test'),
+  membership('w-delete', 'me', 'owner', 'Test Nutzer', 'nexus-test'),
+  membership('w-delete', 'delete-member', 'member', 'Archiv Mitglied', 'archiv-member'),
+];
 const historyConversations = [
   { conversation_id: 'c1', contact_user_id: 'other', full_name: 'Test Kontakt', username: 'test', avatar_url: null, unread_count: 0, last_message: 'Historie 129', last_message_at: '2026-01-01T02:09:00.000Z' },
   { conversation_id: 'c2', contact_user_id: 'second', full_name: 'Zweiter Kontakt', username: 'second', avatar_url: null, unread_count: 2, last_message: 'Vorherige Vorschau', last_message_at: '2026-03-10T09:00:00.000Z' },
@@ -30,10 +64,20 @@ const historyGroupChats = [
   { group_id: 'g2', name: 'Zweite Gruppe', role: 'member', member_count: 2, unread_count: 1, last_message: 'Alte Gruppenvorschau', last_message_at: '2026-02-16T10:00:00.000Z' },
 ];
 const historyGroupMessages = [
-  { message_id: 'gm-search-anchor', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', sender_username: 'team', body: 'Meilenstein Gruppe vertraulich', created_at: '2026-02-15T10:00:00.000Z', deleted_at: null, attachments: [] },
+  ...Array.from({ length: 130 }, (_, index) => ({
+    message_id: index === 8 ? 'gm-search-anchor' : `gm-history-${String(index).padStart(3, '0')}`,
+    group_id: 'g1', sender_id: index % 2 ? 'me' : 'other',
+    sender_full_name: index % 2 ? 'Test Nutzer' : 'Team Kontakt',
+    sender_username: index % 2 ? 'nexus-test' : 'team',
+    body: index === 8 ? 'Meilenstein Gruppe vertraulich' : `Gruppenverlauf ${index}`,
+    created_at: new Date(Date.UTC(2026, 1, 15, 0, index)).toISOString(),
+    edited_at: null, deleted_at: null, attachments: [],
+  })),
   { message_id: 'gm-second', group_id: 'g2', sender_id: 'other', sender_full_name: 'Zweiter Kontakt', sender_username: 'second', body: 'Nachricht in zweiter Gruppe', created_at: '2026-02-16T10:00:00.000Z', deleted_at: null, attachments: [] },
 ];
 const state = {
+  workspaces: structuredClone(workspaceLifecycleFixture ? lifecycleWorkspaces : defaultWorkspaces),
+  memberships: structuredClone(workspaceLifecycleFixture ? lifecycleMemberships : defaultMemberships),
   projects: [project('p1', 'Überfälliges Projekt', 'w1', '2026-09-13'), project('p2', 'Kommendes Projekt', 'w1', '2026-09-16'), project('p3', 'Abgeschlossenes Projekt', 'w1', null, 'completed'), project('p4', 'Zweites Team', 'w2', null)],
   tasks: [
     task('mine', 'Meine heutige Aufgabe'), task('past', 'Meine überfällige Aufgabe', { due_date: '2026-09-13' }),
@@ -45,7 +89,7 @@ const state = {
   ],
   failure: null, revoked: false, delayWorkspace: null, writes: 0, channels: [], revision: 0,
   sources: JSON.parse(sessionStorage.getItem('nexusTest.sources') || '[]'), sourceDenied: false,
-  hideRecentSource: false, loseCreateResponse: false, createDelay: 0,
+  hideRecentSource: false, loseCreateResponse: false, createDelay: 0, directMessageDelay: 0,
   resetRequests: [], passwordUpdates: [], authFailure: null, signOutCount: 0,
   notifications: JSON.parse(sessionStorage.getItem('nexusTest.notifications') || '[]'),
   notificationPreferences: JSON.parse(sessionStorage.getItem('nexusTest.notificationPreferences') || '{}'),
@@ -61,16 +105,13 @@ const state = {
   groupChats: messageHistoryFixture ? historyGroupChats : [{ group_id: 'g1', name: 'Projektgruppe', role: 'member', member_count: 2, unread_count: 0, last_message: 'Startseite vorbereiten' }],
   groupMessages: messageHistoryFixture ? historyGroupMessages : [{ message_id: 'gm1', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', body: 'Startseite für den Kunden vorbereiten!', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
   searchCalls: [], textSendCalls: [], textSendWrites: 0, loseTextSendResponse: false,
-  groupChatListLoads: 0,
+  groupChatListLoads: 0, groupChatListDelay: 0,
   uploadCalls: [], failAttachmentUpload: false,
+  lifecycleCalls: [], lifecycleDelay: 0,
 };
 state.projects.push(project('p5', 'Drittes Projekt', 'w3', null));
 state.tasks.push(...JSON.parse(sessionStorage.getItem('nexusTest.created') || '[]'));
-const memberships = [
-  { workspace_id: 'w1', user_id: 'me', role: 'member' },
-  { workspace_id: 'w2', user_id: 'me', role: 'guest' },
-  { workspace_id: 'w3', user_id: 'me', role: 'admin' },
-];
+const memberships = state.memberships;
 let user = { id: 'me', email: 'nexus-test@example.invalid', user_metadata: { full_name: 'Test Nutzer' } };
 export const backendConfigured = true;
 export const supabaseConfig = { url: 'https://example.invalid', publishableKey: 'test-only' };
@@ -298,6 +339,14 @@ const sendTextMessage = (kind, args) => {
   }
   return { data: messageId, error: null };
 };
+const lifecycleError = message => ({ data: null, error: { message, code: 'P0001' } });
+const lifecycleCall = async (name, args) => {
+  state.lifecycleCalls.push({ name, args: structuredClone(args), userId: user.id });
+  if (state.lifecycleDelay > 0) await new Promise(resolve => setTimeout(resolve, state.lifecycleDelay));
+  if (state.failure === name) return lifecycleError('Simulierter Lifecycle-Fehler.');
+  return null;
+};
+const currentMembership = workspaceId => memberships.find(member => member.workspace_id === workspaceId && member.user_id === user.id);
 
 export const supabase = {
   functions: {
@@ -376,7 +425,7 @@ export const supabase = {
           let rows = table === 'projects' ? state.projects : table === 'project_tasks' ? state.tasks
             : table === 'workspace_members' ? memberships
             : table === 'project_task_sources' ? state.sources.filter(s => !state.sourceDenied && !state.revoked && (s.kind === 'direct' ? state.directMessages : state.groupMessages).some(m => m.message_id === s.message_id && !m.deleted_at))
-            : table === 'workspaces' ? [{ id: 'w1', name: 'Erstes Team' }, { id: 'w2', name: 'Zweites Team' }, { id: 'w3', name: 'Drittes Team' }]
+            : table === 'workspaces' ? state.workspaces.filter(workspace => !workspaceLifecycleFixture || memberships.some(member => member.workspace_id === workspace.id && member.user_id === user.id))
             : table === 'profiles' ? [{ id: 'me', full_name: 'Test Nutzer' }] : [];
           rows = rows.filter(row => request.filters.every(([key, value]) => row[key] === value));
           if (request.operation !== 'select') {
@@ -452,14 +501,21 @@ export const supabase = {
     }
     if (name === 'get_direct_conversations') return { data: structuredClone(state.conversations), error: null };
     if (name === 'get_direct_messages') return { data: state.hideRecentSource ? [] : structuredClone(state.directMessages.filter(message => directChatId(message) === args.p_conversation_id).map(normalizedDirectMessage)), error: null };
-    if (name === 'get_direct_message_page') return { data: state.hideRecentSource
-      ? { messages: [], has_more: false, next_cursor: null }
-      : messagePage(state.directMessages.map(normalizedDirectMessage), args, directChatId), error: null };
-    if (name === 'get_direct_message_context') return state.hideRecentSource
-      ? { data: null, error: { message: 'Nachricht nicht gefunden oder kein Zugriff.' } }
-      : messageContext(state.directMessages.map(normalizedDirectMessage), args, directChatId);
+    if (name === 'get_direct_message_page') {
+      if (state.directMessageDelay) await new Promise(r => setTimeout(r, state.directMessageDelay));
+      return { data: state.hideRecentSource
+        ? { messages: [], has_more: false, next_cursor: null }
+        : messagePage(state.directMessages.map(normalizedDirectMessage), args, directChatId), error: null };
+    }
+    if (name === 'get_direct_message_context') {
+      if (state.directMessageDelay) await new Promise(r => setTimeout(r, state.directMessageDelay));
+      return state.hideRecentSource
+        ? { data: null, error: { message: 'Nachricht nicht gefunden oder kein Zugriff.' } }
+        : messageContext(state.directMessages.map(normalizedDirectMessage), args, directChatId);
+    }
     if (name === 'get_my_group_chats') {
       state.groupChatListLoads++;
+      if (state.groupChatListDelay) await new Promise(r => setTimeout(r, state.groupChatListDelay));
       return { data: structuredClone(state.groupChats), error: null };
     }
     if (name === 'get_group_messages') return { data: state.hideRecentSource ? [] : structuredClone(state.groupMessages.filter(message => message.group_id === args.p_group_id).map(normalizedGroupMessage)), error: null };
@@ -499,8 +555,76 @@ export const supabase = {
       if (state.loseCreateResponse) { state.loseCreateResponse = false; throw new Error('Simulated response loss after commit'); }
       return { data: structuredClone(created), error: null };
     }
+    if (name === 'rename_workspace') {
+      const failed = await lifecycleCall(name, args);
+      if (failed) return failed;
+      const target = state.workspaces.find(workspace => workspace.id === args.p_workspace_id);
+      const member = currentMembership(args.p_workspace_id);
+      if (!target || !member) return lifecycleError('Workspace nicht gefunden oder kein Zugriff.');
+      if (!['owner', 'admin'].includes(member.role)) return lifecycleError('Nur Owner und Admins können den Workspace umbenennen.');
+      const normalizedName = String(args.p_name ?? '').trim();
+      if (normalizedName.length < 2 || normalizedName.length > 80) return lifecycleError('Der Workspace-Name muss zwischen 2 und 80 Zeichen lang sein.');
+      target.name = normalizedName;
+      target.updated_at = new Date().toISOString();
+      state.writes++;
+      queueMicrotask(() => state.emit('workspaces', 'UPDATE', { new: structuredClone(target), old: null }));
+      return { data: null, error: null };
+    }
+    if (name === 'transfer_workspace_ownership') {
+      const failed = await lifecycleCall(name, args);
+      if (failed) return failed;
+      const target = state.workspaces.find(workspace => workspace.id === args.p_workspace_id);
+      const ownerMembership = currentMembership(args.p_workspace_id);
+      const successor = memberships.find(member => member.workspace_id === args.p_workspace_id && member.user_id === args.p_new_owner_id);
+      if (!target || !ownerMembership || target.owner_id !== user.id || ownerMembership.role !== 'owner') return lifecycleError('Nur der aktuelle Owner kann die Ownership übertragen.');
+      if (!successor || !['admin', 'member'].includes(successor.role)) return lifecycleError('Der neue Owner muss aktiver Admin oder Member sein.');
+      if (successor.user_id === user.id) return lifecycleError('Du bist bereits Owner dieses Workspaces.');
+      ownerMembership.role = 'admin';
+      successor.role = 'owner';
+      target.owner_id = successor.user_id;
+      target.updated_at = new Date().toISOString();
+      state.writes++;
+      queueMicrotask(() => {
+        state.emit('workspace_members', 'UPDATE', { new: structuredClone(successor), old: null });
+        state.emit('workspaces', 'UPDATE', { new: structuredClone(target), old: null });
+      });
+      return { data: null, error: null };
+    }
+    if (name === 'leave_workspace') {
+      const failed = await lifecycleCall(name, args);
+      if (failed) return failed;
+      const memberIndex = memberships.findIndex(member => member.workspace_id === args.p_workspace_id && member.user_id === user.id);
+      if (memberIndex < 0) return lifecycleError('Workspace nicht gefunden oder kein Zugriff.');
+      if (memberships[memberIndex].role === 'owner') return lifecycleError('Owner können den Workspace nicht verlassen. Übertrage zuerst die Ownership.');
+      const [removed] = memberships.splice(memberIndex, 1);
+      for (const item of state.tasks) if (item.workspace_id === args.p_workspace_id && item.assigned_to === user.id) item.assigned_to = null;
+      state.writes++;
+      queueMicrotask(() => state.emit('workspace_members', 'DELETE', { new: null, old: structuredClone(removed) }));
+      return { data: null, error: null };
+    }
+    if (name === 'delete_workspace') {
+      const failed = await lifecycleCall(name, args);
+      if (failed) return failed;
+      const workspaceIndex = state.workspaces.findIndex(workspace => workspace.id === args.p_workspace_id);
+      const target = state.workspaces[workspaceIndex];
+      const member = currentMembership(args.p_workspace_id);
+      if (!target || !member || target.owner_id !== user.id || member.role !== 'owner') return lifecycleError('Nur der Owner kann den Workspace löschen.');
+      if (String(args.p_confirmation ?? '') !== target.name) return lifecycleError('Der Workspace-Name stimmt nicht überein.');
+      const [removed] = state.workspaces.splice(workspaceIndex, 1);
+      for (let index = memberships.length - 1; index >= 0; index--) if (memberships[index].workspace_id === removed.id) memberships.splice(index, 1);
+      state.projects = state.projects.filter(project => project.workspace_id !== removed.id);
+      state.tasks = state.tasks.filter(task => task.workspace_id !== removed.id);
+      state.writes++;
+      queueMicrotask(() => state.emit('workspaces', 'DELETE', { new: null, old: structuredClone(removed) }));
+      return { data: null, error: null };
+    }
     if (name === 'get_workspace_members') return {
-      data: state.revoked ? [] : memberships.filter(m => m.workspace_id === args.p_workspace_id).map(m => ({ ...m, full_name: 'Test Nutzer' })), error: null,
+      data: state.revoked ? [] : memberships.filter(m => m.workspace_id === args.p_workspace_id).map(m => ({
+        ...m,
+        full_name: m.full_name ?? 'Test Nutzer',
+        username: m.username ?? null,
+        avatar_url: m.avatar_url ?? null,
+      })), error: null,
     };
     return { data: [], error: null };
   },

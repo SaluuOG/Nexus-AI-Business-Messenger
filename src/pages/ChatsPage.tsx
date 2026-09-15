@@ -196,6 +196,9 @@ export function ChatsPage({
   const olderRequestRef = useRef(0);
   const olderLoadingChatRef = useRef<string | null>(null);
   const messageCountRef = useRef(0);
+  const messagesDataRef = useRef<DirectMessage[]>([]);
+  const realtimeMessageRequestRef = useRef(new Map<string, number>());
+  const realtimeGenerationRef = useRef(0);
   const hasNewerRef = useRef(false);
   const contextMessageRef = useRef<string | null>(null);
   const messagesElementRef = useRef<HTMLDivElement | null>(null);
@@ -209,6 +212,8 @@ export function ChatsPage({
   const retryStoreRef = useRef(createTextSendRetryStore());
   const retryReplyRef = useRef(new Map<string, string | null>());
   const previousUserRef = useRef(currentUserId);
+  const replyingToRef = useRef<DirectMessage | null>(null);
+  const editingRef = useRef<DirectMessage | null>(null);
 
   const [conversations, setConversations] = useState<DirectConversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(requestedConversationId ?? null);
@@ -254,7 +259,10 @@ export function ChatsPage({
   selectedRef.current = selectedId;
   linkedConversationRef.current = linkedConversationId;
   messageCountRef.current = messages.length;
+  messagesDataRef.current = messages;
   hasNewerRef.current = hasNewer;
+  replyingToRef.current = replyingTo;
+  editingRef.current = editing;
 
   const pendingIsAudio = Boolean(pendingFile?.type.startsWith('audio/'));
   const pendingAudioUrl = useMemo(
@@ -501,6 +509,54 @@ export function ChatsPage({
     });
   };
 
+  const clearDeletedMessageContext = (conversationId: string, messageId: string) => {
+    if (replyingToRef.current?.message_id === messageId) {
+      replyingToRef.current = null;
+      setReplyingTo(null);
+    }
+    if (editingRef.current?.message_id === messageId) {
+      editingRef.current = null;
+      setEditing(null);
+      const scope = draftScope(conversationId);
+      setDraft(scope ? readChatDraft(scope) : '');
+    }
+  };
+
+  const removeRealtimeMessage = (conversationId: string, messageId: string) => {
+    realtimeMessageRequestRef.current.set(messageId, (realtimeMessageRequestRef.current.get(messageId) ?? 0) + 1);
+    setMessages((current) => {
+      if (!current.some((message) => message.message_id === messageId)) return current;
+      const next = current.filter((message) => message.message_id !== messageId);
+      messagesDataRef.current = next;
+      return next;
+    });
+    setHighlightedMessageId((current) => current === messageId ? null : current);
+    clearDeletedMessageContext(conversationId, messageId);
+  };
+
+  const refreshLoadedRealtimeMessage = async (conversationId: string, messageId: string, generation: number) => {
+    const request = (realtimeMessageRequestRef.current.get(messageId) ?? 0) + 1;
+    realtimeMessageRequestRef.current.set(messageId, request);
+    const result = await loadDirectMessageContext(conversationId, messageId, 1);
+    if (selectedRef.current !== conversationId
+      || realtimeGenerationRef.current !== generation
+      || realtimeMessageRequestRef.current.get(messageId) !== request
+      || !messagesDataRef.current.some((message) => message.message_id === messageId)) return;
+    if (result.error || !result.data) {
+      if (/Nachricht nicht gefunden|kein Zugriff/i.test(result.error ?? '')) removeRealtimeMessage(conversationId, messageId);
+      return;
+    }
+    const refreshed = result.data.messages.find((message) => message.message_id === messageId);
+    if (!refreshed) return;
+    setMessages((current) => {
+      if (!current.some((message) => message.message_id === messageId)) return current;
+      const next = mergeMessages(current, [refreshed]);
+      messagesDataRef.current = next;
+      return next;
+    });
+    if (refreshed.deleted_at) clearDeletedMessageContext(conversationId, messageId);
+  };
+
   const loadOlderMessages = async () => {
     if (!selectedId || !oldestCursor || !hasOlder || olderLoadingChatRef.current === selectedId) return;
     const container = messagesElementRef.current;
@@ -583,6 +639,11 @@ export function ChatsPage({
   }, [currentUserId]);
 
   useEffect(() => {
+    const realtimeGeneration = ++realtimeGenerationRef.current;
+    const isCurrentRealtime = () => (
+      selectedRef.current === selectedId
+      && realtimeGenerationRef.current === realtimeGeneration
+    );
     if (!selectedId) {
       messageRequestRef.current += 1;
       messageCountRef.current = 0;
@@ -637,13 +698,26 @@ export function ChatsPage({
     if (messageId) void refreshMessageContext(selectedId, messageId);
     else void refreshLatestMessages(selectedId, { replace: true, stickToBottom: true, markRead: true });
 
-    void loadContactPresence(selectedId).then((result) => { if (!result.error && selectedRef.current === selectedId) setPresence(result.data); });
-    void loadConversationTyping(selectedId).then((result) => { if (!result.error && selectedRef.current === selectedId) setContactTyping(result.data); });
+    void loadContactPresence(selectedId).then((result) => {
+      if (!result.error && isCurrentRealtime()) setPresence(result.data);
+    });
+    void loadConversationTyping(selectedId).then((result) => {
+      if (!result.error && isCurrentRealtime()) setContactTyping(result.data);
+    });
 
     const channel = subscribeToConversationRealtime(selectedId, {
-      onMessagesChanged: () => {
+      onMessagesChanged: (change) => {
+        if (!isCurrentRealtime()) return;
+        const loadedMessage = Boolean(change.messageId
+          && messagesDataRef.current.some((message) => message.message_id === change.messageId));
+        const belongsToSelected = change.scopeId ? change.scopeId === selectedId : loadedMessage;
+        if (change.event === 'UPDATE' && !belongsToSelected) return;
         setCurrentHistoryRevision((revision) => revision + 1);
         scheduleConversationListRefresh();
+        if (change.event === 'UPDATE' && change.messageId) {
+          if (loadedMessage) void refreshLoadedRealtimeMessage(selectedId, change.messageId, realtimeGeneration);
+          return;
+        }
         if (hasNewerRef.current || contextMessageRef.current) {
           hasNewerRef.current = true;
           setHasNewer(true);
@@ -653,27 +727,33 @@ export function ChatsPage({
         void refreshVisibleMessages(selectedId);
       },
       onReadChanged: () => {
+        if (!isCurrentRealtime()) return;
         if (!hasNewerRef.current && !contextMessageRef.current) void refreshVisibleMessages(selectedId);
       },
       onTypingChanged: () => {
+        if (!isCurrentRealtime()) return;
         void loadConversationTyping(selectedId).then((result) => {
-          if (!result.error && selectedRef.current === selectedId) setContactTyping(result.data);
+          if (!result.error && isCurrentRealtime()) setContactTyping(result.data);
         });
+        if (!isCurrentRealtime()) return;
         if (typingRecheckRef.current) clearTimeout(typingRecheckRef.current);
         typingRecheckRef.current = setTimeout(() => {
+          if (!isCurrentRealtime()) return;
           void loadConversationTyping(selectedId).then((result) => {
-            if (!result.error && selectedRef.current === selectedId) setContactTyping(result.data);
+            if (!result.error && isCurrentRealtime()) setContactTyping(result.data);
           });
         }, 6500);
       },
     });
     const presenceTimer = setInterval(() => {
+      if (!isCurrentRealtime()) return;
       void loadContactPresence(selectedId).then((result) => {
-        if (!result.error && selectedRef.current === selectedId) setPresence(result.data);
+        if (!result.error && isCurrentRealtime()) setPresence(result.data);
       });
     }, 20000);
 
     return () => {
+      realtimeGenerationRef.current += 1;
       messageRequestRef.current += 1;
       olderRequestRef.current += 1;
       olderLoadingChatRef.current = null;

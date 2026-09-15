@@ -1,0 +1,47 @@
+.workspace-lifecycle-panel{grid-column:1/-1}
+.workspace-lifecycle-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.workspace-lifecycle-head>div{min-width:0}
+.workspace-lifecycle-head>div>svg{margin-bottom:9px;color:#8a83ff}
+.workspace-lifecycle-head h3,.workspace-lifecycle-head p{margin-top:0}
+.workspace-lifecycle-head .role-pill{flex:0 0 auto}
+.workspace-lifecycle-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:17px}
+.workspace-lifecycle-section,.workspace-danger-zone{min-width:0;border:1px solid #252e3a;border-radius:13px;background:#0d1219;padding:15px}
+.workspace-lifecycle-section-title{display:flex;align-items:flex-start;gap:10px}
+.workspace-lifecycle-section-title>svg{flex:0 0 auto;margin-top:2px;color:#8a83ff}
+.workspace-lifecycle-section-title>div{min-width:0}
+.workspace-lifecycle-section-title h4{margin:0;color:#e7ebf2;font-size:12px;line-height:1.4}
+.workspace-lifecycle-section-title p,.workspace-lifecycle-section>p{margin:5px 0 0;color:#828ea2;font-size:10px;line-height:1.55}
+.workspace-rename-form,.workspace-transfer-form{grid-template-columns:minmax(0,1fr) auto;align-items:end}
+.workspace-rename-form button,.workspace-transfer-form button{min-height:38px;margin:0;display:inline-flex;align-items:center;justify-content:center}
+.workspace-owner-note{grid-column:1/-1;color:#788497;font-size:9px;line-height:1.5}
+.workspace-leave-button{display:inline-flex;align-items:center;gap:7px;margin-top:15px}
+.workspace-danger-zone{margin-top:12px;border-color:rgba(229,91,110,.34);background:rgba(83,23,33,.1)}
+.workspace-danger-zone .workspace-lifecycle-section-title>svg{color:#e27583}
+.workspace-danger-zone .workspace-lifecycle-section-title p{color:#aa8188}
+.workspace-delete-confirmation{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end;margin-top:14px}
+.workspace-delete-confirmation label{display:grid;gap:7px;color:#a79398;font-size:10px;line-height:1.5}
+.workspace-delete-confirmation strong{color:#f0c0c6;overflow-wrap:anywhere}
+.workspace-delete-confirmation input{width:100%;min-width:0;border:1px solid #54313a;border-radius:10px;background:#130e12;color:#f4e8ea;padding:10px 11px;outline:none}
+.workspace-delete-confirmation input:focus{border-color:#d76e7d;box-shadow:0 0 0 3px rgba(215,110,125,.1)}
+.workspace-danger-button{display:inline-flex;align-items:center;justify-content:center;min-height:38px;border:1px solid #743d47;border-radius:9px;background:#2c171c;color:#f0a2ac;padding:9px 13px;font:inherit;font-size:10px;font-weight:700;cursor:pointer}
+.workspace-danger-button:hover:not(:disabled){border-color:#a34d5c;background:#3a1b22;color:#ffd1d7}
+.workspace-danger-button:disabled{cursor:not-allowed;opacity:.48}
+.workspace-lifecycle-feedback{margin:13px 0 0;color:#98a4b5;font-size:11px;line-height:1.55}
+.workspace-lifecycle-feedback.success{color:#8fe0b7}
+.workspace-lifecycle-feedback.error{color:#f4a2a9}
+.workspace-lifecycle-dialog{width:min(520px,calc(100% - 32px));max-height:calc(100dvh - 32px);padding:0;overflow:auto;border:1px solid #4c3740;border-radius:17px;background:#11171f;color:#eef2f7;box-shadow:0 24px 90px rgba(0,0,0,.65);color-scheme:dark}
+.workspace-lifecycle-dialog::backdrop{background:rgba(3,6,10,.8);backdrop-filter:blur(6px)}
+.workspace-lifecycle-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 21px 15px;border-bottom:1px solid #2d242a;background:rgba(24,19,23,.96)}
+.workspace-lifecycle-dialog-head small{display:block;margin-bottom:5px;color:#df8592;font-size:8px;font-weight:800;letter-spacing:.13em}
+.workspace-lifecycle-dialog-head h2{margin:0;font-size:19px;line-height:1.35}
+.workspace-lifecycle-dialog-head>button{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border:1px solid #3c3138;border-radius:9px;background:#1a1519;color:#b9a7ad;cursor:pointer}
+.workspace-lifecycle-dialog-body{padding:18px 21px 21px}
+.workspace-lifecycle-dialog-body p{margin:0;color:#a99ba0;font-size:12px;line-height:1.65}
+.workspace-lifecycle-dialog-body p strong{color:#f5e9eb;overflow-wrap:anywhere}
+.workspace-lifecycle-dialog-body .form-feedback{margin-top:13px;color:#f4a2a9}
+.workspace-lifecycle-dialog-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:20px;padding-top:15px;border-top:1px solid #28212a}
+.workspace-lifecycle-dialog-actions button{margin:0}
+.workspace-lifecycle-dialog button:focus-visible,.workspace-lifecycle-panel button:focus-visible,.workspace-lifecycle-panel input:focus-visible,.workspace-lifecycle-panel select:focus-visible{outline:2px solid #b0aaff;outline-offset:3px}
+.workspace-lifecycle-dialog button:disabled{cursor:not-allowed;opacity:.5}
+@media(max-width:760px){.workspace-lifecycle-grid{grid-template-columns:1fr}.workspace-rename-form,.workspace-transfer-form,.workspace-delete-confirmation{grid-template-columns:1fr}.workspace-rename-form button,.workspace-transfer-form button,.workspace-delete-confirmation button{width:100%}.workspace-lifecycle-dialog{inset:auto 0 0;width:100%;max-height:92dvh;margin:0 auto;border-right:0;border-bottom:0;border-left:0;border-radius:17px 17px 0 0}}
+@media(max-width:390px){.workspace-lifecycle-panel{padding:16px!important}.workspace-lifecycle-head{gap:10px}.workspace-lifecycle-head .role-pill{padding:5px 7px}.workspace-lifecycle-section,.workspace-danger-zone{padding:13px}.workspace-lifecycle-dialog-head,.workspace-lifecycle-dialog-body{padding-right:16px;padding-left:16px}.workspace-lifecycle-dialog-actions{display:grid;grid-template-columns:1fr}.workspace-lifecycle-dialog-actions button{width:100%}}
