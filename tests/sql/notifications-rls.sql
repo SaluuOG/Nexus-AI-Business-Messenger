@@ -139,6 +139,36 @@ BEGIN
   f := public.get_my_notifications('UTC');
   IF EXISTS(SELECT 1 FROM jsonb_array_elements(f->'items') item WHERE item->>'kind' <> 'task_assigned') THEN RAISE EXCEPTION 'Inaccessible or obsolete hint returned: %',f; END IF;
 END $$;
+-- Reassigning a task removes the former hint and gives its returning assignee
+-- one fresh unread event. Unchanged assignments cannot generate duplicates.
+UPDATE public.project_tasks SET assigned_to=current_setting('nexus.test.owner')::uuid WHERE id=current_setting('nexus.test.past_task')::uuid;
+DO $$ BEGIN
+  IF EXISTS(SELECT 1 FROM public.notifications WHERE source_id=current_setting('nexus.test.past_task')::uuid) THEN RAISE EXCEPTION 'Former assignee retained hint'; END IF;
+END $$;
+RESET ROLE;
+SELECT set_config('request.jwt.claims',json_build_object('sub',current_setting('nexus.test.owner'),'role','authenticated')::text,true);
+SET LOCAL ROLE authenticated;
+UPDATE public.project_tasks SET assigned_to=current_setting('nexus.test.member')::uuid WHERE id=current_setting('nexus.test.past_task')::uuid;
+UPDATE public.project_tasks SET assigned_to=current_setting('nexus.test.member')::uuid WHERE id=current_setting('nexus.test.past_task')::uuid;
+RESET ROLE;
+SELECT set_config('request.jwt.claims',json_build_object('sub',current_setting('nexus.test.member'),'role','authenticated')::text,true);
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.notifications WHERE source_id=current_setting('nexus.test.past_task')::uuid AND kind='task_assigned') <> 1
+     OR (public.get_my_notifications('UTC')->>'unread_count')::int <> 1 THEN RAISE EXCEPTION 'Reassignment event lost or duplicated'; END IF;
+END $$;
+-- The same due date is today in the earlier timezone and overdue in the later
+-- one, without depending on the wall-clock hour at which this suite runs.
+UPDATE public.project_tasks SET due_date=(now() AT TIME ZONE 'Etc/GMT+12')::date WHERE id=current_setting('nexus.test.past_task')::uuid;
+DO $$ DECLARE early jsonb; late jsonb;
+BEGIN
+  early := public.get_my_notifications('Etc/GMT+12',NULL,100,false);
+  late := public.get_my_notifications('Pacific/Kiritimati',NULL,100,false);
+  IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(early->'items') n WHERE n->>'kind'='task_due')
+    OR EXISTS(SELECT 1 FROM jsonb_array_elements(early->'items') n WHERE n->>'kind'='task_overdue') THEN RAISE EXCEPTION 'Early timezone date incorrect'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(late->'items') n WHERE n->>'kind'='task_overdue')
+    OR EXISTS(SELECT 1 FROM jsonb_array_elements(late->'items') n WHERE n->>'kind'='task_due') THEN RAISE EXCEPTION 'Late timezone date incorrect'; END IF;
+END $$;
 RESET ROLE;
 DELETE FROM public.workspace_members WHERE workspace_id=current_setting('nexus.test.ws')::uuid AND user_id=current_setting('nexus.test.member')::uuid;
 SET LOCAL ROLE authenticated;

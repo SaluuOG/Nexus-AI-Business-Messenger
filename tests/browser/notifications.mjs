@@ -93,7 +93,7 @@ try {
       await page.getByRole('heading', { name: 'Benachrichtigungen', exact: true }).waitFor();
       const messages = page.getByRole('switch', { name: 'Nachrichten', exact: true });
       await page.evaluate(() => { window.nexusTest.failure = 'set_notification_preference'; });
-      await messages.uncheck();
+      await messages.click();
       await page.getByRole('alert').filter({ hasText: 'Einstellung konnte nicht gespeichert' }).waitFor();
       assert.equal(await messages.isChecked(), true);
       await page.evaluate(() => { window.nexusTest.failure = null; });

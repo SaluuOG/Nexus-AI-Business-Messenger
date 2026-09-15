@@ -45,7 +45,7 @@ export function useNotifications(userId: string | undefined, route: string) {
     const channel = supabase?.channel('notifications:' + userId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: 'recipient_id=eq.' + userId }, schedule)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notification_preferences', filter: 'user_id=eq.' + userId }, schedule)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_tasks', filter: 'assigned_to=eq.' + userId }, schedule)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_tasks' }, schedule)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'group_members' }, schedule)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'workspace_members' }, schedule)
       .subscribe(status => { if (active) { setConnected(status === 'SUBSCRIBED'); if (status === 'SUBSCRIBED') schedule(); } });
