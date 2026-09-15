@@ -126,7 +126,10 @@ try {
       for (const exitMode of ['blur', 'hidden']) {
         await page.evaluate(() => { window.nexusTest.chatScanCacheDeferred = true; });
         await trigger.click();
-        await page.waitForFunction(() => window.nexusTest.chatScanCachePending.length === 1);
+        // StrictMode replays mount effects: the first aborted RPC and its live
+        // replacement can both remain pending in this uncooperative transport.
+        await page.waitForFunction(() => window.nexusTest.chatScanCachePending.length > 0);
+        await settle();
         await page.evaluate(mode => {
           if (mode === 'hidden') {
             Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
@@ -335,6 +338,7 @@ try {
       await page.screenshot({ path: `browser-results/${name}-chat-scan-failure.png`, fullPage: true });
       console.error('Browser errors:', errors);
       console.error('Test URL:', page.url());
+      console.error('Pending scan/cache requests:', await page.evaluate(() => ({ scans: window.nexusTest?.chatScanPending.length, cache: window.nexusTest?.chatScanCachePending.length })));
       console.error('Test UI:', (await page.locator('body').innerText()).slice(0, 9000));
       throw error;
     } finally { await context.close(); await browser.close(); }
