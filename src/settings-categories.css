@@ -5,7 +5,7 @@
 .settings-category>svg{flex-shrink:0;margin-top:2px;color:#89839c}
 .settings-category span{min-width:0}
 .settings-category b,.settings-category small{display:block}
-.settings-category b{font-size:13px;line-height:1.5;font-weight:650}
+.settings-category b{overflow-wrap:anywhere;hyphens:auto;font-size:13px;line-height:1.5;font-weight:650}
 .settings-category small{font-size:11px;line-height:1.5;color:#7f8ba0;margin-top:4px}
 .settings-category:hover{background:#151a25;color:#e3e6f2}
 .settings-category.active{background:#201e38;border-color:#514887;color:#e1dcff}

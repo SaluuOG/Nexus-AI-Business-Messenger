@@ -23,7 +23,7 @@ export function NotificationsPage({ model }: { model: NotificationsModel }) {
     <Header kicker="DEIN NEXUS" title="Benachrichtigungen" sub="Nachrichten, Team-Einladungen und deine Aufgaben an einem Ort." />
     <div className="notification-summary">
       <div className="notification-summary-icon"><Bell size={24} /></div>
-      <div><b>{model.error ? 'Aktualisierung erforderlich' : model.loading && !model.items.length ? 'Wird geladen…' : model.unread_count ? model.unread_count + ' ungelesene Hinweise' : 'Alles im Blick'}</b><p>Aus allen deinen Workspaces und Chats. Nur für dich sichtbar.</p></div>
+      <div><b>{model.error ? 'Aktualisierung erforderlich' : model.loading && !model.items.length ? 'Wird geladen…' : model.unread_count ? model.unread_count === 1 ? '1 ungelesener Hinweis' : model.unread_count + ' ungelesene Hinweise' : 'Alles im Blick'}</b><p>Aus allen deinen Workspaces und Chats. Nur für dich sichtbar.</p></div>
       <Link to={routes.settings + '?category=notifications'} className="notification-settings-link"><Settings2 size={16} /> Einstellungen</Link>
     </div>
     <div className="notification-toolbar">

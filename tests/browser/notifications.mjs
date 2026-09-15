@@ -126,10 +126,12 @@ try {
       await page.setViewportSize({ width: 390, height: 844 });
       assert.equal(await bell().isVisible(), true);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-      await page.screenshot({ path: `browser-results/${name}-notifications-mobile.png`, fullPage: true });
+      assert.ok((await page.locator('.notification-summary>div:nth-child(2)').boundingBox()).width >= 180, 'Summary text must have room to read on mobile');
+      await page.screenshot({ path: `browser-results/${name}-notifications-mobile.png`, fullPage: false });
       await page.locator('.notification-settings-link').click();
       await page.getByRole('switch', { name: 'Nachrichten', exact: true }).waitFor();
       assert.equal(await page.getByRole('switch').count(), 5);
+      assert.equal(await page.locator('.settings-category b').evaluateAll(elements => elements.every(el => el.scrollWidth <= el.clientWidth)), true, 'Category labels must fit their cards');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await page.screenshot({ path: `browser-results/${name}-notification-settings-mobile.png`, fullPage: true });
       await page.getByRole('switch', { name: 'Nachrichten', exact: true }).press('Space');
