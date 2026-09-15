@@ -60,11 +60,14 @@ try {
         { expected: expectedCount, calls: previousCalls },
       );
     };
-    const waitForGlobalMessageSubscription = table => page.waitForFunction(
-      expectedTable => window.nexusTest.channels.some(channel => channel.active
-        && channel.entries.some(entry => entry.filter.table === expectedTable && !entry.filter.filter)),
-      table,
-    );
+    const waitForGlobalMessageSubscription = table => page.waitForFunction(expectedTable => {
+      const channels = window.nexusTest.channels.filter(channel => channel.entries.some(entry =>
+        entry.filter?.table === expectedTable && entry.filter.filter == null));
+      // The development build deliberately remounts effects once in StrictMode.
+      // Wait for the surviving generation so its debounced refresh is not cleared
+      // by the probe generation's cleanup immediately after this assertion.
+      return channels.length >= 2 && channels.filter(channel => channel.active).length === 1;
+    }, table);
     const noHorizontalOverflow = () => page.evaluate(() => ({
       viewport: window.innerWidth,
       documentWidth: document.documentElement.scrollWidth,
