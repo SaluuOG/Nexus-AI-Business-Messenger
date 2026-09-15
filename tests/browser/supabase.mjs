@@ -23,6 +23,7 @@ const state = {
   failure: null, revoked: false, delayWorkspace: null, writes: 0, channels: [], revision: 0,
   sources: JSON.parse(sessionStorage.getItem('nexusTest.sources') || '[]'), sourceDenied: false,
   hideRecentSource: false, loseCreateResponse: false, createDelay: 0,
+  resetRequests: [], passwordUpdates: [], authFailure: null, signOutCount: 0,
   directMessages: [{ message_id: 'dm1', sender_id: 'other', body: 'Bitte das Angebot prüfen!\nDetails für das Team.', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
   groupMessages: [{ message_id: 'gm1', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', body: 'Startseite für den Kunden vorbereiten!', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
 };
@@ -47,11 +48,26 @@ state.connection = status => {
   for (const channel of state.channels.filter(c => c.active)) channel.statusCallback?.(status);
 };
 window.nexusTest = state;
+const authListeners = new Set();
 
 export const supabase = {
   auth: {
     getSession: async () => ({ data: { session: { user } }, error: null }),
-    onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+    onAuthStateChange: listener => { authListeners.add(listener); return { data: { subscription: { unsubscribe() { authListeners.delete(listener); } } } }; },
+    resetPasswordForEmail: async (email, options) => {
+      state.resetRequests.push({ email, options });
+      return { error: state.authFailure ? { message: state.authFailure } : null };
+    },
+    updateUser: async ({ password }) => {
+      state.passwordUpdates.push(password);
+      return { data: { user }, error: state.authFailure ? { message: state.authFailure } : null };
+    },
+    signOut: async () => {
+      state.signOutCount++;
+      if (state.authFailure) return { error: { message: state.authFailure } };
+      for (const listener of authListeners) listener('SIGNED_OUT', null);
+      return { error: null };
+    },
   },
   from(table) {
     const request = { operation: 'select', filters: [], range: null, single: false };

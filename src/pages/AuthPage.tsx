@@ -33,7 +33,7 @@ export function AuthPage() {
   const pendingInvite = inviteFromUrl || localStorage.getItem('nexus_pending_invite');
   const destination = pendingInvite
     ? `${routes.settings}?invite=${encodeURIComponent(pendingInvite)}`
-    : routes.briefing;
+    : '/';
 
   useEffect(() => {
     if (inviteFromUrl) {

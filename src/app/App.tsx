@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { useAuth } from '../features/auth/AuthProvider';
@@ -29,6 +29,8 @@ import {
 import type { IdentityMode } from '../types';
 import { routes } from './routes';
 import { businessSearch } from './businessNavigation';
+import { useAccountPreferences } from '../features/settings/useAccountPreferences';
+import { startRoute } from '../features/settings/preferences';
 
 type ManageableRole = Exclude<WorkspaceRole, 'owner'>;
 
@@ -68,7 +70,10 @@ function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const auth = useAuth();
-  const [identity, setIdentity] = useState<IdentityMode>('business');
+  const { preferences, updatePreferences, ready: preferencesReady, error: preferencesError } = useAccountPreferences(auth.user?.id);
+  const identity = preferences.identity;
+  const setIdentity = (value: IdentityMode) => updatePreferences({ identity: value });
+  const defaultRoute = startRoute(preferences.startView);
   const [profile, setProfile] = useState<NexusProfile | null>(null);
   const [businessProfiles, setBusinessProfiles] = useState<NexusBusinessProfile[]>([]);
   const [workspaces, setWorkspaces] = useState<NexusWorkspace[]>([]);
@@ -79,12 +84,15 @@ function AppShell() {
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [teamLoading, setTeamLoading] = useState(false);
+  const [teamWorkspaceId, setTeamWorkspaceId] = useState<string | null>(null);
   const [teamError, setTeamError] = useState<string | null>(null);
   const [requestedConversationId, setRequestedConversationId] = useState<string | null>(null);
   const linkedWorkspaceId = location.pathname === routes.business ? new URLSearchParams(location.search).get('workspace') : null;
   const selectedWorkspaceId = linkedWorkspaceId
     ? workspaces.some(workspace => workspace.id === linkedWorkspaceId) ? linkedWorkspaceId : null
     : preferredWorkspaceId;
+  const selectedWorkspaceRef = useRef(selectedWorkspaceId);
+  selectedWorkspaceRef.current = selectedWorkspaceId;
   useEffect(() => {
     if (linkedWorkspaceId && selectedWorkspaceId) setSelectedWorkspaceId(selectedWorkspaceId);
   }, [linkedWorkspaceId, selectedWorkspaceId]);
@@ -134,13 +142,13 @@ function AppShell() {
 
   useEffect(() => {
     const workspaceId = selectedWorkspaceId;
-    if (!workspaceId || !auth.user?.id) { setWorkspaceMembers([]); setWorkspaceInvitations([]); setTeamError(null); setTeamLoading(false); return; }
+    if (!workspaceId || !auth.user?.id) { setWorkspaceMembers([]); setWorkspaceInvitations([]); setTeamWorkspaceId(null); setTeamError(null); setTeamLoading(false); return; }
     let active = true; setTeamLoading(true); setTeamError(null);
     void (async () => {
       const memberResult = await loadWorkspaceMembers(workspaceId);
       const invitationResult = currentWorkspaceRole === 'owner' || currentWorkspaceRole === 'admin' ? await loadWorkspaceInvitations(workspaceId) : { data: [] as NexusWorkspaceInvitation[], error: null };
       if (!active) return;
-      setWorkspaceMembers(memberResult.data); setWorkspaceInvitations(invitationResult.data); setTeamError(memberResult.error || invitationResult.error || null); setTeamLoading(false);
+      setTeamWorkspaceId(workspaceId); setWorkspaceMembers(memberResult.data); setWorkspaceInvitations(invitationResult.data); setTeamError(memberResult.error || invitationResult.error || null); setTeamLoading(false);
     })();
     return () => { active = false; };
   }, [auth.user?.id, currentWorkspaceRole, selectedWorkspaceId]);
@@ -171,7 +179,8 @@ function AppShell() {
     setTeamLoading(true); setTeamError(null);
     const memberResult = await loadWorkspaceMembers(selectedWorkspaceId);
     const invitationResult = currentWorkspaceRole === 'owner' || currentWorkspaceRole === 'admin' ? await loadWorkspaceInvitations(selectedWorkspaceId) : { data: [] as NexusWorkspaceInvitation[], error: null };
-    setWorkspaceMembers(memberResult.data); setWorkspaceInvitations(invitationResult.data); setTeamError(memberResult.error || invitationResult.error || null); setTeamLoading(false);
+    if (selectedWorkspaceRef.current !== selectedWorkspaceId) return;
+    setTeamWorkspaceId(selectedWorkspaceId); setWorkspaceMembers(memberResult.data); setWorkspaceInvitations(invitationResult.data); setTeamError(memberResult.error || invitationResult.error || null); setTeamLoading(false);
   };
 
   const saveProfile = async (patch: Partial<Pick<NexusProfile, 'full_name' | 'username' | 'bio'>>) => {
@@ -199,7 +208,11 @@ function AppShell() {
     if (workspaceResult.error || membershipResult.error) return { error: workspaceResult.error || membershipResult.error || 'Workspace konnte nicht neu geladen werden.' };
     setWorkspaces(workspaceResult.data); setMemberships(membershipResult.data); setSelectedWorkspaceId(result.data.workspace_id); return { error: null, workspaceName: result.data.workspace_name };
   };
-  const signOut = async () => { await auth.signOut(); navigate(routes.auth, { replace: true }); };
+  const signOut = async () => {
+    const result = await auth.signOut();
+    if (!result.error) navigate(routes.auth, { replace: true });
+    return result;
+  };
 
   return <div className="app">
     <Sidebar workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onWorkspaceChange={workspaceId => {
@@ -207,7 +220,7 @@ function AppShell() {
       if (location.pathname === routes.business) navigate(routes.business + '?' + businessSearch(workspaceId));
     }} workspaceRole={currentWorkspaceRole} workspaceLoading={dataLoading} identity={identity} accountName={accountName} accountSubtitle={accountSubtitle} />
     <main><Routes>
-      <Route path="/" element={<Navigate to={routes.briefing} replace />} />
+      <Route path="/" element={preferencesReady ? <Navigate to={defaultRoute} replace /> : <AppLoading />} />
       <Route
         path={routes.briefing}
         element={
@@ -241,7 +254,7 @@ function AppShell() {
         }
       />
       <Route path={routes.ai} element={<AIPage />} />
-      <Route path={routes.settings} element={<SettingsPage identity={identity} setIdentity={setIdentity} backendConfigured={auth.configured} accountEmail={auth.user?.email} currentUserId={auth.user?.id} profile={profile} businessProfiles={businessProfiles} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} currentWorkspaceRole={currentWorkspaceRole} workspaceMembers={workspaceMembers} workspaceInvitations={workspaceInvitations} teamLoading={teamLoading} teamError={teamError} dataLoading={dataLoading} dataError={dataError} onSaveProfile={saveProfile} onCreateWorkspace={addWorkspace} onCreateBusinessProfile={addBusinessProfile} onInviteWorkspaceMember={inviteWorkspaceMember} onUpdateWorkspaceMemberRole={changeWorkspaceMemberRole} onRemoveWorkspaceMember={deleteWorkspaceMember} onRevokeWorkspaceInvitation={revokeInvitation} onRefreshWorkspaceTeam={refreshWorkspaceTeam} onAcceptWorkspaceInvitation={acceptInvitation} onUpdatePassword={auth.configured ? auth.updatePassword : undefined} onSignOut={auth.configured ? signOut : undefined} />} />
+      <Route path={routes.settings} element={<SettingsPage key={auth.user?.id} identity={identity} setIdentity={setIdentity} startView={preferences.startView} onStartViewChange={startView => updatePreferences({ startView })} preferencesError={preferencesError} onWorkspaceChange={setSelectedWorkspaceId} backendConfigured={auth.configured} accountEmail={auth.user?.email} currentUserId={auth.user?.id} profile={profile} businessProfiles={businessProfiles} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} currentWorkspaceRole={currentWorkspaceRole} workspaceMembers={teamWorkspaceId === selectedWorkspaceId ? workspaceMembers : []} workspaceInvitations={teamWorkspaceId === selectedWorkspaceId ? workspaceInvitations : []} teamLoading={teamLoading || teamWorkspaceId !== selectedWorkspaceId} teamError={teamWorkspaceId === selectedWorkspaceId ? teamError : null} dataLoading={dataLoading} dataError={dataError} onSaveProfile={saveProfile} onCreateWorkspace={addWorkspace} onCreateBusinessProfile={addBusinessProfile} onInviteWorkspaceMember={inviteWorkspaceMember} onUpdateWorkspaceMemberRole={changeWorkspaceMemberRole} onRemoveWorkspaceMember={deleteWorkspaceMember} onRevokeWorkspaceInvitation={revokeInvitation} onRefreshWorkspaceTeam={refreshWorkspaceTeam} onAcceptWorkspaceInvitation={acceptInvitation} onUpdatePassword={auth.configured ? auth.updatePassword : undefined} onRequestPasswordReset={auth.configured ? auth.requestPasswordReset : undefined} onSignOut={auth.configured ? signOut : undefined} />} />
       <Route path={routes.auth} element={<Navigate to={routes.briefing} replace />} /><Route path="*" element={<Navigate to={routes.briefing} replace />} />
     </Routes></main>
   </div>;

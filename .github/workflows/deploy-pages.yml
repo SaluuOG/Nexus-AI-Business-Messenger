@@ -51,6 +51,7 @@ jobs:
         run: |
           node tests/browser/briefing.mjs
           node tests/browser/message-tasks.mjs
+          node tests/browser/settings.mjs
         env:
           NEXUS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/nexus-browser/node_modules/playwright/index.mjs
       - name: Browser screenshots

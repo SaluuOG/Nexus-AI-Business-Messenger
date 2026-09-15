@@ -194,7 +194,17 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - `tests/sql/message-tasks-rls.sql` prüft mit drei Identitäten Quellenzugriff, Rollenwechsel, Seitengrenzen, Wiederholung und Löschketten und rollt sämtliche Testdaten zurück
 - Browserabläufe prüfen beide Chat-Arten, mobile Dialoge, Textfreigabe, Verbindungsabbruch nach Speicherung, Workspace-Wechsel, lange Nachrichten und verlorenen Zugriff
 
-Browserprüfungen laufen in GitHub Actions mit Playwright 1.55.1 in einem separaten Laufzeitverzeichnis. Lokal: Playwright installieren, Chromium/WebKit mit `playwright install --with-deps chromium webkit` bereitstellen und `NEXUS_PLAYWRIGHT_MODULE` auf den absoluten Pfad zu `playwright/index.mjs` setzen. Danach `node tests/browser/briefing.mjs` und `node tests/browser/message-tasks.mjs` ausführen. Screenshots landen unter `browser-results/`. `node tests/browser/preview.mjs` startet eine separate Vorschau mit synthetischen Testdaten; diese werden nicht mit der App veröffentlicht.
+### Einstellungen nach Kategorien
+- Allgemein: Startansicht sowie private oder geschäftliche Identität; die Auswahl wird pro Konto in diesem Browser gespeichert
+- Profil & Business: Name, Username, Bio und Business-Profil
+- Workspace & Team: aktiven Workspace auch mobil auswählen, Workspace erstellen, Mitglieder, Rollen und Einladungen verwalten
+- Datenschutz & Sicherheit: Passwort ändern, Wiederherstellungslink an die eigene Konto-Adresse senden und abmelden
+- klare Fehlermeldungen und eine Sendepause nach erfolgreicher Reset-Anforderung; Passwort-Sonderzeichen bleiben unverändert erhalten
+- Kategorien bleiben in der URL erhalten und unterstützen Neuladen, Zurück/Vorwärts und Tastaturbedienung; Einladungslinks bleiben beim Kategorienwechsel erhalten
+- direkte Aufgaben- und Chatlinks haben Vorrang vor der gewählten Startansicht
+- Testfälle für Kontentrennung und nicht verfügbaren Browserspeicher sowie vollständige Browserabläufe mit isolierten Auth-Testdaten
+
+Browserprüfungen laufen in GitHub Actions mit Playwright 1.55.1 in einem separaten Laufzeitverzeichnis. Lokal: Playwright installieren, Chromium/WebKit mit `playwright install --with-deps chromium webkit` bereitstellen und `NEXUS_PLAYWRIGHT_MODULE` auf den absoluten Pfad zu `playwright/index.mjs` setzen. Danach `node tests/browser/briefing.mjs`, `node tests/browser/message-tasks.mjs` und `node tests/browser/settings.mjs` ausführen. Screenshots landen unter `browser-results/`. `node tests/browser/preview.mjs` startet eine separate Vorschau mit synthetischen Testdaten; diese werden nicht mit der App veröffentlicht.
 
 Offene Nutzerabnahme: abschließender manueller Durchlauf mit zwei echten Konten. Browserprüfungen mit Testdaten ersetzen diese Abnahme nicht.
 
