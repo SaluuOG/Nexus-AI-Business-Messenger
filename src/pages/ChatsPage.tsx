@@ -1024,7 +1024,7 @@ export function ChatsPage({
       </section>
 
       <section className="conversation">
-        <TaskMessageContext kind="direct" onChatResolved={(id) => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setChatSearch({}); setSelectedId(id); void refreshConversations(id); }} />
+        <TaskMessageContext kind="direct" onChatResolved={(id) => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setSelectedId(id); void refreshConversations(id); }} />
         {contextWarning && <div className="chat-error chat-context-warning" role="status">{contextWarning}</div>}
         {error && (
           <div className={`chat-error${contextRetryMessageId ? ' chat-context-retry' : ''}`} role="alert">
