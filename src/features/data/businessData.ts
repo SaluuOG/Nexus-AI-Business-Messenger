@@ -175,6 +175,16 @@ async function loadWorkspaceProjects(workspaceId: string) {
   }
 }
 
+export async function loadTaskWorkspace(workspaceId: string) {
+  const [projects, members] = await Promise.all([loadWorkspaceProjects(workspaceId), loadWorkspaceMembers(workspaceId)]);
+  const error = projects.error || members.error;
+  return {
+    projects: error ? [] : projects.data.map(normalizeProject),
+    members: error ? [] : members.data,
+    error: error ? 'Projekte und Team konnten nicht geladen werden. Bitte erneut versuchen.' : null,
+  };
+}
+
 export async function loadBriefingWorkspace(workspaceId: string, currentUserId: string) {
   const empty = { projects: [] as NexusProject[], tasks: [] as NexusProjectTask[] };
   if (!supabase) return { ...empty, error: 'Supabase ist nicht konfiguriert.' };

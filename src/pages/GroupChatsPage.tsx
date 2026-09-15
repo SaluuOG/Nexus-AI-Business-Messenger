@@ -1,5 +1,8 @@
 import { Camera, CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { MessageTaskAction } from '../components/MessageTaskAction';
+import { TaskMessageContext } from '../components/TaskMessageContext';
 import { Header } from '../components/Header';
 import { SUPPORTED_CHAT_ATTACHMENT_TYPES, validateChatAttachment } from '../features/data/chatData';
 import { loadNexusContacts, type NexusContact } from '../features/data/contactsData';
@@ -33,7 +36,7 @@ import {
   type GroupMessage,
 } from '../features/data/groupChatData';
 
-type GroupChatsPageProps = { currentUserId?: string };
+type GroupChatsPageProps = { currentUserId?: string; workspaceId?: string | null };
 
 type NexusMediaRecorder = MediaRecorder & { __cancel?: boolean };
 
@@ -108,7 +111,10 @@ function GroupAttachmentView({ attachment }: { attachment: GroupAttachment }) {
   return <a className="file-attachment" href={attachment.signed_url} target="_blank" rel="noreferrer" download={attachment.file_name}><span className="file-attachment-icon"><FileText size={19} /></span><span className="file-attachment-info"><b>{attachment.file_name}</b><small>{formatFileSize(attachment.file_size)}</small></span></a>;
 }
 
-export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
+export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPageProps) {
+  const [, setChatSearch] = useSearchParams();
+  const selectedRef = useRef<string | null>(null);
+  const messageRequest = useRef(0);
   const [groups, setGroups] = useState<GroupChat[]>([]);
   const [contacts, setContacts] = useState<NexusContact[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -156,6 +162,8 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     if (pendingAudioUrl) URL.revokeObjectURL(pendingAudioUrl);
   }, [pendingAudioUrl]);
 
+  selectedRef.current = selectedId;
+
   const refreshGroups = async (preferred?: string | null) => {
     setLoading(true);
     const result = await loadGroupChats();
@@ -191,13 +199,16 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
   };
 
   const refreshGroup = async (groupId: string, markRead = true) => {
+    const request = ++messageRequest.current;
     setMessagesLoading(true);
     const [messageResult, memberResult] = await Promise.all([
       loadGroupMessages(groupId),
       loadGroupMembers(groupId),
     ]);
+    if (selectedRef.current !== groupId || request !== messageRequest.current) return;
     setMessagesLoading(false);
     if (messageResult.error || memberResult.error) {
+      setMessages([]); setMembers([]);
       const groupError = messageResult.error || memberResult.error;
       if (lostGroupAccess(groupError)) {
         setError(null);
@@ -231,6 +242,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
       setActivity([]);
       return;
     }
+    setMessages([]); setMembers([]);
     setDraft('');
     setPendingFile(null);
     setUploadStatus(null);
@@ -267,6 +279,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
     });
     const activityInterval = window.setInterval(() => void refreshActivity(selectedId), 20000);
     return () => {
+      messageRequest.current++;
       window.clearInterval(activityInterval);
       if (typingStopRef.current) clearTimeout(typingStopRef.current);
       if (typingRecheckRef.current) clearTimeout(typingRecheckRef.current);
@@ -677,7 +690,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
         {loading && groups.length === 0 && <div className="chat-list-empty">Gruppen werden geladen…</div>}
         {!loading && groups.length === 0 && <div className="chat-list-empty"><UsersRound size={24} /><b>Noch keine Gruppen</b><span>Erstelle deine erste Gruppe mit einem Nexus-Kontakt.</span></div>}
         {filteredGroups.map((group) => (
-          <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => setSelectedId(group.group_id)} key={group.group_id}>
+          <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setSelectedId(group.group_id); setChatSearch({}); }} key={group.group_id}>
             <div className="avatar group-avatar"><GroupAvatar group={group} size={16} /></div>
             <span><b>{group.name}</b><small>{group.member_count} Mitglieder · {roleLabel(group.role)}</small><p>{group.last_message || 'Neue Gruppe'}</p></span>
             <em>{formatTime(group.last_message_at)}{group.unread_count > 0 && <i>{group.unread_count > 99 ? '99+' : group.unread_count}</i>}</em>
@@ -686,6 +699,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
       </section>
 
       <section className="conversation">
+        <TaskMessageContext kind="group" onChatResolved={id => { setSelectedId(id); void refreshGroups(id); }} />
         {error && <div className="chat-error">{error}</div>}
         {!currentGroup ? (
           <div className="conversation-empty"><UsersRound size={42} /><h2>Team-Messenger</h2><p>Wähle eine Gruppe aus oder erstelle eine neue.</p></div>
@@ -810,6 +824,7 @@ export function GroupChatsPage({ currentUserId }: GroupChatsPageProps) {
                     </div>
                     {!message.deleted_at && (
                       <div className="message-actions">
+                        <MessageTaskAction currentUserId={currentUserId} workspaceId={workspaceId} source={{ kind: 'group', messageId: message.message_id, body: message.body, chatName: currentGroup.name, attachmentName: message.attachments?.[0]?.file_name }} />
                         <button onClick={() => { setEditing(null); setReplyingTo(message); }}><Reply size={13} /></button>
                         {mine && message.body.trim() && <button onClick={() => { setReplyingTo(null); clearPendingFile(); setEditing(message); setDraft(message.body); }}><Pencil size={13} /></button>}
                         {mine && <button onClick={() => void remove(message)} disabled={saving}><Trash2 size={13} /></button>}

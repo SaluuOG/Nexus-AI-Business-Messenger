@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
 
 test('Task data and UI workflow handles permissions, concurrent edits, pagination and realtime deletion', async t => {
   const root = fileURLToPath(new URL('../', import.meta.url));
@@ -58,7 +59,7 @@ test('Task data and UI workflow handles permissions, concurrent edits, paginatio
     });
     await t.test('Rendered role controls follow live membership and escape task descriptions', () => {
       for (const role of ['owner', 'admin', 'member', 'guest', undefined]) {
-        const html = renderToStaticMarkup(React.createElement(ProjectTasksPanel, { workspaceId: 'workspace-1', currentUserId: 'member-1', tasks: [task], projects: [{ id: 'project-1', title: 'Website' }], members: role ? [{ user_id: 'member-1', role, full_name: 'Testperson' }] : [], defaultProjectId: 'all', loading: false, loadError: null, onRefresh: async () => {} }));
+        const html = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(ProjectTasksPanel, { workspaceId: 'workspace-1', currentUserId: 'member-1', tasks: [task], projects: [{ id: 'project-1', title: 'Website' }], members: role ? [{ user_id: 'member-1', role, full_name: 'Testperson' }] : [], defaultProjectId: 'all', loading: false, loadError: null, onRefresh: async () => {} })));
         assert.equal(html.includes('Aufgabe anlegen'), ['owner', 'admin', 'member'].includes(role));
         assert.equal(html.includes('Aufgabe Startseite löschen'), ['owner', 'admin'].includes(role));
         assert.equal(html.includes('Status für Startseite'), ['owner', 'admin', 'member'].includes(role));

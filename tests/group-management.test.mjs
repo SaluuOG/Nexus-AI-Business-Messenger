@@ -54,12 +54,17 @@ test('Group UI exposes avatar, roles, ownership, leave and owner-only deletion f
   ]) assert.ok(data.includes(token), `Datenfluss fehlt: ${token}`);
 });
 
-test('Migration sequence is complete from 0001 through 0021', async () => {
+test('Legacy migration sequence is complete and new migrations use CLI timestamps', async () => {
   const files = (await readdir(new URL('../supabase/migrations/', import.meta.url)))
     .filter((name) => name.endsWith('.sql'))
     .sort();
-  const prefixes = files.map((name) => Number(name.slice(0, 4)));
+  const legacy = files.filter(name => /^\d{4}_/.test(name));
+  const prefixes = legacy.map((name) => Number(name.slice(0, 4)));
   assert.deepEqual(prefixes, Array.from({ length: 21 }, (_, index) => index + 1));
+  const current = files.filter(name => !legacy.includes(name));
+  assert.ok(current.some(name => name.endsWith('_message_project_tasks.sql')));
+  assert.ok(current.every(name => /^\d{14}_[a-z_]+\.sql$/.test(name)));
+  assert.equal(new Set(current.map(name => name.slice(0, 14))).size, current.length);
 });
 
 test('Legacy trigger and RLS helper functions are not anonymously executable', async () => {

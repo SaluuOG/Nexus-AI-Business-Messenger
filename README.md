@@ -181,7 +181,20 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Browserprüfungen verwenden ausschließlich isolierte Testdaten; sie ändern keine Produktionsdaten
 - Veröffentlichung prüft zusätzlich das konkrete veröffentlichte JavaScript-Paket und den echten Login in beiden Browsern
 
-Browserprüfungen laufen in GitHub Actions mit Playwright 1.55.1 in einem separaten Laufzeitverzeichnis. Lokal: Playwright installieren, Chromium/WebKit mit `playwright install --with-deps chromium webkit` bereitstellen und `NEXUS_PLAYWRIGHT_MODULE` auf den absoluten Pfad zu `playwright/index.mjs` setzen. Danach `node tests/browser/briefing.mjs` ausführen. Screenshots landen unter `browser-results/`.
+### Phase 3.4 — Nachrichten als Projektaufgaben
+- „Als Aufgabe übernehmen“ in Einzel- und Gruppenchats; Titel und Beschreibung werden aus der Nachricht vorbereitet und bleiben bearbeitbar
+- bewusste Freigabe an einen Workspace mit Schreibrecht; Projekt, zuständige Person, Priorität und Deadline auswählen
+- Anhänge bleiben im Chat; Nachrichten über 4.000 Zeichen müssen vor der Übernahme in der Aufgabenbeschreibung gekürzt werden
+- Aufgabe und Quellenverknüpfung werden atomar gespeichert; derselbe Übernahmeversuch erzeugt bei Wiederholung keine zweite Aufgabe
+- neue Aufgaben erscheinen in der Projektverwaltung und bei passender Zuständigkeit/Frist im Tagesbriefing
+- Rücksprung zeigt die genaue aktuelle Ursprungsnachricht im Chat, auch außerhalb der letzten 200 Nachrichten; URL funktioniert nach Neuladen
+- Quellenverknüpfungen sind nur bei gleichzeitigem Zugriff auf Workspace und Chat lesbar; fehlender Zugriff oder gelöschte Quellen zeigen keinen Nachrichtentext
+- Änderungen oder Löschung der Quelle verändern den bewusst geteilten Aufgabentext nicht; Aufgabenlöschung entfernt ihre Verknüpfung
+- Migration `20260915030037_message_project_tasks.sql`, erzeugt mit der Supabase CLI; neue Funktionen verwenden `SECURITY INVOKER` und die bestehenden RLS-Regeln
+- `tests/sql/message-tasks-rls.sql` prüft mit drei Identitäten Quellenzugriff, Rollenwechsel, Seitengrenzen, Wiederholung und Löschketten und rollt sämtliche Testdaten zurück
+- Browserabläufe prüfen beide Chat-Arten, mobile Dialoge, Textfreigabe, Verbindungsabbruch nach Speicherung, Workspace-Wechsel, lange Nachrichten und verlorenen Zugriff
+
+Browserprüfungen laufen in GitHub Actions mit Playwright 1.55.1 in einem separaten Laufzeitverzeichnis. Lokal: Playwright installieren, Chromium/WebKit mit `playwright install --with-deps chromium webkit` bereitstellen und `NEXUS_PLAYWRIGHT_MODULE` auf den absoluten Pfad zu `playwright/index.mjs` setzen. Danach `node tests/browser/briefing.mjs` und `node tests/browser/message-tasks.mjs` ausführen. Screenshots landen unter `browser-results/`. `node tests/browser/preview.mjs` startet eine separate Vorschau mit synthetischen Testdaten; diese werden nicht mit der App veröffentlicht.
 
 Offene Nutzerabnahme: abschließender manueller Durchlauf mit zwei echten Konten. Browserprüfungen mit Testdaten ersetzen diese Abnahme nicht.
 

@@ -223,8 +223,8 @@ function AppShell() {
           />
         }
       />
-      <Route path={routes.chats} element={<ChatsPage currentUserId={auth.user?.id} requestedConversationId={requestedConversationId} onRequestedConversationHandled={() => setRequestedConversationId(null)} />} />
-      <Route path={routes.groups} element={<GroupChatsPage currentUserId={auth.user?.id} />} />
+      <Route path={routes.chats} element={<ChatsPage key={auth.user?.id} workspaceId={selectedWorkspaceId} currentUserId={auth.user?.id} requestedConversationId={requestedConversationId} onRequestedConversationHandled={() => setRequestedConversationId(null)} />} />
+      <Route path={routes.groups} element={<GroupChatsPage key={auth.user?.id} workspaceId={selectedWorkspaceId} currentUserId={auth.user?.id} />} />
       <Route path={routes.contacts} element={<ContactsPage onStartChat={startContactChat} />} />
       <Route
         path={routes.business}

@@ -35,7 +35,9 @@ jobs:
       - name: Set up browser checks
         uses: ./.github/actions/setup-browser
       - name: Browser workflows
-        run: node tests/browser/briefing.mjs
+        run: |
+          node tests/browser/briefing.mjs
+          node tests/browser/message-tasks.mjs
         env:
           NEXUS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/nexus-browser/node_modules/playwright/index.mjs
       - name: Browser screenshots

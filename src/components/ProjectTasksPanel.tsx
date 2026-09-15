@@ -4,6 +4,9 @@ import {
   createProjectTask, deleteProjectTask, projectPriorities, updateProjectTask, updateProjectTaskStatus,
   type NexusProject, type NexusProjectTask, type ProjectTaskInput,
 } from '../features/data/businessData';
+import { useNavigate } from 'react-router-dom';
+import { routes } from '../app/routes';
+import { useTaskSourceLinks } from './TaskSourceLinks';
 import type { NexusWorkspaceMember } from '../features/data/nexusData';
 import {
   filterTasks, localDateKey, summarizeTasks, taskIsOverdue, taskMemberName, taskPermissions,
@@ -29,6 +32,9 @@ function dueLabel(value: string | null) {
 }
 
 export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects, members, defaultProjectId, initialTaskId, onClearTaskFocus, loading, loadError, onRefresh }: Props) {
+  const navigate = useNavigate();
+  const sources = useTaskSourceLinks(workspaceId, tasks);
+  const sourcesByTask = new Map(sources.sources.map(source => [source.task_id, source.kind]));
   const [filters, setFilters] = useState<TaskFilters>({ query: '', project: defaultProjectId, status: 'all', assignee: 'all' });
   const [editor, setEditor] = useState<NexusProjectTask | 'new' | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -109,6 +115,7 @@ export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects,
     {loadError && <div className="data-alert" role="alert">{loadError}</div>}
     {error && <div className="data-alert" role="alert">{error}</div>}
     {feedback && <div className="contact-feedback" role="status">{feedback}</div>}
+    {sources.error && <p className="task-source-error" role="status">{sources.error} Beim erneuten Öffnen wird der Zugriff noch einmal geprüft.</p>}
 
     {!initialTaskId && <div className="task-filters panel">
       <label className="business-search"><Search size={15} /><input aria-label="Aufgaben durchsuchen" placeholder="Aufgabe, Projekt oder Person suchen…" value={filters.query} onChange={event => setFilters(f => ({ ...f, query: event.target.value }))} /></label>
@@ -149,6 +156,7 @@ export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects,
             <span className={overdue ? 'task-overdue' : dueToday ? 'task-due-today' : ''}><CalendarDays size={14} />{dueLabel(task.due_date)}{overdue ? ' · Überfällig' : dueToday ? ' · Heute' : ''}</span>
           </div>
           <div className="task-card-actions">
+            {sourcesByTask.has(task.id) && <button className="secondary" onClick={() => navigate((sourcesByTask.get(task.id) === 'group' ? routes.groups : routes.chats) + '?' + new URLSearchParams({ task: task.id, workspace: workspaceId }).toString())}>Ursprungsnachricht öffnen</button>}
             {permissions.write ? <select aria-label={`Status für ${task.title}`} value={task.status} disabled={Boolean(busyId) || Boolean(loadError)} onChange={event => changeStatus(task, event.target.value as TaskStatus)}>{taskStatuses.map(status => <option key={status} value={status}>{taskStatusLabels[status]}</option>)}</select> : <span className={`business-badge task-${task.status}`}>{taskStatusLabels[task.status]}</span>}
             {permissions.write && <button className="secondary" disabled={Boolean(busyId) || Boolean(loadError)} onClick={() => openEditor(task)}><SquarePen size={14} /> Bearbeiten</button>}
             {permissions.delete && <button className="task-delete" aria-label={`Aufgabe ${task.title} löschen`} disabled={Boolean(busyId) || Boolean(loadError)} onClick={() => removeTask(task)}><Trash2 size={15} /></button>}
