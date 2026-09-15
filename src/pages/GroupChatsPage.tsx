@@ -1,6 +1,7 @@
 import { Camera, CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { ChatScanAction } from '../components/ChatScanAction';
 import { MessageTaskAction } from '../components/MessageTaskAction';
 import { TaskMessageContext } from '../components/TaskMessageContext';
 import { Header } from '../components/Header';
@@ -120,6 +121,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   const [contacts, setContacts] = useState<NexusContact[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
+  const [scanRevision, setScanRevision] = useState(0);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [activity, setActivity] = useState<GroupActivity[]>([]);
   const [query, setQuery] = useState('');
@@ -259,6 +261,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     void refreshActivity(selectedId);
     const channel = subscribeToGroupRealtime(selectedId, {
       onMessagesChanged: () => {
+        setScanRevision(revision => revision + 1);
         void refreshGroup(selectedId).then(() => refreshGroups(selectedId));
       },
       onReadChanged: () => {
@@ -273,6 +276,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
         void refreshGroups(selectedId);
       },
       onMembersChanged: () => {
+        setScanRevision(revision => revision + 1);
         void refreshGroups(selectedId).then((nextGroups) => {
           if (!nextGroups?.some((group) => group.group_id === selectedId)) return;
           void refreshGroup(selectedId, false);
@@ -314,6 +318,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     return groups.filter((group) => `${group.name} ${group.last_message || ''}`.toLowerCase().includes(needle));
   }, [groups, query]);
 
+  const scanHistoryVersion = useMemo(() => JSON.stringify([scanRevision, messages.map(message => [message.message_id, message.edited_at, message.deleted_at, message.body])]), [scanRevision, messages]);
   const currentGroup = groups.find((group) => group.group_id === selectedId) || null;
   const typingMembers = activity.filter((member) => member.user_id !== currentUserId && member.typing);
   const onlineCount = activity.filter((member) => member.online).length;
@@ -867,6 +872,15 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                 <button onClick={clearPendingFile} disabled={saving} title="Anhang entfernen"><X size={15} /></button>
               </div>
             )}
+
+            <ChatScanAction
+              key={`${currentUserId}:group:${currentGroup.group_id}`}
+              currentUserId={currentUserId}
+              kind="group"
+              chatId={currentGroup.group_id}
+              chatName={currentGroup.name}
+              historyVersion={scanHistoryVersion}
+            />
 
             <div className="composer group-composer attachment-composer">
               <input ref={fileRef} className="attachment-file-input" type="file" accept={SUPPORTED_CHAT_ATTACHMENT_TYPES.join(',')} onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} />

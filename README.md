@@ -209,6 +209,17 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Migration `20260915035952_notifications_center.sql`; RLS, minimale Schreibrechte, interne Trigger in nicht exponiertem Schema und öffentliche RPCs mit `SECURITY INVOKER`
 - `tests/sql/notifications-rls.sql` verwendet ausschließlich synthetische Identitäten und rollt alle Prüfungen zurück; Browserabläufe in Chromium/WebKit verwenden isolierte Testdaten
 
+### Phase 3.6 — Gesamten Chat mit KI auswerten (Anbindung vorbereitet)
+- eigener Button unten rechts im Einzel- und Gruppenchat; keine Auswahl einzelner Nachrichten nötig
+- vollständiger zugänglicher Textverlauf über einen separaten seitenweisen Abruf, einschließlich älterer Nachrichten außerhalb der letzten 200
+- Zusammenfassung, wichtige Informationen, Entscheidungen, Aufgaben und offene Fragen mit Textstellen zum Nachprüfen
+- Dialog mit Status der KI-Anbindung, bewusstem Start, Fortschrittsanzeige, Abbrechen und verständlichen Fehlerzuständen
+- Dateiinhalte, Bilder und Sprachnachrichten sind noch nicht Teil dieser Textauswertung; keine automatische Aufgabenanlage oder Nachrichtenversendung
+- Ergebnisse sind an Konto, Chat und den ausgewerteten Verlauf gebunden; veraltete oder verspätete Ergebnisse werden verworfen
+- Migration `20260915044932_chat_scan.sql` und Edge Function `chat-scan`; serverseitiger Anbieterzugang, Quellenrechte und begrenzte Nutzung
+- **Aktivierung ausstehend:** Anbieterzugang, Modell und Kostenrahmen sind noch einzurichten; bisherige KI-Prüfungen verwenden simulierte Antworten
+- Einrichtung und Grenzen: [docs/chat-scan-setup.md](docs/chat-scan-setup.md)
+
 ### Einstellungen nach Kategorien
 - Allgemein: Startansicht sowie private oder geschäftliche Identität; die Auswahl wird pro Konto in diesem Browser gespeichert
 - Profil & Business: Name, Username, Bio und Business-Profil

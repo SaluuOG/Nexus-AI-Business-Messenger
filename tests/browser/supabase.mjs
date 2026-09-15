@@ -27,6 +27,9 @@ const state = {
   notifications: JSON.parse(sessionStorage.getItem('nexusTest.notifications') || '[]'),
   notificationPreferences: JSON.parse(sessionStorage.getItem('nexusTest.notificationPreferences') || '{}'),
   notificationDelay: 0, notificationReadDelay: 0, notificationCalls: [],
+  chatScanAvailable: true, chatScanCalls: [], chatScanAborts: [], chatScanFailure: null,
+  chatScanDeferred: false, chatScanPending: [], chatScanResult: null,
+  conversations: [{ conversation_id: 'c1', contact_user_id: 'other', full_name: 'Test Kontakt', username: 'test', unread_count: 0, last_message: 'Bitte das Angebot prüfen!' }],
   directMessages: [{ message_id: 'dm1', sender_id: 'other', body: 'Bitte das Angebot prüfen!\nDetails für das Team.', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
   groupMessages: [{ message_id: 'gm1', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', body: 'Startseite für den Kunden vorbereiten!', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
 };
@@ -62,8 +65,46 @@ state.persistNotifications = () => {
   sessionStorage.setItem('nexusTest.notifications', JSON.stringify(state.notifications));
   sessionStorage.setItem('nexusTest.notificationPreferences', JSON.stringify(state.notificationPreferences));
 };
+state.finishChatScans = () => {
+  for (const finish of state.chatScanPending.splice(0)) finish();
+};
+
+// The scan deliberately includes an old source outside the one-message chat
+// viewport. UI tests prove that coverage and sources come from the server's
+// complete-history result instead of analyzing only loaded message bubbles.
+const chatScanResult = (kind, chatId) => ({
+  scanId: 'scan-test', chatKind: kind, chatId,
+  summary: 'Das Team bereitet die neue Kundenwebseite vor.',
+  facts: [{ text: 'Das vereinbarte Budget beträgt 2.500 Euro.', sourceIds: ['old-source'] }],
+  decisions: [{ text: 'Der Start erfolgt nach der Freigabe.', sourceIds: ['recent-source'] }],
+  tasks: [{ text: 'Angebot bis Freitag vorbereiten.', sourceIds: ['recent-source'] }],
+  questions: [{ text: 'Wer liefert die Produktbilder?', sourceIds: ['old-source'] }],
+  sources: [
+    { id: 'old-source', sender: 'Test Kontakt', createdAt: '2025-01-01T09:00:00Z', excerpt: 'Unser Budget beträgt 2.500 Euro. Wer liefert die Produktbilder?' },
+    { id: 'recent-source', sender: 'Test Nutzer', createdAt: '2025-09-14T08:00:00Z', excerpt: 'Das Angebot ist bis Freitag fertig. Danach geben wir den Start frei.' },
+  ],
+  coverage: { messageCount: 250, from: '2025-01-01T09:00:00Z', to: '2025-09-14T08:00:00Z', attachmentsExcluded: 2, complete: true },
+});
 
 export const supabase = {
+  functions: {
+    async invoke(name, { body, signal } = {}) {
+      if (name !== 'chat-scan') throw new Error('Unexpected test function: ' + name);
+      const call = { name, body: structuredClone(body), userId: user.id };
+      state.chatScanCalls.push(call);
+      signal?.addEventListener('abort', () => state.chatScanAborts.push(call), { once: true });
+      const failure = state.chatScanFailure;
+      const result = failure
+        ? { data: null, error: { message: failure, context: new Response(JSON.stringify({ error: failure, code: failure }), { status: 503, headers: { 'content-type': 'application/json' } }) } }
+        : { data: body.action === 'status'
+          ? { available: state.chatScanAvailable, providerLabel: 'Test KI' }
+          : structuredClone(state.chatScanResult ?? chatScanResult(body.kind, body.chatId)), error: null };
+      // Ignore the AbortSignal here on purpose: even an uncooperative late
+      // response must never repopulate a closed dialog or a different chat.
+      if (state.chatScanDeferred) await new Promise(resolve => state.chatScanPending.push(resolve));
+      return result;
+    },
+  },
   auth: {
     getSession: async () => ({ data: { session: { user } }, error: null }),
     onAuthStateChange: listener => { authListeners.add(listener); return { data: { subscription: { unsubscribe() { authListeners.delete(listener); } } } }; },
@@ -143,7 +184,7 @@ export const supabase = {
       state.persistNotifications(); state.emit('notification_preferences');
       return { data: null, error: null };
     }
-    if (name === 'get_direct_conversations') return { data: [{ conversation_id: 'c1', contact_user_id: 'other', full_name: 'Test Kontakt', username: 'test', unread_count: 0, last_message: 'Bitte das Angebot prüfen!' }], error: null };
+    if (name === 'get_direct_conversations') return { data: state.conversations, error: null };
     if (name === 'get_direct_messages') return { data: state.hideRecentSource ? [] : state.directMessages, error: null };
     if (name === 'get_my_group_chats') return { data: [{ group_id: 'g1', name: 'Projektgruppe', role: 'member', member_count: 2, unread_count: 0, last_message: 'Startseite vorbereiten' }], error: null };
     if (name === 'get_group_messages') return { data: state.hideRecentSource ? [] : state.groupMessages, error: null };
