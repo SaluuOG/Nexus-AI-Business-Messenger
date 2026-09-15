@@ -194,10 +194,26 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - `tests/sql/message-tasks-rls.sql` prüft mit drei Identitäten Quellenzugriff, Rollenwechsel, Seitengrenzen, Wiederholung und Löschketten und rollt sämtliche Testdaten zurück
 - Browserabläufe prüfen beide Chat-Arten, mobile Dialoge, Textfreigabe, Verbindungsabbruch nach Speicherung, Workspace-Wechsel, lange Nachrichten und verlorenen Zugriff
 
+### Phase 3.5 — Benachrichtigungen & Aktivitätsübersicht
+- Glocke mit vollständigem Ungelesen-Zähler, eigener Übersicht und Filter „Alle/Ungelesen“; mobile Bedienung und Tastaturzugriff
+- serverseitige Ereignisse für neue Einzel-/Gruppennachrichten, Kontaktanfragen, Workspace-Einladungen und Aufgabenzuweisungen durch andere Teammitglieder
+- Frist-Hinweise für eigene heute fällige und überfällige Aufgaben; lokale IANA-Zeitzone, jeweils ein Ereignis pro Aufgabe/Termin/Fristzustand
+- Fristen und noch offene Kontaktanfragen/Einladungen werden beim Abruf abgeglichen; Nachrichten und Zuweisungen werden ab Aktivierung dieser Phase erfasst
+- nur Metadaten und Quellenkennungen werden gespeichert, keine Kopien privater Nachrichtentexte; aktuelle Quellenrechte werden bei jedem Abruf erneut geprüft
+- beantwortete Anfragen, abgelaufene/widerrufene Einladungen, gelöschte Nachrichten sowie nicht mehr zugängliche Aufgaben/Gruppen verschwinden aus der Übersicht
+- Hinweis-Gelesenstatus bleibt pro Konto erhalten; „Alle als gelesen“ gilt bis zur abgerufenen Ereignisnummer, sodass gleichzeitig neu eintreffende Hinweise ungelesen bleiben
+- Öffnen eines Chats markiert auch seine Hinweise als gelesen; das Markieren eines Hinweises erzeugt keine Chat-Lesebestätigung
+- vollständige Zähler und Keyset-Seitennavigation; direkte Links zu Chat, Gruppe, Einladung oder genauer Workspace-/Projektaufgabe
+- Kategorie „Benachrichtigungen“ speichert Nachrichten, Kontaktanfragen, Einladungen, Zuweisungen und Fristen pro Konto für alle Geräte; ausgeschaltete Kategorien bleiben aus Übersicht und Zähler ausgeblendet
+- Realtime sowie Abgleich bei Rückkehr zur App, wiederhergestellter Verbindung und alle 30 Sekunden; ausschließlich Hinweise innerhalb der geöffneten App
+- Migration `20260915035952_notifications_center.sql`; RLS, minimale Schreibrechte, interne Trigger in nicht exponiertem Schema und öffentliche RPCs mit `SECURITY INVOKER`
+- `tests/sql/notifications-rls.sql` verwendet ausschließlich synthetische Identitäten und rollt alle Prüfungen zurück; Browserabläufe in Chromium/WebKit verwenden isolierte Testdaten
+
 ### Einstellungen nach Kategorien
 - Allgemein: Startansicht sowie private oder geschäftliche Identität; die Auswahl wird pro Konto in diesem Browser gespeichert
 - Profil & Business: Name, Username, Bio und Business-Profil
 - Workspace & Team: aktiven Workspace auch mobil auswählen, Workspace erstellen, Mitglieder, Rollen und Einladungen verwalten
+- Benachrichtigungen: Hinweise nach Art ein-/ausschalten; Auswahl wird pro Konto auf allen Geräten gespeichert
 - Datenschutz & Sicherheit: Passwort ändern, Wiederherstellungslink an die eigene Konto-Adresse senden und abmelden
 - klare Fehlermeldungen und eine Sendepause nach erfolgreicher Reset-Anforderung; Passwort-Sonderzeichen bleiben unverändert erhalten
 - Kategorien bleiben in der URL erhalten und unterstützen Neuladen, Zurück/Vorwärts und Tastaturbedienung; Einladungslinks bleiben beim Kategorienwechsel erhalten
@@ -218,6 +234,7 @@ Offene Nutzerabnahme: abschließender manueller Durchlauf mit zwei echten Konten
 - `#/app/business`
 - `#/app/ai`
 - `#/app/settings`
+- `#/app/notifications`
 
 ## Lokal starten
 ```bash

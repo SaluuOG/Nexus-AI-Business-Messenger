@@ -1,4 +1,5 @@
 import {
+  Bell,
   Building2,
   CheckCircle2,
   LockKeyhole,
@@ -18,6 +19,8 @@ import { routes } from '../app/routes';
 import { Header } from '../components/Header';
 import { PasswordInput, PasswordStrengthHint } from '../components/PasswordInput';
 import { WorkspaceTeamPanel } from '../components/WorkspaceTeamPanel';
+import { NotificationPreferences } from '../components/NotificationPreferences';
+import type { NotificationsModel } from '../features/notifications/useNotifications';
 import { PASSWORD_MIN_LENGTH, RESET_REQUEST_CONFIRMATION, validateNewPassword } from '../features/auth/passwordPolicy';
 import { startViews, type StartView } from '../features/settings/preferences';
 import type {
@@ -34,6 +37,7 @@ type ProfilePatch = Partial<Pick<NexusProfile, 'full_name' | 'username' | 'bio'>
 type ManageableRole = Exclude<WorkspaceRole, 'owner'>;
 
 type SettingsPageProps = {
+  notifications?: NotificationsModel;
   identity: IdentityMode;
   setIdentity: (identity: IdentityMode) => void;
   startView: StartView;
@@ -77,6 +81,7 @@ const categories = [
   { id: 'general', title: 'Allgemein', detail: 'Startansicht und Nutzung', icon: Settings2, description: 'Passe an, wie du Nexus auf diesem Gerät verwendest.' },
   { id: 'profile', title: 'Profil & Business', detail: 'Name, Username und Business-Profil', icon: UserRound, description: 'Verwalte dein persönliches Profil und deinen geschäftlichen Auftritt.' },
   { id: 'workspace', title: 'Workspace & Team', detail: 'Workspaces, Mitglieder und Rollen', icon: Users, description: 'Wähle deinen Workspace und organisiere die Zusammenarbeit im Team.' },
+  { id: 'notifications', title: 'Benachrichtigungen', detail: 'Nachrichten, Anfragen und Aufgaben', icon: Bell, description: 'Wähle, welche Hinweise du in Nexus erhalten möchtest.' },
   { id: 'security', title: 'Datenschutz & Sicherheit', detail: 'Passwort, Wiederherstellung und Konto', icon: ShieldCheck, description: 'Ändere dein Passwort, fordere einen Wiederherstellungslink an oder melde dich ab.' },
 ] as const;
 
@@ -88,6 +93,7 @@ const roleLabel: Record<WorkspaceRole, string> = {
 };
 
 export function SettingsPage({
+  notifications,
   identity,
   setIdentity,
   startView,
@@ -398,6 +404,8 @@ export function SettingsPage({
             </div>
             <WorkspaceTeamPanel key={selectedWorkspaceId} workspace={selectedWorkspace} currentRole={currentWorkspaceRole} currentUserId={currentUserId} members={workspaceMembers} invitations={workspaceInvitations} loading={teamLoading} error={teamError} onInvite={onInviteWorkspaceMember} onUpdateRole={onUpdateWorkspaceMemberRole} onRemoveMember={onRemoveWorkspaceMember} onRevokeInvitation={onRevokeWorkspaceInvitation} onRefresh={onRefreshWorkspaceTeam} />
           </div>}
+
+          {category.id === 'notifications' && notifications && <NotificationPreferences model={notifications} />}
 
           {category.id === 'security' && <div className="settings-grid">
             <div className="panel">

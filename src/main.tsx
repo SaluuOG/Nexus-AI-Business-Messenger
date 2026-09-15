@@ -13,6 +13,7 @@ import './project-tasks.css';
 import './briefing.css';
 import './message-tasks.css';
 import './settings-categories.css';
+import './notifications.css';
 import './chat-data.css';
 import './group-chat.css';
 import './group-management.css';

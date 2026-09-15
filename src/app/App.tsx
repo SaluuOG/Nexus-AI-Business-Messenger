@@ -31,6 +31,7 @@ import { routes } from './routes';
 import { businessSearch } from './businessNavigation';
 import { useAccountPreferences } from '../features/settings/useAccountPreferences';
 import { startRoute } from '../features/settings/preferences';
+import { useNotifications } from '../features/notifications/useNotifications';
 
 type ManageableRole = Exclude<WorkspaceRole, 'owner'>;
 
@@ -43,6 +44,7 @@ const ContactsPage = lazy(() => import('../pages/ContactsPage').then((module) =>
 const GroupChatsPage = lazy(() => import('../pages/GroupChatsPage').then((module) => ({ default: module.GroupChatsPage })));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })));
 const SettingsPage = lazy(() => import('../pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
+const NotificationsPage = lazy(() => import('../pages/NotificationsPage').then((module) => ({ default: module.NotificationsPage })));
 
 function AppLoading() {
   return <div className="app-loading"><div className="auth-logo">N</div><b>Nexus wird sicher geladen…</b></div>;
@@ -59,7 +61,7 @@ export function App() {
         <Routes>
           <Route path={routes.auth} element={<AuthPage />} />
           <Route path={routes.resetPassword} element={<ResetPasswordPage />} />
-          <Route path="*" element={<AppShell />} />
+          <Route path="*" element={<AppShell key={auth.user?.id ?? 'anonymous'} />} />
         </Routes>
       )}
     </Suspense>
@@ -71,6 +73,7 @@ function AppShell() {
   const location = useLocation();
   const auth = useAuth();
   const { preferences, updatePreferences, ready: preferencesReady, error: preferencesError } = useAccountPreferences(auth.user?.id);
+  const notifications = useNotifications(auth.user?.id, location.pathname + location.search);
   const identity = preferences.identity;
   const setIdentity = (value: IdentityMode) => updatePreferences({ identity: value });
   const defaultRoute = startRoute(preferences.startView);
@@ -215,7 +218,7 @@ function AppShell() {
   };
 
   return <div className="app">
-    <Sidebar workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onWorkspaceChange={workspaceId => {
+    <Sidebar unreadNotifications={notifications.error ? null : notifications.unread_count} notificationsLoading={notifications.loading} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} onWorkspaceChange={workspaceId => {
       setSelectedWorkspaceId(workspaceId);
       if (location.pathname === routes.business) navigate(routes.business + '?' + businessSearch(workspaceId));
     }} workspaceRole={currentWorkspaceRole} workspaceLoading={dataLoading} identity={identity} accountName={accountName} accountSubtitle={accountSubtitle} />
@@ -254,7 +257,8 @@ function AppShell() {
         }
       />
       <Route path={routes.ai} element={<AIPage />} />
-      <Route path={routes.settings} element={<SettingsPage key={auth.user?.id} identity={identity} setIdentity={setIdentity} startView={preferences.startView} onStartViewChange={startView => updatePreferences({ startView })} preferencesError={preferencesError} onWorkspaceChange={setSelectedWorkspaceId} backendConfigured={auth.configured} accountEmail={auth.user?.email} currentUserId={auth.user?.id} profile={profile} businessProfiles={businessProfiles} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} currentWorkspaceRole={currentWorkspaceRole} workspaceMembers={teamWorkspaceId === selectedWorkspaceId ? workspaceMembers : []} workspaceInvitations={teamWorkspaceId === selectedWorkspaceId ? workspaceInvitations : []} teamLoading={teamLoading || teamWorkspaceId !== selectedWorkspaceId} teamError={teamWorkspaceId === selectedWorkspaceId ? teamError : null} dataLoading={dataLoading} dataError={dataError} onSaveProfile={saveProfile} onCreateWorkspace={addWorkspace} onCreateBusinessProfile={addBusinessProfile} onInviteWorkspaceMember={inviteWorkspaceMember} onUpdateWorkspaceMemberRole={changeWorkspaceMemberRole} onRemoveWorkspaceMember={deleteWorkspaceMember} onRevokeWorkspaceInvitation={revokeInvitation} onRefreshWorkspaceTeam={refreshWorkspaceTeam} onAcceptWorkspaceInvitation={acceptInvitation} onUpdatePassword={auth.configured ? auth.updatePassword : undefined} onRequestPasswordReset={auth.configured ? auth.requestPasswordReset : undefined} onSignOut={auth.configured ? signOut : undefined} />} />
+      <Route path={routes.notifications} element={<NotificationsPage model={notifications} />} />
+      <Route path={routes.settings} element={<SettingsPage key={auth.user?.id} notifications={notifications} identity={identity} setIdentity={setIdentity} startView={preferences.startView} onStartViewChange={startView => updatePreferences({ startView })} preferencesError={preferencesError} onWorkspaceChange={setSelectedWorkspaceId} backendConfigured={auth.configured} accountEmail={auth.user?.email} currentUserId={auth.user?.id} profile={profile} businessProfiles={businessProfiles} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} currentWorkspaceRole={currentWorkspaceRole} workspaceMembers={teamWorkspaceId === selectedWorkspaceId ? workspaceMembers : []} workspaceInvitations={teamWorkspaceId === selectedWorkspaceId ? workspaceInvitations : []} teamLoading={teamLoading || teamWorkspaceId !== selectedWorkspaceId} teamError={teamWorkspaceId === selectedWorkspaceId ? teamError : null} dataLoading={dataLoading} dataError={dataError} onSaveProfile={saveProfile} onCreateWorkspace={addWorkspace} onCreateBusinessProfile={addBusinessProfile} onInviteWorkspaceMember={inviteWorkspaceMember} onUpdateWorkspaceMemberRole={changeWorkspaceMemberRole} onRemoveWorkspaceMember={deleteWorkspaceMember} onRevokeWorkspaceInvitation={revokeInvitation} onRefreshWorkspaceTeam={refreshWorkspaceTeam} onAcceptWorkspaceInvitation={acceptInvitation} onUpdatePassword={auth.configured ? auth.updatePassword : undefined} onRequestPasswordReset={auth.configured ? auth.requestPasswordReset : undefined} onSignOut={auth.configured ? signOut : undefined} />} />
       <Route path={routes.auth} element={<Navigate to={routes.briefing} replace />} /><Route path="*" element={<Navigate to={routes.briefing} replace />} />
     </Routes></main>
   </div>;

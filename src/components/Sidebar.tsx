@@ -1,4 +1,5 @@
 import {
+  Bell,
   Bot,
   BriefcaseBusiness,
   ContactRound,
@@ -8,12 +9,14 @@ import {
   Sparkles,
   UsersRound,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { routes } from '../app/routes';
 import type { NexusWorkspace, WorkspaceRole } from '../features/data/nexusData';
 import type { IdentityMode } from '../types';
 
 type SidebarProps = {
+  unreadNotifications?: number | null;
+  notificationsLoading?: boolean;
   workspaces: NexusWorkspace[];
   selectedWorkspaceId: string | null;
   onWorkspaceChange: (workspaceId: string | null) => void;
@@ -42,6 +45,8 @@ const roleLabel: Record<WorkspaceRole, string> = {
 };
 
 export function Sidebar({
+  unreadNotifications = 0,
+  notificationsLoading,
   workspaces,
   selectedWorkspaceId,
   onWorkspaceChange,
@@ -72,6 +77,9 @@ export function Sidebar({
           <b>Nexus</b>
           <small>AI Business Messenger</small>
         </div>
+        <Link to={routes.notifications} className={'notification-bell' + (location.pathname === routes.notifications ? ' active' : '')} aria-label={unreadNotifications === null ? 'Benachrichtigungen: Aktualisierung fehlgeschlagen' : 'Benachrichtigungen: ' + unreadNotifications + ' ungelesen'} aria-current={location.pathname === routes.notifications ? 'page' : undefined} aria-busy={notificationsLoading} title="Benachrichtigungen">
+          <Bell size={19} />{(unreadNotifications === null || unreadNotifications > 0) && <span className="notification-badge" aria-hidden="true">{unreadNotifications === null ? '!' : unreadNotifications > 99 ? '99+' : unreadNotifications}</span>}
+        </Link>
       </div>
 
       <nav>

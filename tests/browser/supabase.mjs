@@ -24,6 +24,9 @@ const state = {
   sources: JSON.parse(sessionStorage.getItem('nexusTest.sources') || '[]'), sourceDenied: false,
   hideRecentSource: false, loseCreateResponse: false, createDelay: 0,
   resetRequests: [], passwordUpdates: [], authFailure: null, signOutCount: 0,
+  notifications: JSON.parse(sessionStorage.getItem('nexusTest.notifications') || '[]'),
+  notificationPreferences: JSON.parse(sessionStorage.getItem('nexusTest.notificationPreferences') || '{}'),
+  notificationDelay: 0, notificationReadDelay: 0, notificationCalls: [],
   directMessages: [{ message_id: 'dm1', sender_id: 'other', body: 'Bitte das Angebot prüfen!\nDetails für das Team.', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
   groupMessages: [{ message_id: 'gm1', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', body: 'Startseite für den Kunden vorbereiten!', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
 };
@@ -34,7 +37,7 @@ const memberships = [
   { workspace_id: 'w2', user_id: 'me', role: 'guest' },
   { workspace_id: 'w3', user_id: 'me', role: 'admin' },
 ];
-const user = { id: 'me', email: 'nexus-test@example.invalid', user_metadata: { full_name: 'Test Nutzer' } };
+let user = { id: 'me', email: 'nexus-test@example.invalid', user_metadata: { full_name: 'Test Nutzer' } };
 export const backendConfigured = true;
 export const supabaseConfig = { url: 'https://example.invalid', publishableKey: 'test-only' };
 export const initialAuthCallback = { isRecovery: false, hasError: false, hasPkceCode: false, marker: null };
@@ -49,6 +52,16 @@ state.connection = status => {
 };
 window.nexusTest = state;
 const authListeners = new Set();
+state.switchUser = id => {
+  user = { id, email: id + '@example.invalid', user_metadata: { full_name: 'Other Test User' } };
+  for (const listener of authListeners) listener('SIGNED_IN', { user });
+};
+const notificationCategory = kind => ({ direct_message: 'messages', group_message: 'messages', contact_request: 'contacts', workspace_invitation: 'invitations', task_assigned: 'assignments', task_due: 'deadlines', task_overdue: 'deadlines' })[kind];
+const notificationPrefs = id => ({ messages: true, contacts: true, invitations: true, assignments: true, deadlines: true, ...state.notificationPreferences[id] });
+state.persistNotifications = () => {
+  sessionStorage.setItem('nexusTest.notifications', JSON.stringify(state.notifications));
+  sessionStorage.setItem('nexusTest.notificationPreferences', JSON.stringify(state.notificationPreferences));
+};
 
 export const supabase = {
   auth: {
@@ -103,6 +116,33 @@ export const supabase = {
     return builder;
   },
   async rpc(name, args) {
+    if (name === 'get_my_notifications') {
+      state.notificationCalls.push({ name, args, userId: user.id });
+      if (state.failure === name) return { data: null, error: { message: 'offline' } };
+      const preferences = notificationPrefs(user.id);
+      const visible = state.notifications.filter(n => n.recipient_id === user.id && !n.revoked && preferences[notificationCategory(n.kind)]).sort((a, b) => Number(b.id) - Number(a.id));
+      const filtered = visible.filter(n => !args.p_unread_only || !n.read_at);
+      const paged = filtered.filter(n => !args.p_before || BigInt(n.id) < BigInt(args.p_before));
+      const items = paged.slice(0, args.p_limit);
+      const result = structuredClone({ data: { items, preferences, unread_count: visible.filter(n => !n.read_at).length, total_count: filtered.length, through_id: visible[0]?.id ?? '0', has_more: paged.length > items.length }, error: null });
+      if (state.notificationDelay) await new Promise(r => setTimeout(r, state.notificationDelay));
+      return result;
+    }
+    if (name === 'mark_notifications_read') {
+      state.notificationCalls.push({ name, args, userId: user.id });
+      if (state.failure === name) return { data: null, error: { message: 'offline' } };
+      if (state.notificationReadDelay) await new Promise(r => setTimeout(r, state.notificationReadDelay));
+      const preferences = notificationPrefs(user.id);
+      for (const n of state.notifications) if (n.recipient_id === user.id && !n.revoked && preferences[notificationCategory(n.kind)] && BigInt(n.id) <= BigInt(args.p_through) && (!args.p_id || n.id === args.p_id)) n.read_at = new Date().toISOString();
+      state.persistNotifications(); state.emit('notifications');
+      return { data: null, error: null };
+    }
+    if (name === 'set_notification_preference') {
+      if (state.failure === name) return { data: null, error: { message: 'offline' } };
+      state.notificationPreferences[user.id] = { ...notificationPrefs(user.id), [args.p_category]: args.p_enabled };
+      state.persistNotifications(); state.emit('notification_preferences');
+      return { data: null, error: null };
+    }
     if (name === 'get_direct_conversations') return { data: [{ conversation_id: 'c1', contact_user_id: 'other', full_name: 'Test Kontakt', username: 'test', unread_count: 0, last_message: 'Bitte das Angebot prüfen!' }], error: null };
     if (name === 'get_direct_messages') return { data: state.hideRecentSource ? [] : state.directMessages, error: null };
     if (name === 'get_my_group_chats') return { data: [{ group_id: 'g1', name: 'Projektgruppe', role: 'member', member_count: 2, unread_count: 0, last_message: 'Startseite vorbereiten' }], error: null };

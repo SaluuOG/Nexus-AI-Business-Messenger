@@ -112,7 +112,8 @@ function GroupAttachmentView({ attachment }: { attachment: GroupAttachment }) {
 }
 
 export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPageProps) {
-  const [, setChatSearch] = useSearchParams();
+  const [chatSearch, setChatSearch] = useSearchParams();
+  const linkedGroupId = chatSearch.get('group');
   const selectedRef = useRef<string | null>(null);
   const messageRequest = useRef(0);
   const [groups, setGroups] = useState<GroupChat[]>([]);
@@ -174,14 +175,17 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     }
     setError(null);
     setGroups(result.data);
+    if (linkedGroupId && !result.data.some(group => group.group_id === linkedGroupId)) setError('Die verlinkte Gruppe ist nicht mehr verfügbar.');
     setSelectedId((current) => {
-      const target = preferred || current;
+      const target = preferred || linkedGroupId || current;
       return target && result.data.some((group) => group.group_id === target)
         ? target
-        : result.data[0]?.group_id ?? null;
+        : linkedGroupId ? null : result.data[0]?.group_id ?? null;
     });
     return result.data;
   };
+
+  useEffect(() => { void refreshGroups(linkedGroupId); }, [linkedGroupId]);
 
   const refreshActivity = async (groupId: string) => {
     const result = await loadGroupActivity(groupId);
@@ -228,7 +232,6 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   };
 
   useEffect(() => {
-    void refreshGroups();
     void loadNexusContacts().then((result) => {
       if (result.error) setError(result.error);
       else setContacts(result.data);

@@ -8,6 +8,7 @@ export const routes = {
   business: '/app/business',
   ai: '/app/ai',
   settings: '/app/settings',
+  notifications: '/app/notifications',
 } as const;
 
 export type RouteKey = keyof typeof routes;
