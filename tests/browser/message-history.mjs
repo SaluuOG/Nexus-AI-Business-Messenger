@@ -190,38 +190,6 @@ try {
       await runSearch(3);
       assert.equal(await page.locator('.message-search-result').count(), 3);
 
-      await page.getByLabel('Chat-Art', { exact: true }).selectOption('group');
-      await runSearch(1);
-      assert.equal(await page.locator('.message-search-result').count(), 1);
-      await page.locator('.message-search-result').getByText('Meilenstein Gruppe vertraulich', { exact: true }).waitFor();
-
-      await page.getByLabel('Chat-Art', { exact: true }).selectOption('all');
-      await page.getByLabel('Von', { exact: true }).fill('2026-02-01');
-      await page.getByLabel('Bis', { exact: true }).fill('2026-02-28');
-      await runSearch(1);
-      assert.equal(await page.locator('.message-search-result').count(), 1);
-      const groupResult = page.locator('.message-search-result').filter({ hasText: 'Meilenstein Gruppe vertraulich' });
-      await groupResult.locator('.message-search-open').click();
-      await page.locator('[data-message-id="gm-search-anchor"][data-highlighted="true"]').waitFor();
-      assert.match(page.url(), /#\/app\/groups\?group=g1&message=gm-search-anchor$/);
-
-      // The group list also reacts to a message in a non-selected group.
-      await waitForGlobalMessageSubscription('group_messages');
-      const previousGroupListLoads = await page.evaluate(() => window.nexusTest.groupChatListLoads);
-      const deliveredGroupEvents = await page.evaluate(() => {
-        const group = window.nexusTest.groupChats.find(item => item.group_id === 'g2');
-        group.last_message = 'Live-Vorschau aus anderer Gruppe';
-        group.last_message_at = '2026-03-12T09:00:00.000Z';
-        return window.nexusTest.emit('group_messages', 'INSERT', {
-          new: { group_id: 'g2', id: 'remote-group' }, old: null,
-        });
-      });
-      assert.ok(deliveredGroupEvents > 0, 'The active group list channel must receive the realtime event');
-      await page.waitForFunction(previous => window.nexusTest.groupChatListLoads > previous, previousGroupListLoads);
-      await page.locator('.chat').filter({ hasText: 'Zweite Gruppe' }).getByText('Live-Vorschau aus anderer Gruppe', { exact: true }).waitFor();
-
-      await openSearch();
-      await page.locator('#message-search-query').fill('Meilenstein');
       await page.getByLabel('Chat-Art', { exact: true }).selectOption('direct');
       await page.getByLabel('Gespräch oder Person', { exact: true }).fill('Test Kontakt');
       await runSearch(1);
@@ -252,6 +220,41 @@ try {
           `Search form does not fit ${width}px`);
       }
       await page.screenshot({ path: `browser-results/${name}-message-search-320.png`, fullPage: true });
+
+      // Finish with the group deep-link and live-list flow. WebKit keeps this
+      // isolated from another navigation after the deliberately dense scenario.
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.locator('#message-search-query').fill('Meilenstein');
+      await page.getByLabel('Gespräch oder Person', { exact: true }).fill('');
+      await page.getByLabel('Chat-Art', { exact: true }).selectOption('group');
+      await runSearch(1);
+      assert.equal(await page.locator('.message-search-result').count(), 1);
+      await page.locator('.message-search-result').getByText('Meilenstein Gruppe vertraulich', { exact: true }).waitFor();
+
+      await page.getByLabel('Chat-Art', { exact: true }).selectOption('all');
+      await page.getByLabel('Von', { exact: true }).fill('2026-02-01');
+      await page.getByLabel('Bis', { exact: true }).fill('2026-02-28');
+      await runSearch(1);
+      assert.equal(await page.locator('.message-search-result').count(), 1);
+      const groupResult = page.locator('.message-search-result').filter({ hasText: 'Meilenstein Gruppe vertraulich' });
+      await groupResult.locator('.message-search-open').click();
+      await page.locator('[data-message-id="gm-search-anchor"][data-highlighted="true"]').waitFor();
+      assert.match(page.url(), /#\/app\/groups\?group=g1&message=gm-search-anchor$/);
+
+      // The group list also reacts to a message in a non-selected group.
+      await waitForGlobalMessageSubscription('group_messages');
+      const previousGroupListLoads = await page.evaluate(() => window.nexusTest.groupChatListLoads);
+      const deliveredGroupEvents = await page.evaluate(() => {
+        const group = window.nexusTest.groupChats.find(item => item.group_id === 'g2');
+        group.last_message = 'Live-Vorschau aus anderer Gruppe';
+        group.last_message_at = '2026-03-12T09:00:00.000Z';
+        return window.nexusTest.emit('group_messages', 'INSERT', {
+          new: { group_id: 'g2', id: 'remote-group' }, old: null,
+        });
+      });
+      assert.ok(deliveredGroupEvents > 0, 'The active group list channel must receive the realtime event');
+      await page.waitForFunction(previous => window.nexusTest.groupChatListLoads > previous, previousGroupListLoads);
+      await page.locator('.chat').filter({ hasText: 'Zweite Gruppe' }).getByText('Live-Vorschau aus anderer Gruppe', { exact: true }).waitFor();
 
       assert.deepEqual(errors, []);
       console.log(`${name}: history anchoring, scoped drafts, idempotent retry, binary no-retry, global search/deep-links, exact highlights, live lists and 390/320px layouts passed`);
