@@ -43,12 +43,16 @@ try {
       await page.setViewportSize({ width: 390, height: 844 });
       const bounds = await dialog.boundingBox();
       assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390, 'Dialog must fit mobile width');
-      assert.ok(await dialog.getByRole('button', { name: 'Aufgabe erstellen', exact: true }).isEnabled());
+      const createTaskButton = dialog.locator('form button[type="submit"]');
+      assert.ok(await createTaskButton.isEnabled());
       await page.screenshot({ path: `browser-results/${name}-message-task-mobile.png`, fullPage: true });
       await page.setViewportSize({ width: 1440, height: 1000 });
-      await page.evaluate(() => { window.nexusTest.createDelay = 400; window.nexusTest.loseCreateResponse = true; });
-      await dialog.getByRole('button', { name: 'Aufgabe erstellen', exact: true }).click();
-      assert.equal(await dialog.getByRole('button', { name: 'Übernimmt…', exact: true }).isEnabled(), false);
+      await page.evaluate(() => { window.nexusTest.createDelay = 1_000; window.nexusTest.loseCreateResponse = true; });
+      await Promise.all([
+        dialog.locator('form button[type="submit"]:disabled').filter({ hasText: 'Übernimmt…' }).waitFor(),
+        createTaskButton.click(),
+      ]);
+      assert.equal(await createTaskButton.isEnabled(), false);
       await dialog.getByRole('alert').filter({ hasText: 'Verbindung wurde unterbrochen' }).waitFor();
       assert.equal(await page.evaluate(() => window.nexusTest.writes), 1);
       await dialog.getByRole('button', { name: 'Aufgabe erstellen', exact: true }).click();

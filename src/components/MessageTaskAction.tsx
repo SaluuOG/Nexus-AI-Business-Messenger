@@ -105,7 +105,7 @@ function MessageTaskDialog({ source, currentUserId, workspaceId: preferredWorksp
       </fieldset>
       {tooLong && <p className="data-alert" role="alert">Die Nachricht ist länger als 4.000 Zeichen. Kürze die Beschreibung vor der Übernahme; die Ursprungsnachricht bleibt verknüpft.</p>}
       {draft.due_date && selectedProject?.deadline && draft.due_date > selectedProject.deadline && <p className="task-deadline-note">Die Aufgaben-Deadline liegt nach der Projekt-Deadline ({selectedProject.deadline}).</p>}
-      <div className="business-modal-actions"><button type="button" className="secondary" disabled={saving} onClick={onClose}>Abbrechen</button><button className="primary" disabled={saving || !ready}>{saving ? 'Übernimmt…' : 'Aufgabe erstellen'}</button></div>
+      <div className="business-modal-actions"><button type="button" className="secondary" disabled={saving} onClick={onClose}>Abbrechen</button><button type="submit" className="primary" disabled={saving || !ready}>{saving ? 'Übernimmt…' : 'Aufgabe erstellen'}</button></div>
     </form>}
   </dialog>, document.body);
 }
