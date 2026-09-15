@@ -233,6 +233,32 @@ const scenarios = [
     await page.locator('.newer-messages-notice').waitFor();
     assert.match(page.url(), /#\/app\/chats\?conversation=c1&message=dm-history-008$/);
 
+    // Both common phone widths remain operable without page overflow. Viewport
+    // screenshots avoid rasterising an unnecessarily tall virtual history page.
+    await page.setViewportSize({ width: 390, height: 844 });
+    let dimensions = await noHorizontalOverflow(page);
+    assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= dimensions.viewport + 1, JSON.stringify(dimensions));
+    await page.screenshot({ path: `browser-results/${name}-message-history-mobile-chat.png`, fullPage: false });
+    await openSearch(page);
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      dimensions = await noHorizontalOverflow(page);
+      assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= dimensions.viewport + 1,
+        `Search overflows at ${width}px: ${JSON.stringify(dimensions)}`);
+      const bounds = await page.locator('.message-search-form').boundingBox();
+      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1,
+        `Search form does not fit ${width}px`);
+    }
+    await page.screenshot({ path: `browser-results/${name}-message-search-320.png`, fullPage: false });
+    console.log(`${name}: isolated direct search, deep-link, highlight and 390/320px layouts passed`);
+  }],
+  ['retired-direct-subscriptions', async (page, name) => {
+    // Start directly at the anchored history view so retired-callback checks
+    // do not depend on the search and mobile-layout scenario's renderer state.
+    await page.goto(`${baseUrl}/#/app/chats?conversation=c1&message=dm-history-008`);
+    await page.locator('[data-message-id="dm-history-008"][aria-current="true"]').waitFor();
+    await waitForScopedMessageSubscription(page, 'direct-conversation:c1', 'direct_messages');
+
     // A read callback retained by the previous channel must become inert as
     // soon as another chat is selected. Without the scope + generation guard,
     // its delayed refresh supersedes the new chat request and leaves c2 empty
@@ -284,27 +310,7 @@ const scenarios = [
     )).length), scanCallsBeforeStaleCallback,
     'A retired chat callback must not invalidate the newly selected chat scan');
 
-    await page.evaluate(() => { location.hash = '#/app/chats?conversation=c1&message=dm-history-008'; });
-    await page.locator('[data-message-id="dm-history-008"][aria-current="true"]').waitFor();
-
-    // Both common phone widths remain operable without page overflow. Viewport
-    // screenshots avoid rasterising an unnecessarily tall virtual history page.
-    await page.setViewportSize({ width: 390, height: 844 });
-    let dimensions = await noHorizontalOverflow(page);
-    assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= dimensions.viewport + 1, JSON.stringify(dimensions));
-    await page.screenshot({ path: `browser-results/${name}-message-history-mobile-chat.png`, fullPage: false });
-    await openSearch(page);
-    for (const width of [390, 320]) {
-      await page.setViewportSize({ width, height: 844 });
-      dimensions = await noHorizontalOverflow(page);
-      assert.ok(Math.max(dimensions.documentWidth, dimensions.bodyWidth) <= dimensions.viewport + 1,
-        `Search overflows at ${width}px: ${JSON.stringify(dimensions)}`);
-      const bounds = await page.locator('.message-search-form').boundingBox();
-      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1,
-        `Search form does not fit ${width}px`);
-    }
-    await page.screenshot({ path: `browser-results/${name}-message-search-320.png`, fullPage: false });
-    console.log(`${name}: isolated direct search, deep-link, highlight and 390/320px layouts passed`);
+    console.log(`${name}: isolated retired direct read/message callbacks preserve the new chat and scan state`);
   }],
   ['group-search-and-live-list', async (page, name) => {
     await page.goto(`${baseUrl}/#/app/search`);
@@ -418,6 +424,7 @@ const runIsolatedScenario = async (name, engine, scenarioName, scenario) => {
   page.setDefaultTimeout(15_000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
+  page.on('crash', () => console.error(`${name}/${scenarioName}: browser renderer crashed`));
 
   try {
     await scenario(page, name);
