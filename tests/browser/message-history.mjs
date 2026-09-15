@@ -60,6 +60,11 @@ try {
         { expected: expectedCount, calls: previousCalls },
       );
     };
+    const waitForGlobalMessageSubscription = table => page.waitForFunction(
+      expectedTable => window.nexusTest.channels.some(channel => channel.active
+        && channel.entries.some(entry => entry.filter.table === expectedTable && !entry.filter.filter)),
+      table,
+    );
     const noHorizontalOverflow = () => page.evaluate(() => ({
       viewport: window.innerWidth,
       documentWidth: document.documentElement.scrollWidth,
@@ -119,6 +124,7 @@ try {
       // A signal for a different chat updates its list preview without opening
       // it. Filter-aware fixture dispatch prevents the selected-chat channel
       // from accidentally satisfying this assertion.
+      await waitForGlobalMessageSubscription('direct_messages');
       await page.evaluate(() => {
         const chat = window.nexusTest.conversations.find(item => item.conversation_id === 'c1');
         chat.last_message = 'Live-Vorschau aus anderem Chat';
@@ -196,6 +202,7 @@ try {
       assert.match(page.url(), /#\/app\/groups\?group=g1&message=gm-search-anchor$/);
 
       // The group list also reacts to a message in a non-selected group.
+      await waitForGlobalMessageSubscription('group_messages');
       await page.evaluate(() => {
         const group = window.nexusTest.groupChats.find(item => item.group_id === 'g2');
         group.last_message = 'Live-Vorschau aus anderer Gruppe';
