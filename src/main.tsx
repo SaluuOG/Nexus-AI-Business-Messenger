@@ -24,6 +24,7 @@ import './chat-status.css';
 import './message-search.css';
 import './message-history.css';
 import './mobile-install.css';
+import './mobile-menu.css';
 
 registerMobileApp();
 

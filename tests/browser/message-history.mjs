@@ -25,6 +25,8 @@ await server.listen();
 await mkdir('browser-results', { recursive: true });
 
 const openSearch = async page => {
+  const menu = page.getByRole('button', { name: 'Hauptmenü öffnen', exact: true });
+  if (await menu.isVisible()) await menu.click();
   await page.getByRole('button', { name: 'Suche', exact: true }).click();
   await page.getByRole('heading', { name: 'Nachrichten durchsuchen', exact: true }).waitFor();
 };

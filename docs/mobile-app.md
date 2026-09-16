@@ -7,6 +7,7 @@ Adresse: https://saluuog.github.io/Nexus-AI-Business-Messenger/
 - Android: In Chrome öffnen, Menü → App installieren bzw. Zum Startbildschirm hinzufügen. Wenn verfügbar, gibt es auch in Nexus einen Installationsbutton.
 - Anschließend über das Nexus-Symbol starten und mit dem vorhandenen Konto anmelden. Eine Anmeldung kann in der installierten App erneut nötig sein.
 - Anleitung auch auf der Anmeldung und unter Einstellungen → Allgemein.
+- Mobile Navigation: oben links öffnet das Menü-Symbol die Kategorien. Die aktive Kategorie ist markiert; Auswahl, Tippen außerhalb oder Escape schließen das Menü. Der Inhalt bleibt nach dem Schließen normal scrollbar. Am Desktop bleibt die Seitenleiste sichtbar.
 
 ## Technischer Umfang
 

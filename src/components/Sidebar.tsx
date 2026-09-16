@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import {
   Bell,
   Bot,
@@ -5,10 +6,12 @@ import {
   ContactRound,
   House,
   MessageCircle,
+  Menu,
   Search,
   Settings,
   Sparkles,
   UsersRound,
+  X,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { routes } from '../app/routes';
@@ -62,6 +65,27 @@ export function Sidebar({
 }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuToggle = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => { setMenuOpen(false); }, [location.key]);
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 901px)');
+    const closeOnDesktop = () => { if (desktop.matches) setMenuOpen(false); };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => desktop.removeEventListener('change', closeOnDesktop);
+  }, []);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setMenuOpen(false);
+      menuToggle.current?.focus({ preventScroll: true });
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [menuOpen]);
   const fallbackSubtitle = identity === 'business' ? 'Business-Profil einrichten' : 'Privates Profil';
   const initials = (accountName || 'Nexus')
     .split(' ')
@@ -72,8 +96,16 @@ export function Sidebar({
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId);
 
   return (
-    <aside className="side">
+    <aside className="side" data-menu-open={menuOpen} onBlur={event => {
+      if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false);
+    }}>
       <div className="brand">
+        <button ref={menuToggle} type="button" className="mobile-menu-toggle"
+          aria-label={menuOpen ? 'Hauptmenü schließen' : 'Hauptmenü öffnen'}
+          aria-expanded={menuOpen} aria-controls="nexus-main-navigation"
+          onClick={() => setMenuOpen(open => !open)}>
+          {menuOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
         <span className="logo">
           <Sparkles />
         </span>
@@ -86,13 +118,23 @@ export function Sidebar({
         </Link>
       </div>
 
-      <nav aria-label="Hauptnavigation">
+      {menuOpen && <button type="button" className="mobile-menu-backdrop" tabIndex={-1}
+        aria-label="Menü schließen" onClick={() => {
+          setMenuOpen(false);
+          menuToggle.current?.focus({ preventScroll: true });
+        }} />}
+
+      <nav id="nexus-main-navigation" aria-label="Hauptnavigation">
         {navigation.map(([path, Icon, label]) => (
           <button
             type="button"
             key={path}
             className={location.pathname === path ? 'active' : ''}
-            onClick={() => navigate(path)}
+            onClick={() => {
+              setMenuOpen(false);
+              if (menuOpen) menuToggle.current?.focus({ preventScroll: true });
+              navigate(path);
+            }}
             aria-current={location.pathname === path ? 'page' : undefined}
           >
             <Icon size={19} />
