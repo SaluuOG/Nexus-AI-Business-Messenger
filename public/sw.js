@@ -17,7 +17,7 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== 'GET' || request.mode !== 'navigate' || url.origin !== self.location.origin || !url.href.startsWith(self.registration.scope)) return;
-  event.respondWith(fetch(request).catch(async () => {
+  event.respondWith(fetch(request, { cache: 'no-store' }).catch(async () => {
     const cache = await caches.open(CACHE);
     return await cache.match(OFFLINE) || new Response('Nexus braucht eine Internetverbindung. Bitte erneut laden.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   }));

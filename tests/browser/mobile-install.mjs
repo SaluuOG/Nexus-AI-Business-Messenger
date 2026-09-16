@@ -5,7 +5,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { preview } from 'vite';
 const { chromium, webkit } = await import(pathToFileURL(process.env.NEXUS_PLAYWRIGHT_MODULE).href);
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const server = await preview({ root, preview: { host: '127.0.0.1', port: 4183, strictPort: true } });
+const startServer = () => preview({ root, preview: { host: '127.0.0.1', port: 4183, strictPort: true } });
+let server = await startServer();
 const base = 'http://127.0.0.1:4183/Nexus-AI-Business-Messenger/';
 await mkdir('browser-results', { recursive: true });
 try {
@@ -80,15 +81,22 @@ try {
         return (await cache.keys()).map(request => request.url);
       });
       assert.deepEqual(cachedURLs, [base + 'offline.html']);
-      await context.setOffline(true);
-      await page.reload({ waitUntil: 'domcontentloaded' });
+      // Stop the actual origin: browser offline emulation does not consistently
+      // apply to separate service-worker network contexts across engines.
+      await new Promise(resolve => server.httpServer.close(resolve));
+      const offlineResponse = await page.reload({ waitUntil: 'domcontentloaded' });
+      assert.equal(offlineResponse.fromServiceWorker(), true);
       await page.getByRole('heading', { name: 'Deine Verbindung fehlt gerade.', exact: true }).waitFor();
       assert.equal(await page.getByLabel('E-Mail', { exact: true }).count(), 0);
-      await context.setOffline(false);
+      server = await startServer();
       await page.getByRole('button', { name: 'Erneut versuchen', exact: true }).click();
       await page.getByLabel('E-Mail', { exact: true }).waitFor();
       assert.deepEqual(errors, []);
       console.log(`${name}: production manifest, PNG icons, 320/390px layout, install guidance, prompt handling, public-only cache and offline/reconnect passed`);
+    } catch (error) {
+      console.error(name + ': mobile acceptance failure at ' + page.url());
+      console.error((await page.locator('body').innerText()).slice(0,1600));
+      throw error;
     } finally { await browser.close(); }
   }
 } finally { await new Promise(resolve => server.httpServer.close(resolve)); }
