@@ -22,6 +22,7 @@ export function TaskCollaboration({ workspaceId, taskId, currentUserId, role, me
   const mounted = useRef(false);
   const intents = useRef<{ comment?: { id: string; value: string }; checklist?: { id: string; value: string } }>({});
   const headingId = useId();
+  const commentInputId = useId();
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const disabled = saving || Boolean(error);
   const author = (id: string | null) => id === currentUserId ? 'Du' : id ? taskMemberName(members.find(member => member.user_id === id)) : 'Ehemaliges Konto / System';
@@ -84,7 +85,7 @@ export function TaskCollaboration({ workspaceId, taskId, currentUserId, role, me
 
       <section className="collaboration-section" aria-label="Kommentare">
         <h4><MessageSquare size={17} /> Kommentare</h4>
-        {permissions.write && <form className="collaboration-comment-form" onSubmit={event => add(event, 'comment')}><label><span>Neuer Kommentar</span><textarea value={comment} maxLength={4000} required disabled={disabled} onChange={event => setComment(event.target.value)} placeholder="Teile einen Zwischenstand oder stelle eine Frage…" /></label><div><small>Für alle Mitglieder dieses Workspaces sichtbar.</small><button className="primary" disabled={disabled || !comment.trim()}>Kommentar senden</button></div></form>}
+        {permissions.write && <form className="collaboration-comment-form" onSubmit={event => add(event, 'comment')}><label htmlFor={commentInputId}><span>Neuer Kommentar</span></label><textarea id={commentInputId} value={comment} maxLength={4000} required disabled={disabled} onChange={event => setComment(event.target.value)} placeholder="Teile einen Zwischenstand oder stelle eine Frage…" /><div><small>Für alle Mitglieder dieses Workspaces sichtbar.</small><button className="primary" disabled={disabled || !comment.trim()}>Kommentar senden</button></div></form>}
         {!loading && !data.comments.length && <p className="collaboration-empty">Noch keine Kommentare.</p>}
         {data.comments.length > 0 && <p className="collaboration-note">Neueste Kommentare zuerst</p>}
         <ol className="task-comments">{data.comments.map(entry => <li key={entry.id}>
@@ -112,8 +113,9 @@ function EntryEditor({ initial, maxLength, label, disabled, onSave, onCancel }: 
   initial: string; maxLength: number; label: string; disabled: boolean; onSave: (value: string) => void; onCancel: () => void;
 }) {
   const [value, setValue] = useState(initial);
+  const inputId = useId();
   return <form className="collaboration-entry-editor" onSubmit={event => { event.preventDefault(); if (value.trim()) onSave(value.trim()); }}>
-    <label><span>{label}</span><textarea autoFocus required value={value} maxLength={maxLength} disabled={disabled} onChange={event => setValue(event.target.value)} /></label>
+    <label htmlFor={inputId}><span>{label}</span></label><textarea id={inputId} autoFocus required value={value} maxLength={maxLength} disabled={disabled} onChange={event => setValue(event.target.value)} />
     <div className="collaboration-actions"><button className="secondary" disabled={disabled || !value.trim()}>Speichern</button><button type="button" disabled={disabled} onClick={onCancel}>Abbrechen</button></div>
   </form>;
 }
