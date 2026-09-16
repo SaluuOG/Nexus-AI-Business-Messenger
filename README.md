@@ -251,6 +251,17 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - rollbackfähige SQL-Prüfungen decken Rollen, RLS, anonyme Zugriffe, Owner-Invariante, Aufgabenfreigabe und Löschkaskaden ab; Browserprüfungen testen den vollständigen Ablauf
 - diese Phase benötigt keinen KI-Anbieter und verursacht keine OpenAI-API-Aufrufe
 
+### Phase 3.9 — Aufgaben-Zusammenarbeit (Live-Abnahme ausstehend)
+- Aufgabendetails sind direkt aus der Aufgabenliste erreichbar und enthalten Kommentare, Checklisten und einen serverseitigen Änderungsverlauf
+- Owner, Admins und Member können kommentieren und Checklisten pflegen; Gäste lesen mit
+- nur die Verfasser bearbeiten Kommentare; Verfasser mit Schreibrecht sowie Owner/Admins können Kommentare entfernen
+- unveränderliche Workspace-/Aufgaben-Zuordnung, serverseitige Autoren und Revisionen schützen vor gefälschten Metadaten und veraltetem Überschreiben
+- Wiederholung nach einer verlorenen Antwort erzeugt keinen doppelten Kommentar oder Checklistenpunkt
+- Kommentare und Verlauf werden mit stabilen Cursorn nachgeladen; Realtime, erneuter Fokus und ein sichtbarkeitsabhängiger Abgleich aktualisieren die geladene Ansicht
+- Konto-, Rollen- und Workspace-Wechsel verwerfen alte Antworten und Eingaben; fehlgeschlagene Zugriffsprüfungen entfernen zuvor geladene Inhalte
+- der Verlauf speichert Aktionsarten und geänderte Feldnamen, keine Kopien privater Chat- oder Kommentartexte
+- [Umfang, Testnachweise und Freigabeschritte](docs/phase-3-9.md); die neue Migration muss vor Veröffentlichung des Frontends angewandt werden
+
 ### Einstellungen nach Kategorien
 - Allgemein: Startansicht sowie private oder geschäftliche Identität; die Auswahl wird pro Konto in diesem Browser gespeichert
 - Profil & Business: Name, Username, Bio und Business-Profil
