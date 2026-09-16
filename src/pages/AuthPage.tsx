@@ -3,6 +3,7 @@ import { ArrowLeft, Mail, ShieldCheck, Sparkles, UserRound } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom';
 import { routes } from '../app/routes';
 import { PasswordInput, PasswordStrengthHint } from '../components/PasswordInput';
+import { MobileInstall } from '../components/MobileInstall';
 import { useAuth } from '../features/auth/AuthProvider';
 import {
   PASSWORD_MIN_LENGTH,
@@ -261,6 +262,7 @@ export function AuthPage() {
         <div className="auth-security">
           <ShieldCheck size={16} /> Sichere Session- und Passwortverwaltung über Supabase Auth
         </div>
+        <MobileInstall />
       </div>
     </div>
   );
