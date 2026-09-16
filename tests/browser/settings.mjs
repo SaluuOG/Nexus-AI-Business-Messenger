@@ -25,6 +25,8 @@ try {
     try {
       await page.goto('http://127.0.0.1:4177/#/app/settings');
       await page.getByRole('heading', { name: 'Allgemein', exact: true }).waitFor();
+      await page.getByRole('region', { name: 'Nexus auf dem Handy' }).getByText('So installierst du Nexus', { exact: true }).click();
+      await page.getByText('Android:', { exact: true }).waitFor();
       assert.equal(await categories.getByRole('link').count(), 5);
       assert.equal(await page.getByRole('heading', { name: 'Passwort ändern', exact: true }).count(), 0);
       await page.getByLabel('Startansicht', { exact: true }).selectOption('groups');

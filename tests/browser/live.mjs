@@ -31,6 +31,23 @@ for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     await page.locator('input[type="password"]').waitFor({ state: 'visible' });
     assert.equal(await page.locator('button[type="submit"]').isEnabled(), true);
     assert.equal(await page.getByText('Demo-Modus öffnen', { exact: true }).count(), 0);
+    const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
+    assert.equal(manifestHref, '/Nexus-AI-Business-Messenger/manifest.webmanifest');
+    const manifestResponse = await page.request.get(new URL(manifestHref, url).href);
+    assert.equal(manifestResponse.status(), 200);
+    const manifest = await manifestResponse.json();
+    assert.equal(manifest.display, 'standalone');
+    assert.equal(manifest.short_name, 'Nexus');
+    for (const icon of manifest.icons) {
+      assert.equal((await page.request.get(new URL(icon.src, url).href)).status(), 200);
+    }
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      await page.getByRole('region', { name: 'Nexus auf dem Handy' }).waitFor();
+    }
     await page.screenshot({ path: 'browser-results/live-' + name + '.png', fullPage: true });
     assert.deepEqual(errors, []);
     assert.deepEqual(failedAssets, []);

@@ -1,3 +1,4 @@
+import { MobileInstall } from '../components/MobileInstall';
 import {
   Bell,
   Building2,
@@ -346,6 +347,7 @@ export function SettingsPage({
           <div className="settings-section-heading"><h2 id="settings-category-title">{category.title}</h2><p>{category.description}</p></div>
 
           {category.id === 'general' && <div className="settings-grid">
+            <MobileInstall />
             <div className="panel">
               <Settings2 /><h3>Deine Startansicht</h3>
               <p>Wähle, wo du nach dem Anmelden und beim Öffnen der Nexus-Startseite beginnen möchtest.</p>
