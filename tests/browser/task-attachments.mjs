@@ -12,9 +12,9 @@ const txt={name:'Notizen.txt',mimeType:'text/plain',buffer:Buffer.from('Nexus at
 try{
  for(const[name,engine]of[['chromium',chromium],['webkit',webkit]]){
   const browser=await engine.launch();const context=await browser.newContext({viewport:{width:390,height:844}});
-  await context.route('**/*',route=>route.request().url().startsWith('http://127.0.0.1:4189')?route.continue():route.abort());
+  await context.route('**/*',route=>['http://127.0.0.1:4189/','blob:http://127.0.0.1:4189/'].some(prefix=>route.request().url().startsWith(prefix))?route.continue():route.abort());
   const page=await context.newPage();page.setDefaultTimeout(15000);page.on('dialog',dialog=>dialog.accept());
-  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const errors=[];const failedRequests=[];page.on('pageerror',e=>errors.push(e.message));page.on('requestfailed',r=>failedRequests.push({url:r.url(),failure:r.failure()}));
   const collaboration=page.getByRole('region',{name:'Zusammenarbeit',exact:true});
   const files=page.getByRole('region',{name:'Dateien',exact:true});
   const comments=page.getByRole('region',{name:'Kommentare',exact:true});
@@ -87,7 +87,7 @@ try{
    await page.evaluate(()=>{window.nexusTest.revoked=true;window.nexusTest.emit('workspace_members','DELETE');});await collaboration.waitFor({state:'hidden'});
    assert.deepEqual(errors,[]);
    console.log(name+': task/comment uploads, image preview, download bytes, retry without duplicates, deletion, mobile layout, guest/author rights, account switch, failed reads and revoked membership passed');
-  }catch(error){await page.screenshot({path:`browser-results/${name}-task-attachments-failure.png`,fullPage:true});console.error('Browser errors:',errors);console.error((await page.locator('body').innerText()).slice(0,10000));throw error;}
+  }catch(error){await page.screenshot({path:`browser-results/${name}-task-attachments-failure.png`,fullPage:true});console.error('Browser errors:',errors);console.error('Failed requests:',failedRequests);console.error((await page.locator('body').innerText()).slice(0,10000));throw error;}
   finally{await context.close();await browser.close();}
  }
 }finally{await server.close();}

@@ -310,3 +310,7 @@ Nexus verwendet Supabase Row Level Security und Security-Definer-RPCs für sensi
 Einstellungen → Benachrichtigungen → Auf diesem Gerät: Push für Chats, Zuweisungen und Aufgabenkommentare aktivieren, Kategorien wählen und eine Testmeldung anfordern. Vorschauen sind standardmäßig aus. Auf iPhone/iPad Nexus zuerst zum Home-Bildschirm hinzufügen. [Umfang, Betrieb und gezielte Abnahme](docs/mobile-push.md).
 
 Unter **Aufgaben-Erinnerungen** lassen sich zusätzlich Frist-Pushs am Vortag und Fälligkeitstag mit eigener Uhrzeit und Zeitzone pro Gerät aktivieren. Erledigung, Terminänderungen und aktuelle Berechtigungen werden vor dem Versand berücksichtigt. [Terminplanung und gezielte Abnahme](docs/deadline-reminders.md).
+
+### Dateien an Aufgaben und Kommentaren
+
+Unter **Projekte → Aufgaben → Details & Zusammenarbeit** können Mitglieder Bilder und Dokumente bis 25 MB direkt an Aufgaben oder eigene Kommentare anhängen. Bildvorschau und Download funktionieren auch mobil. Gäste können lesen und herunterladen; Entfernen folgt den Teamrechten. [Dateitypen, Rechte und Bereinigung](docs/task-attachments.md).
