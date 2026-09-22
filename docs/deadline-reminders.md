@@ -23,7 +23,7 @@ Kalendertage werden vor der Zeitzonenumrechnung bestimmt. Sommer-/Winterzeit fol
 
 ## Veröffentlichung
 
-Am 22.09.2026 zur Veröffentlichung freigegeben. Nachweise:
+Am 22.09.2026 veröffentlicht und technisch abgenommen. Nachweise:
 
 - Migration `20260922091033_deadline_push_reminders.sql` dauerhaft angewandt; die gezielte SQL-Abnahme bestand vor und nach der Anwendung. Migration zunächst mit der Supabase-CLI erstellt, danach auf den tatsächlich angewandten Versionsstempel abgeglichen.
 - Edge Function `mobile-push`, Version 3, aktiv; die bestehende Authentifizierung und VAPID-Schlüssel bleiben erhalten.
@@ -31,4 +31,7 @@ Am 22.09.2026 zur Veröffentlichung freigegeben. Nachweise:
 - Live-Prüfung des neuen Versandwegs: Ein ausschließlich synthetisches Konto mit isoliertem Workspace, Projekt und Aufgabe erhielt einen fälligen Warteschlangeneintrag. Der echte Minutenjob verarbeitete ihn um 09:13 UTC. Edge antwortete HTTP 200 mit `expired: 1`, ohne Fehler oder Wiederholung; der ausdrücklich nicht existierende FCM-Endpunkt wurde erwartungsgemäß als abgelaufen erkannt. Abonnement und Job wurden automatisch entfernt. Testkonto, Sitzung, Workspace, Projekt und Aufgabe wurden anschließend unter Identitätsprüfung vollständig gelöscht. Kein echtes Gerät wurde adressiert; dies ist kein erneuter physischer Handy-Test.
 - Supabase Advisors: keine neuen Sicherheitsfunde und kein fehlender neuer Fremdschlüssel-Index. Der neue FK-Index wird direkt nach Einrichtung noch als unbenutzt gemeldet. Bestehende Hinweise bleiben unverändert; siehe die [Sicherheitsnachweise der Phase 3.9](phase-3-9.md).
 
-Veröffentlichter Commit und Live-Prüfung der App folgen nach Abschluss des Deployments.
+Veröffentlichter Anwendungscommit: `33126ee3a9064ccc4e0b4f3ec5899d5613c82743`.
+[Veröffentlichung und Live-Prüfung](https://github.com/SaluuOG/Nexus-AI-Business-Messenger/actions/runs/35709281431) vollständig erfolgreich. Der Veröffentlichungslauf bestätigte elf ausgewählte Unit-Tests und ausschließlich die drei betroffenen Browserabläufe (Push, Benachrichtigungen, PWA), jeweils in Chromium und WebKit.
+
+Die Live-Prüfung bestätigte um 09:19 UTC das tatsächlich geladene Script `/Nexus-AI-Business-Messenger/assets/index-DiGhD9R_.js`, konfigurierte Anmeldung und Darstellung ohne Anwendungsfehler in beiden Browsern. Die abschließende Änderung dokumentiert ausschließlich diese Abnahme; Anwendung und Datenbank bleiben auf dem geprüften Stand.
