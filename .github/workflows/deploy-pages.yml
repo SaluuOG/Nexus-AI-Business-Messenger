@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -39,7 +41,7 @@ jobs:
         run: npm run typecheck
 
       - name: Tests
-        run: npm test
+        run: node tests/run-changed.mjs --unit
 
       - name: Build
         run: npm run build
@@ -48,17 +50,7 @@ jobs:
       - name: Set up browser checks
         uses: ./.github/actions/setup-browser
       - name: Browser workflows
-        run: |
-          node tests/browser/task-collaboration.mjs
-          node tests/browser/mobile-workflows.mjs
-          node tests/browser/chat-scan.mjs
-          node tests/browser/briefing.mjs
-          node tests/browser/mobile-install.mjs
-          node tests/browser/workspace-lifecycle.mjs
-          node tests/browser/message-history.mjs
-          node tests/browser/message-tasks.mjs
-          node tests/browser/settings.mjs
-          node tests/browser/notifications.mjs
+        run: node tests/run-changed.mjs --browser
         env:
           NEXUS_PLAYWRIGHT_MODULE: ${{ runner.temp }}/nexus-browser/node_modules/playwright/index.mjs
       - name: Browser screenshots
@@ -88,6 +80,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Setup Node
         uses: actions/setup-node@v6
         with:

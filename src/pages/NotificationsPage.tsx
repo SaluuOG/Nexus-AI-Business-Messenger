@@ -6,7 +6,7 @@ import { routes } from '../app/routes';
 import { notificationLabels, notificationTarget, type NexusNotification, type NotificationKind } from '../features/notifications/notifications';
 import type { NotificationsModel } from '../features/notifications/useNotifications';
 
-const icons = { direct_message: MessageCircle, group_message: UsersRound, contact_request: UserPlus, workspace_invitation: Mail, task_assigned: ListTodo, task_due: Clock3, task_overdue: Clock3 } satisfies Record<NotificationKind, typeof Bell>;
+const icons = { direct_message: MessageCircle, group_message: UsersRound, contact_request: UserPlus, workspace_invitation: Mail, task_assigned: ListTodo, task_comment: MessageCircle, task_due: Clock3, task_overdue: Clock3 } satisfies Record<NotificationKind, typeof Bell>;
 const dateLabel = (value: string) => new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
 export function NotificationsPage({ model }: { model: NotificationsModel }) {

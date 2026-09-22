@@ -303,3 +303,8 @@ npm run build
 
 ## Sicherheit
 Nexus verwendet Supabase Row Level Security und Security-Definer-RPCs für sensible Datenoperationen. Private Server-Schlüssel gehören nicht ins Frontend. Kontakte und direkte Chats sind auf authentifizierte Nutzer und bestätigte Beziehungen begrenzt. Gruppen werden serverseitig auf bestätigte Kontakte, Gruppen-Mitgliedschaft und Rollen geprüft. Das Nutzerverzeichnis gibt keine E-Mail-Adressen aus. Eine spätere Ende-zu-Ende-Verschlüsselung wird mit etablierter Kryptografie separat entworfen; die aktuellen Messenger-Phasen sind noch keine E2E-Verschlüsselung.
+
+
+### Mobile Push-Benachrichtigungen
+
+Einstellungen → Benachrichtigungen → Auf diesem Gerät: Push für Chats, Zuweisungen und Aufgabenkommentare aktivieren, Kategorien wählen und eine Testmeldung anfordern. Vorschauen sind standardmäßig aus. Auf iPhone/iPad Nexus zuerst zum Home-Bildschirm hinzufügen. [Umfang, Betrieb und gezielte Abnahme](docs/mobile-push.md).

@@ -17,7 +17,7 @@ test('Notification data, navigation, pagination and persistence errors', async t
       assert.equal(target('group_message', { chat_id: 'g2' }), '/app/groups?group=g2');
       assert.equal(target('workspace_invitation', { invite_token: 'secret?token' }), '/app/settings?category=workspace&invite=secret%3Ftoken');
       assert.equal(target('contact_request', {}), '/app/contacts');
-      for (const kind of ['task_assigned','task_due','task_overdue']) {
+      for (const kind of ['task_assigned','task_due','task_overdue','task_comment']) {
         assert.equal(target(kind, { workspace_id: 'w2', project_id: 'p2', task_id: 't2' }), '/app/business?workspace=w2&view=tasks&project=p2&task=t2');
         assert.equal(target(kind, { task_id: 't2' }), null);
       }

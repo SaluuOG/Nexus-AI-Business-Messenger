@@ -10,6 +10,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { routes } from '../../app/routes';
 import { backendConfigured } from '../../lib/env';
 import { initialAuthCallback, supabase } from '../../lib/supabase';
+import { syncPushAccount } from '../notifications/push';
 
 type AuthResult = {
   error: string | null;
@@ -166,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
+      void syncPushAccount(data.session?.user.id ?? null);
       setSession(data.session);
       if (recoveryRequested && data.session) {
         rememberRecoverySession(true);
@@ -187,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      void syncPushAccount(nextSession?.user.id ?? null);
       setSession(nextSession);
       if (event === 'PASSWORD_RECOVERY') {
         rememberRecoverySession(true);
@@ -268,8 +271,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signOut() {
         if (!supabase) return { error: null };
+        await syncPushAccount(null);
         rememberRecoverySession(false);
         const { error } = await supabase.auth.signOut();
+        if (error) void syncPushAccount(session?.user.id ?? null);
         return { error: publicAuthError(error?.message, 'Die Abmeldung ist gerade nicht möglich.') };
       },
     }),

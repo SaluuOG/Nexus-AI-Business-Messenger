@@ -22,6 +22,7 @@ import { PasswordInput, PasswordStrengthHint } from '../components/PasswordInput
 import { WorkspaceLifecyclePanel } from '../components/WorkspaceLifecyclePanel';
 import { WorkspaceTeamPanel } from '../components/WorkspaceTeamPanel';
 import { NotificationPreferences } from '../components/NotificationPreferences';
+import { PushPreferences } from '../components/PushPreferences';
 import type { NotificationsModel } from '../features/notifications/useNotifications';
 import { PASSWORD_MIN_LENGTH, RESET_REQUEST_CONFIRMATION, validateNewPassword } from '../features/auth/passwordPolicy';
 import { startViews, type StartView } from '../features/settings/preferences';
@@ -438,7 +439,10 @@ export function SettingsPage({
             />
           </div>}
 
-          {category.id === 'notifications' && notifications && <NotificationPreferences model={notifications} />}
+          {category.id === 'notifications' && <div className="push-settings-stack">
+            {currentUserId && <PushPreferences key={currentUserId} userId={currentUserId} />}
+            {notifications && <NotificationPreferences model={notifications} />}
+          </div>}
 
           {category.id === 'security' && <div className="settings-grid">
             <div className="panel">
