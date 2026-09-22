@@ -24,4 +24,15 @@ Vorlagen sind unveränderliche Momentaufnahmen innerhalb eines Workspace. Änder
 
 Backend-Migration `20260922171611_project_templates.sql` am 22.09.2026 eingespielt. SQL-Abnahme vor und nach der Migration erfolgreich. Keine neuen Security-Advisory-Funde; nur die drei zunächst unbenutzten neuen Indizes werden als Performance-Information gemeldet. Die Business-Verwaltungsrechte folgen jetzt der per Realtime/Fokus aktualisierten Teammitgliedschaft.
 
-Veröffentlichung und Live-Abnahme werden nach erfolgreicher Bereitstellung ergänzt.
+Branch-Abnahme: Lauf `35761249927`, Commit `8340ce601109e21a338b9599b41b853bdc1447d9`, erfolgreich. 15 gezielte Unit-Tests sowie Chromium und WebKit bestanden.
+
+Veröffentlichungscommit: `f28b3e449f8aac51f759e84d1b16dd6e5390ba44`. Veröffentlichung erfolgreich: Lauf `35761503987` (Build `106860396576`, Deployment `106860893835`). Ausgelieferter Einstieg: `/Nexus-AI-Business-Messenger/assets/index-DBxroj8p.js`.
+
+Live-Abnahme am 22.09.2026 mit einer bestehenden echten Sitzung in einem isolierten Workspace mit genau einem Mitglied:
+
+- Vorlage über die veröffentlichte Oberfläche gespeichert; serverseitig eine Momentaufnahme mit einer Aufgabe und zwei Checklistenpunkten bestätigt.
+- Gespeicherter Ausgangsstart 22.09.2026; Aufgabenabstand 11 Tage, Projektabstand 23 Tage. Mit neuem Start 01.11.2026 zeigte die Oberfläche 12.11.2026 und 24.11.2026. Die Aufgabe wurde vor dem Anlegen auf 13.11.2026 verschoben, zugewiesen und um einen dritten Checklistenpunkt ergänzt.
+- Tatsächlich gespeicherter Projektstatus `planning`, Fortschritt 0, Deadline 24.11.2026; genau eine offene Aufgabe mit der gewählten Person und Frist 13.11.2026; drei ungeprüfte Checklistenpunkte. Das Ausgangsprojekt und seine erledigte Checkliste blieben unverändert.
+- Neues Projekt und Aufgabe wurden in der Live-Oberfläche angezeigt. Nach Öffnen der Zusammenarbeit brach die Verbindung zum Prüfbrowser ab; die abschließende Sichtprüfung dieses Bereichs und der Screenshot waren deshalb nicht mehr möglich. Checklistenpersistenz wurde direkt im Backend bestätigt, ihre Darstellung zusätzlich in beiden automatisierten Browserprüfungen.
+- Beim ersten Aufruf während der Veröffentlichung war ein neuer dynamischer App-Baustein noch nicht abrufbar; nach vollständiger Bereitstellung und Neuladen funktionierte die neue Oberfläche. Die betreffende Datei antwortete anschließend mit HTTP 200.
+- Alle Abnahmedaten danach entfernt. Workspace, Projekte, Aufgaben, Checklisten und Vorlagen für den isolierten Testbereich: jeweils 0 verbliebene Datensätze.
