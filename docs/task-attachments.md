@@ -65,4 +65,40 @@ Storage API initialization returned HTTP 200 and the bucket is private with the
 expected MIME allowlist and size limit. Security advisors introduced no findings;
 the new uploader index is expected to be unused before regular traffic.
 
-Browser and live release verification are recorded below after completion.
+Chromium and WebKit passed the attachment and existing collaboration workflows
+in validation run `35713281118` on commit
+`60cb58ee4a0dda5b4331c19a7bae08bd53f3eee7`. Coverage includes exact download
+bytes, image decoding, 320/390 px layout, interrupted upload/finalize response
+recovery, comment attachments/cascades, guest/author controls, account switches,
+read failures and membership removal. The browser harness allows local blob URLs
+in WebKit while continuing to block external requests. Earlier failed runs exposed
+a damaged PNG fixture and this harness routing difference; both are corrected.
+
+The private bucket was initialized successfully by `task-file-cleanup` v1
+(HTTP response 15, status 200). The worker is authenticated by the one-use internal
+token described above. Live publication and end-to-end file checks follow below.
+
+## Published release and actual Storage acceptance
+
+Release `35713468886` published commit `60cb58ee4a0dda5b4331c19a7bae08bd53f3eee7`.
+Build/deploy and Chromium/WebKit live checks all succeeded; the release asset is
+`/Nexus-AI-Business-Messenger/assets/index-C3l97ZPQ.js`.
+
+The signed-in Darlyn test account used an isolated workspace containing no other
+members. Through the published UI it uploaded a 62-byte UTF-8 text attachment and
+a PNG on its own comment. Both finalized as ready with matching Storage metadata.
+The downloaded text was byte-identical (SHA-256
+`b507c80a725c0b58061c7f3484c2b5b0eedc12280226120301b7a853b8145406`), and the live
+image preview decoded at its original 16 × 16 pixels. A saved screenshot records
+the attachment controls.
+
+The cloud browser's download event did not report the completed blob download;
+the synchronized downloaded file independently confirmed its exact bytes. Its
+native confirm dialog also blocked automation, so live removal was completed
+through authenticated SQL calls to the same attachment RPC and comment deletion
+path. The browser removal controls were verified in both automated engines.
+The ordinary per-minute cron then removed both actual Storage objects, each on
+its first attempt (HTTP response 17: 200, `removed:2`, `retry:0`). The isolated
+workspace, project, task, comment, metadata and binary test files were removed.
+No real team messages or push devices were used. The app was reopened in a fresh
+browser tab after the cloud browser dialog issue.
