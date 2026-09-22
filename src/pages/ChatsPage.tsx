@@ -611,7 +611,11 @@ export function ChatsPage({
   }, [currentUserId]);
 
   useEffect(() => {
-    if (isMobile && !linkedConversationId && !chatSearch.get('task')) setSelectedId(null);
+    if (isMobile && !linkedConversationId && !chatSearch.get('task')) {
+      // Commit the list intent before a fast refresh can reuse the previous chat.
+      mobileListOnlyRef.current = true;
+      setSelectedId(null);
+    }
     else if (linkedConversationId) setSelectedId(linkedConversationId);
     void refreshConversations(linkedConversationId || requestedConversationId);
   }, [linkedConversationId]);
@@ -1102,7 +1106,7 @@ export function ChatsPage({
         {loading && conversations.length === 0 && <div className="chat-list-empty">Chats werden geladen…</div>}
         {!loading && conversations.length === 0 && <div className="chat-list-empty"><MessageCircle size={24} /><b>Noch keine Chats</b></div>}
         {filtered.map((conversation) => (
-          <button className={`chat${selectedId === conversation.conversation_id ? ' active' : ''}`} onClick={() => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setSelectedId(conversation.conversation_id); setChatSearch({ conversation: conversation.conversation_id }); }} key={conversation.conversation_id}>
+          <button className={`chat${selectedId === conversation.conversation_id ? ' active' : ''}`} onClick={() => { setError(null); setContextWarning(null); setContextRetryMessageId(null); if (!isMobile) setSelectedId(conversation.conversation_id); setChatSearch({ conversation: conversation.conversation_id }); }} key={conversation.conversation_id}>
             <div className="avatar">{initials(conversation.full_name, conversation.username)}</div>
             <span>
               <b>{nameOf(conversation)}</b>

@@ -11,6 +11,7 @@ import './settings-data.css';
 import './contacts-data.css';
 import './business-data.css';
 import './project-tasks.css';
+import './task-collaboration.css';
 import './briefing.css';
 import './message-tasks.css';
 import './settings-categories.css';

@@ -68,6 +68,7 @@ try {
           await page.waitForURL(/conversation=c2/);
           assert.equal(await input.inputValue(), '');
           await page.goBack();
+          assert.ok(!new URL(page.url()).hash.includes('conversation='));
           await contact.waitFor();
           assert.equal(await page.locator('.conversation').isVisible(), false);
           await contact.click();
@@ -98,6 +99,12 @@ try {
           await page.getByRole('button', { name: 'Alle Gruppen', exact: true }).click();
           await page.waitForFunction(before => window.voiceFixture.stops > before, beforeGroupBack);
           await group.waitFor();
+          await group.click();
+          await page.waitForURL(/group=/);
+          await page.goBack();
+          assert.ok(!new URL(page.url()).hash.includes('group='));
+          await group.waitFor();
+          assert.equal(await page.locator('.conversation').isVisible(), false);
           // Member and Guest retain the task entry, without customer/project editing.
           for (const [workspaceId, writableTasks] of [['w1', true], ['w2', false]]) {
             await page.goto(base + '/#/app/business?workspace=' + workspaceId);

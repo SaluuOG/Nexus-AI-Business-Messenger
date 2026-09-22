@@ -285,7 +285,11 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   refreshGroupsRef.current = refreshGroups;
 
   useEffect(() => {
-    if (isMobile && !linkedGroupId && !chatSearch.get('task')) setSelectedId(null);
+    if (isMobile && !linkedGroupId && !chatSearch.get('task')) {
+      // Commit the list intent before a fast refresh can reuse the previous chat.
+      mobileListOnlyRef.current = true;
+      setSelectedId(null);
+    }
     else if (linkedGroupId) setSelectedId(linkedGroupId);
     void refreshGroups(linkedGroupId);
   }, [linkedGroupId]);
@@ -1361,7 +1365,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
         {loading && groups.length === 0 && <div className="chat-list-empty">Gruppen werden geladen…</div>}
         {!loading && groups.length === 0 && <div className="chat-list-empty"><UsersRound size={24} /><b>Noch keine Gruppen</b><span>Erstelle deine erste Gruppe mit einem Nexus-Kontakt.</span></div>}
         {filteredGroups.map((group) => (
-          <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setContextWarning(null); setSelectedId(group.group_id); setChatSearch({ group: group.group_id }); }} key={group.group_id}>
+          <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setContextWarning(null); if (!isMobile) setSelectedId(group.group_id); setChatSearch({ group: group.group_id }); }} key={group.group_id}>
             <div className="avatar group-avatar"><GroupAvatar group={group} size={16} /></div>
             <span><b>{group.name}</b><small>{group.member_count} Mitglieder · {roleLabel(group.role)}</small><p>{group.last_message || 'Neue Gruppe'}</p><ChatStatusBadge state={workflows.states.get(group.group_id)} /></span>
             <em>{formatTime(group.last_message_at)}{group.unread_count > 0 && <i>{group.unread_count > 99 ? '99+' : group.unread_count}</i>}</em>

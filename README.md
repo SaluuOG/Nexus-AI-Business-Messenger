@@ -146,13 +146,13 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Live-Kennzahlen für Kunden, offene Projekte, Auftragswert und überfällige Deadlines
 - Supabase Realtime synchronisiert Business-Änderungen im Team
 - strikte Workspace-Trennung per Row Level Security
-- Rollenmodell: Owner/Admin vollständig, Member bearbeiten, Guest lesen
+- Aktuelles Rollenmodell für Kunden/Projekte: Owner/Admin vollständig; Member und Guest lesen (seit dem mobilen Update vom 22. September 2026)
 - Workspace und Ersteller eines Datensatzes sind serverseitig gegen Manipulation geschützt
 - beim Löschen eines Kunden bleiben zugehörige Projekte sicher erhalten
 
 ### Phase 3.2 — Projektaufgaben, Zuständigkeiten & Deadlines ✅
 - Migration `0021_project_tasks.sql` mit geschützter Tabelle `project_tasks`
-- Aufgaben direkt aus einer Projektkarte oder im Business-Reiter „Aufgaben“ öffnen
+- Aufgaben direkt aus einer Projektkarte oder über „Alle Projektaufgaben“ innerhalb von „Projekte“ öffnen
 - Titel, Beschreibung, Projekt, verantwortliche Person, Priorität und Deadline
 - Status: Offen, In Arbeit, Zur Prüfung, Blockiert und Erledigt; direkt in der Liste änderbar
 - Projekt-/Personen-/Statusfilter sowie Suche und „Meine Aufgaben“
@@ -250,6 +250,17 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Rollen, Nachfolgerauswahl, Busy-/Doppelklickschutz, Fehlermeldungen und Dialoge sind bis 320 Pixel Breite zugänglich bedienbar
 - rollbackfähige SQL-Prüfungen decken Rollen, RLS, anonyme Zugriffe, Owner-Invariante, Aufgabenfreigabe und Löschkaskaden ab; Browserprüfungen testen den vollständigen Ablauf
 - diese Phase benötigt keinen KI-Anbieter und verursacht keine OpenAI-API-Aufrufe
+
+### Phase 3.9 — Aufgaben-Zusammenarbeit (Live-Abnahme ausstehend)
+- Aufgabendetails sind direkt aus der Aufgabenliste erreichbar und enthalten Kommentare, Checklisten und einen serverseitigen Änderungsverlauf
+- Owner, Admins und Member können kommentieren und Checklisten pflegen; Gäste lesen mit
+- nur die Verfasser bearbeiten Kommentare; Verfasser mit Schreibrecht sowie Owner/Admins können Kommentare entfernen
+- unveränderliche Workspace-/Aufgaben-Zuordnung, serverseitige Autoren und Revisionen schützen vor gefälschten Metadaten und veraltetem Überschreiben
+- Wiederholung nach einer verlorenen Antwort erzeugt keinen doppelten Kommentar oder Checklistenpunkt
+- Kommentare und Verlauf werden mit stabilen Cursorn nachgeladen; Realtime, erneuter Fokus und ein sichtbarkeitsabhängiger Abgleich aktualisieren die geladene Ansicht
+- Konto-, Rollen- und Workspace-Wechsel verwerfen alte Antworten und Eingaben; fehlgeschlagene Zugriffsprüfungen entfernen zuvor geladene Inhalte
+- der Verlauf speichert Aktionsarten und geänderte Feldnamen, keine Kopien privater Chat- oder Kommentartexte
+- [Umfang, Testnachweise und Freigabeschritte](docs/phase-3-9.md); beide Migrationen sind angewandt, der formale Abschluss wartet auf die Live-Abnahme mit zwei Konten
 
 ### Einstellungen nach Kategorien
 - Allgemein: Startansicht sowie private oder geschäftliche Identität; die Auswahl wird pro Konto in diesem Browser gespeichert

@@ -6,6 +6,8 @@ import {
 } from '../features/data/businessData';
 import { useNavigate } from 'react-router-dom';
 import { routes } from '../app/routes';
+import { businessSearch } from '../app/businessNavigation';
+import { TaskCollaboration } from './TaskCollaboration';
 import { useTaskSourceLinks } from './TaskSourceLinks';
 import type { NexusWorkspaceMember } from '../features/data/nexusData';
 import {
@@ -156,11 +158,15 @@ export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects,
             <span className={overdue ? 'task-overdue' : dueToday ? 'task-due-today' : ''}><CalendarDays size={14} />{dueLabel(task.due_date)}{overdue ? ' · Überfällig' : dueToday ? ' · Heute' : ''}</span>
           </div>
           <div className="task-card-actions">
+            {!initialTaskId && <button className="secondary" onClick={() => navigate(routes.business + '?' + businessSearch(workspaceId, { view: 'tasks', taskId: task.id, projectId: filters.project === 'all' ? undefined : filters.project }))}>Details & Zusammenarbeit</button>}
             {sourcesByTask.has(task.id) && <button className="secondary" onClick={() => navigate((sourcesByTask.get(task.id) === 'group' ? routes.groups : routes.chats) + '?' + new URLSearchParams({ task: task.id, workspace: workspaceId }).toString())}>Ursprungsnachricht öffnen</button>}
             {permissions.write ? <select aria-label={`Status für ${task.title}`} value={task.status} disabled={Boolean(busyId) || Boolean(loadError)} onChange={event => changeStatus(task, event.target.value as TaskStatus)}>{taskStatuses.map(status => <option key={status} value={status}>{taskStatusLabels[status]}</option>)}</select> : <span className={`business-badge task-${task.status}`}>{taskStatusLabels[task.status]}</span>}
             {permissions.write && <button className="secondary" disabled={Boolean(busyId) || Boolean(loadError)} onClick={() => openEditor(task)}><SquarePen size={14} /> Bearbeiten</button>}
             {permissions.delete && <button className="task-delete" aria-label={`Aufgabe ${task.title} löschen`} disabled={Boolean(busyId) || Boolean(loadError)} onClick={() => removeTask(task)}><Trash2 size={15} /></button>}
           </div>
+          {initialTaskId === task.id && currentUserId && membersById.get(currentUserId)?.role && !loadError && <TaskCollaboration
+            key={`${currentUserId}:${workspaceId}:${task.id}:${membersById.get(currentUserId)!.role}`}
+            workspaceId={workspaceId} taskId={task.id} currentUserId={currentUserId} role={membersById.get(currentUserId)!.role} members={members} />}
         </article>;
       })}</div>}
 

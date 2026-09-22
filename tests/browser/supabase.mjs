@@ -1,5 +1,6 @@
 // Test-only in-memory service, injected by the browser test's Vite plugin.
 // It is never imported by the production application.
+import { createCollaborationService } from './collaboration-service.mjs';
 const project = (id, title, workspace_id, deadline, status = 'active') => ({
   id, title, workspace_id, deadline, status, priority: 'medium', progress: 35,
   value_cents: 10000, currency: 'EUR', customer_id: null, description: 'Vollständige Projektbeschreibung',
@@ -117,6 +118,7 @@ state.tasks.push(...JSON.parse(sessionStorage.getItem('nexusTest.created') || '[
 if (mobileBusinessFixture) state.memberships.push(membership('w3','other','member','Test Kontakt','test'), membership('w3','guest-user','guest','Nur Gast','gast'));
 const memberships = state.memberships;
 let user = { id: 'me', email: 'nexus-test@example.invalid', user_metadata: { full_name: 'Test Nutzer' } };
+const collaboration = createCollaborationService(state, () => user);
 export const backendConfigured = true;
 export const supabaseConfig = { url: 'https://example.invalid', publishableKey: 'test-only' };
 export const initialAuthCallback = { isRecovery: false, hasError: false, hasPkceCode: false, marker: null };
@@ -414,9 +416,11 @@ export const supabase = {
     },
   },
   from(table) {
+    if (collaboration.tables.includes(table)) return collaboration.from(table);
     const request = { operation: 'select', filters: [], range: null, single: false };
     const builder = {
       select() { return this; }, order() { return this; },
+      abortSignal() { return this; },
       eq(...filter) { request.filters.push(filter); return this; },
       range(a, b) { request.range = [a, b]; return this; },
       maybeSingle() { request.single = true; return this; }, single() { request.single = true; return this; },
@@ -444,7 +448,11 @@ export const supabase = {
               else throw new Error('Unexpected customer deletion');
             } else {
               if (request.operation !== 'update' || table !== 'project_tasks') throw new Error('Unexpected test mutation');
-              rows.forEach(row => Object.assign(row, request.value, { updated_at: 'revision-' + (++state.revision) }));
+              rows.forEach(row => {
+                const before = { ...row };
+                Object.assign(row, request.value, { updated_at: 'revision-' + (++state.revision) });
+                collaboration.taskChanged(before, row);
+              });
             }
           }
           if (request.range) rows = rows.slice(request.range[0], request.range[1] + 1);
