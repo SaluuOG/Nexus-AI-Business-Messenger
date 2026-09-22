@@ -32,7 +32,7 @@ try{
    assert.equal(await page.evaluate(()=>window.nexusTemplateTest.templates.length),1);
    assert.equal(await page.evaluate(()=>new Set(window.nexusTemplateTest.calls.map(c=>c.p_id)).size),1);
    await openNew();
-   const picker=dialog.getByRole('region',{name:'Projektvorlagen',exact:true});
+   const picker=dialog.locator('.project-template-picker');
    const select=picker.getByLabel('Projektvorlage',{exact:true});
    await select.selectOption({label:'Website Ablauf'});
    await picker.getByLabel('Startdatum für die Vorlage',{exact:true}).fill('2026-11-01');
@@ -100,7 +100,7 @@ try{
    assert.equal(await page.getByRole('button',{name:'Projekt',exact:true}).count(),0);
    assert.deepEqual(errors,[]);
    console.log(`${name}: template save/select, dates, editable checklist/assignee, lost-response deduplication, manual creation, archive, 320/390px, role/account stale replies passed`);
-  }catch(error){await page.screenshot({path:`browser-results/${name}-project-template-failure.png`,fullPage:true});console.error(await page.locator('body').innerText());throw error;}
+  }catch(error){await page.screenshot({path:`browser-results/${name}-project-template-failure.png`,fullPage:true});console.error(await page.locator('body').innerText());console.error(await page.locator('body').ariaSnapshot());throw error;}
   finally{await context.close();await browser.close();}
  }
 }finally{await server.close();}

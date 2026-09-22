@@ -29,6 +29,7 @@ export function SaveProjectTemplate({ project, onClose, onSaved }: { project: Ne
   async function save(event: FormEvent) {
     event.preventDefault();
     if (saving.current) return;
+    if (name.trim().length < 2) { setError('Bitte einen Namen mit mindestens 2 Zeichen angeben.'); return; }
     try { shiftTemplateDate(start, 0); } catch (reason) { setError(errorText(reason)); return; }
     const request = intent.current || { id: crypto.randomUUID(), name, start };
     intent.current = request;
@@ -103,7 +104,7 @@ export function ProjectTemplatePicker({ workspaceId, disabled, hasDraft, onApply
     } catch (reason) { if (active.current) setError(errorText(reason)); }
     finally { busy.current = false; if (active.current) setRemoving(false); }
   }
-  return <section className="project-template-picker" aria-label="Projektvorlagen">
+  return <section className="project-template-picker" role="region" aria-label="Projektvorlagen">
     <h3><Copy size={16} /> Mit Vorlage starten</h3>
     <div className="business-form-grid">
       <label className="wide"><span>Projektvorlage</span><select value={selected} disabled={locked} onChange={event => { setSelected(event.target.value); setConfirm(null); setFeedback(''); }}>

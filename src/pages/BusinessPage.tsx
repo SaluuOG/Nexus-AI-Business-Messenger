@@ -759,7 +759,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
                         <div className="business-card-actions">
                           <button onClick={() => openTasks(project.id)}><ListTodo size={14} /> Aufgaben {taskError ? '' : `(${projectTaskCounts.get(project.id)?.done ?? 0}/${projectTaskCounts.get(project.id)?.total ?? 0})`}</button>
                           {canEdit && <button onClick={() => setTemplateSource(project)}><Copy size={13} /> Als Vorlage speichern</button>}
-                      {canEdit && <button onClick={() => openProject(project)}><SquarePen size={14} /> Bearbeiten</button>}
+                          {canEdit && <button onClick={() => openProject(project)}><SquarePen size={14} /> Bearbeiten</button>}
                           {canDelete && <button className="danger" onClick={() => void removeProject(project)}><Trash2 size={14} /> Löschen</button>}
                         </div>
                     </article>
@@ -869,7 +869,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
                 setInitialTasks(draft.tasks); setError(null);
               }} />}
               <div className="business-form-grid">
-                <label className="wide"><span>Projekttitel *</span><input autoFocus required minLength={2} maxLength={160} value={projectDraft.title} onChange={(event) => setProjectDraft((current) => ({ ...current, title: event.target.value }))} placeholder="z. B. Neue Unternehmenswebsite" /></label>
+                <label className="wide"><span>Projekttitel *</span><input autoFocus={projectEditor !== 'new'} required minLength={2} maxLength={160} value={projectDraft.title} onChange={(event) => setProjectDraft((current) => ({ ...current, title: event.target.value }))} placeholder="z. B. Neue Unternehmenswebsite" /></label>
                 <label><span>Kunde</span><select value={projectDraft.customerId} onChange={(event) => setProjectDraft((current) => ({ ...current, customerId: event.target.value }))}><option value="">Ohne Kundenzuordnung</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
                 <label><span>Status</span><select value={projectDraft.status} onChange={(event) => setProjectDraft((current) => ({ ...current, status: event.target.value as ProjectStatus }))}>{projectStatuses.map((status) => <option key={status} value={status}>{projectStatusLabels[status]}</option>)}</select></label>
                 <label><span>Priorität</span><select value={projectDraft.priority} onChange={(event) => setProjectDraft((current) => ({ ...current, priority: event.target.value as ProjectPriority }))}>{projectPriorities.map((priority) => <option key={priority} value={priority}>{projectPriorityLabels[priority]}</option>)}</select></label>
