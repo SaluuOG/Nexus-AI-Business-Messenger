@@ -98,6 +98,11 @@ try {
           await page.getByRole('button', { name: 'Alle Gruppen', exact: true }).click();
           await page.waitForFunction(before => window.voiceFixture.stops > before, beforeGroupBack);
           await group.waitFor();
+          await group.click();
+          await page.waitForURL(/group=/);
+          await page.goBack();
+          await group.waitFor();
+          assert.equal(await page.locator('.conversation').isVisible(), false);
           // Member and Guest retain the task entry, without customer/project editing.
           for (const [workspaceId, writableTasks] of [['w1', true], ['w2', false]]) {
             await page.goto(base + '/#/app/business?workspace=' + workspaceId);

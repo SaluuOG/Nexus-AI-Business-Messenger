@@ -285,7 +285,11 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   refreshGroupsRef.current = refreshGroups;
 
   useEffect(() => {
-    if (isMobile && !linkedGroupId && !chatSearch.get('task')) setSelectedId(null);
+    if (isMobile && !linkedGroupId && !chatSearch.get('task')) {
+      // Commit the list intent before a fast refresh can reuse the previous chat.
+      mobileListOnlyRef.current = true;
+      setSelectedId(null);
+    }
     else if (linkedGroupId) setSelectedId(linkedGroupId);
     void refreshGroups(linkedGroupId);
   }, [linkedGroupId]);

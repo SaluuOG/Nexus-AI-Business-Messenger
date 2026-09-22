@@ -611,7 +611,11 @@ export function ChatsPage({
   }, [currentUserId]);
 
   useEffect(() => {
-    if (isMobile && !linkedConversationId && !chatSearch.get('task')) setSelectedId(null);
+    if (isMobile && !linkedConversationId && !chatSearch.get('task')) {
+      // Commit the list intent before a fast refresh can reuse the previous chat.
+      mobileListOnlyRef.current = true;
+      setSelectedId(null);
+    }
     else if (linkedConversationId) setSelectedId(linkedConversationId);
     void refreshConversations(linkedConversationId || requestedConversationId);
   }, [linkedConversationId]);
