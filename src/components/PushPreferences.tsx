@@ -24,7 +24,7 @@ function ReminderPreferences({ status, busy, save }: { status: PushStatus; busy:
         <label className="reminder-check"><input type="checkbox" checked={draft.reminder_before} onChange={e => setDraft({ ...draft, reminder_before: e.target.checked })} />Am Vortag</label>
         <label className="reminder-check"><input type="checkbox" checked={draft.reminder_due} onChange={e => setDraft({ ...draft, reminder_due: e.target.checked })} />Am Fälligkeitstag</label>
         <label>Uhrzeit<input type="time" required step="60" value={draft.reminder_time} onChange={e => setDraft({ ...draft, reminder_time: e.target.value })} /></label>
-        <label>Zeitzone<select value={draft.reminder_timezone} onChange={e => setDraft({ ...draft, reminder_timezone: e.target.value })}>{zones.map(zone => <option key={zone} value={zone}>{zone}</option>)}</select></label>
+        <label>Zeitzone<select aria-label="Zeitzone" value={draft.reminder_timezone} onChange={e => setDraft({ ...draft, reminder_timezone: e.target.value })}>{zones.map(zone => <option key={zone} value={zone}>{zone}</option>)}</select></label>
         <p className="push-note">Die gewählte Zeitzone bleibt auch auf Reisen erhalten. Erledigte Aufgaben und geänderte Termine werden vor dem Versand berücksichtigt. „Fällige Aufgaben“ unter „Deine Hinweise“ muss eingeschaltet sein.</p>
         {!valid && <p role="alert" className="form-feedback error">Wähle mindestens einen Erinnerungstag.</p>}
       </div>}
