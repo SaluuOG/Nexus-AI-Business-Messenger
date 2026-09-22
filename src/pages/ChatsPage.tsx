@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   CheckCheck,
   FileText,
   MessageCircle,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useMobileLayout } from '../features/mobile/useMobileLayout';
 import { ChatScanAction } from '../components/ChatScanAction';
 import {
   ChatStatusBadge,
@@ -188,6 +190,7 @@ export function ChatsPage({
   const [chatSearch, setChatSearch] = useSearchParams();
   const linkedConversationId = chatSearch.get('conversation');
   const linkedMessageId = chatSearch.get('message');
+  const isMobile = useMobileLayout();
   const selectedRef = useRef<string | null>(null);
   const linkedConversationRef = useRef<string | null>(linkedConversationId);
   const messageRequestRef = useRef(0);
@@ -217,6 +220,10 @@ export function ChatsPage({
 
   const [conversations, setConversations] = useState<DirectConversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(requestedConversationId ?? null);
+  const mobileConversationOpen = Boolean(selectedId || linkedConversationId || chatSearch.get('task'));
+  const mobileListOnly = isMobile && !mobileConversationOpen;
+  const mobileListOnlyRef = useRef(mobileListOnly);
+  mobileListOnlyRef.current = mobileListOnly;
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [oldestCursor, setOldestCursor] = useState<MessageCursor | null>(null);
   const [hasOlder, setHasOlder] = useState(false);
@@ -390,6 +397,7 @@ export function ChatsPage({
     if (result.error) return;
     setConversations(result.data);
     setSelectedId((current) => {
+      if (mobileListOnlyRef.current) return null;
       const target = linkedConversationRef.current || current;
       if (target && result.data.some((conversation) => conversation.conversation_id === target)) return target;
       return linkedConversationRef.current ? null : result.data[0]?.conversation_id ?? null;
@@ -419,6 +427,7 @@ export function ChatsPage({
       setError('Der verlinkte Chat ist nicht mehr verfügbar.');
     }
     setSelectedId((current) => {
+      if (mobileListOnlyRef.current) return null;
       const target = preferred || linkedConversationId || current;
       return target && result.data.some((conversation) => conversation.conversation_id === target)
         ? target
@@ -602,11 +611,14 @@ export function ChatsPage({
   }, [currentUserId]);
 
   useEffect(() => {
+    if (isMobile && !linkedConversationId && !chatSearch.get('task')) setSelectedId(null);
+    else if (linkedConversationId) setSelectedId(linkedConversationId);
     void refreshConversations(linkedConversationId || requestedConversationId);
   }, [linkedConversationId]);
 
   useEffect(() => {
     if (!requestedConversationId) return;
+    setChatSearch({ conversation: requestedConversationId }, { replace: true });
     setSelectedId(requestedConversationId);
     void refreshConversations(requestedConversationId);
     onRequestedConversationHandled?.();
@@ -644,6 +656,20 @@ export function ChatsPage({
       selectedRef.current === selectedId
       && realtimeGenerationRef.current === realtimeGeneration
     );
+    const activeRecorder = recorderRef.current;
+    if (activeRecorder?.state && activeRecorder.state !== 'inactive') {
+      (activeRecorder as MediaRecorder & { __cancel?: boolean }).__cancel = true;
+      activeRecorder.stop();
+    }
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setRecording(false);
+    setRecordSeconds(0);
+
     if (!selectedId) {
       messageRequestRef.current += 1;
       messageCountRef.current = 0;
@@ -676,20 +702,6 @@ export function ChatsPage({
     clearScrollTimers();
     pendingScrollRef.current = null;
     scrollLockRef.current = null;
-    const activeRecorder = recorderRef.current;
-    if (activeRecorder?.state && activeRecorder.state !== 'inactive') {
-      (activeRecorder as MediaRecorder & { __cancel?: boolean }).__cancel = true;
-      activeRecorder.stop();
-    }
-    if (recordTimerRef.current) {
-      clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
-    }
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    setRecording(false);
-    setRecordSeconds(0);
-
     const scope = draftScope(selectedId);
     setDraft(scope ? readChatDraft(scope) : '');
     setTextRetry(scope ? retryStoreRef.current.get(scope) : null);
@@ -766,6 +778,7 @@ export function ChatsPage({
   }, [selectedId, linkedConversationId, linkedMessageId, currentUserId]);
 
   useEffect(() => () => {
+    selectedRef.current = null;
     if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     clearScrollTimers();
     for (const timer of markReadTimerRef.current.values()) clearTimeout(timer);
@@ -855,7 +868,8 @@ export function ChatsPage({
   };
 
   const startRecording = async () => {
-    if (recording || sending || editing) return;
+    if (!selectedId || recording || sending || editing) return;
+    const recordingChatId = selectedId;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setError('Sprachaufnahme wird von diesem Browser nicht unterstützt.');
       return;
@@ -864,6 +878,7 @@ export function ChatsPage({
       setError(null);
       clearPending();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (selectedRef.current !== recordingChatId) { stream.getTracks().forEach(track => track.stop()); return; }
       streamRef.current = stream;
       const candidates = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
       const mimeType = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || '';
@@ -1074,7 +1089,7 @@ export function ChatsPage({
     && !textRetry;
 
   return (
-    <div className="chat-layout real-chat-layout">
+    <div className="chat-layout real-chat-layout" data-mobile-pane={mobileConversationOpen ? 'conversation' : 'list'}>
       <section className="chat-list">
         <div className="chat-list-title">
           <Header kicker="MESSENGER" title="Chats" sub="Echte 1:1-Nachrichten zwischen deinen Nexus-Kontakten." />
@@ -1082,11 +1097,12 @@ export function ChatsPage({
         </div>
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Chats durchsuchen" /></div>
         <ChatStatusFilter value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
+        {mobileListOnly && error && <div className="chat-error" role="alert">{error}</div>}
         {!loading && conversations.length > 0 && filtered.length === 0 && <div className="chat-list-empty">Keine Chats für diese Auswahl.</div>}
         {loading && conversations.length === 0 && <div className="chat-list-empty">Chats werden geladen…</div>}
         {!loading && conversations.length === 0 && <div className="chat-list-empty"><MessageCircle size={24} /><b>Noch keine Chats</b></div>}
         {filtered.map((conversation) => (
-          <button className={`chat${selectedId === conversation.conversation_id ? ' active' : ''}`} onClick={() => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setSelectedId(conversation.conversation_id); setChatSearch({}); }} key={conversation.conversation_id}>
+          <button className={`chat${selectedId === conversation.conversation_id ? ' active' : ''}`} onClick={() => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setSelectedId(conversation.conversation_id); setChatSearch({ conversation: conversation.conversation_id }); }} key={conversation.conversation_id}>
             <div className="avatar">{initials(conversation.full_name, conversation.username)}</div>
             <span>
               <b>{nameOf(conversation)}</b>
@@ -1100,6 +1116,7 @@ export function ChatsPage({
       </section>
 
       <section className="conversation">
+        <div className="mobile-chat-backbar"><button type="button" onClick={() => { setSelectedId(null); setError(null); setContextWarning(null); setContextRetryMessageId(null); setChatSearch({}); }}><ArrowLeft size={20} /> Alle Chats</button></div>
         <TaskMessageContext kind="direct" onChatResolved={(id) => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setSelectedId(id); void refreshConversations(id); }} />
         {contextWarning && <div className="chat-error chat-context-warning" role="status">{contextWarning}</div>}
         {error && (
@@ -1220,7 +1237,7 @@ export function ChatsPage({
                 maxLength={5000}
                 disabled={recording || sending || Boolean(textRetry)}
               />
-              <button onClick={() => void submit()} disabled={!canSend}><Send size={18} /></button>
+              <button aria-label="Nachricht senden" onClick={() => void submit()} disabled={!canSend}><Send size={18} /></button>
             </div>
           </>
         )}

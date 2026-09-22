@@ -1,0 +1,29 @@
+.mobile-chat-backbar{display:none}
+.customer-chat-button{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;flex-shrink:0;border:1px solid #3d3559;border-radius:50%;background:#211b35;color:#c4b5fd;cursor:pointer}
+.customer-chat-button:hover{background:#302448}
+.customer-chat-button:disabled{opacity:.55;cursor:wait}
+.business-customer-top .business-badge{margin-left:auto}
+.business-customer-top{gap:10px}
+.project-task-drafts{margin-top:20px;padding-top:18px;border-top:1px solid #293141}
+.project-task-drafts h3{margin:0 0 8px}
+.project-task-drafts>p,.customer-chat-hint{color:#9ca9bc;font-size:13px;line-height:1.5}
+.project-task-draft{padding:14px;margin:12px 0;border:1px solid #303749;border-radius:12px;min-width:0}
+.project-task-draft legend{padding:0 6px;color:#b8a3ef}
+.project-task-draft>.secondary{margin-top:12px}
+.project-tasks-entry{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:16px 0}
+@media(max-width:900px){
+  .real-chat-layout{display:flex!important;flex-direction:column;grid-template-columns:none!important}
+  .real-chat-layout>.chat-list,.real-chat-layout>.conversation{height:100%;max-height:100%;width:100%;min-width:0;min-height:0;flex:1 1 auto}
+  .real-chat-layout[data-mobile-pane="list"]>.conversation{display:none}
+  .real-chat-layout[data-mobile-pane="conversation"]>.chat-list{display:none}
+  .real-chat-layout[data-mobile-pane="conversation"]>.conversation{display:flex;flex-direction:column}
+  .real-chat-layout .chat-list{border-right:0;scrollbar-gutter:auto}
+  .mobile-chat-backbar{display:flex;align-items:center;flex:0 0 auto;min-height:44px;border-bottom:1px solid #252c3a;background:#10151e;padding:2px 12px}
+  .mobile-chat-backbar button{display:inline-flex;gap:8px;align-items:center;min-height:40px;padding:6px 8px;border:0;background:transparent;color:#b6a2f4;font:inherit;cursor:pointer}
+  .real-chat-layout .chat-head{padding:10px 12px}
+  .real-chat-layout:not(.group-chat-layout) .chat-head .project-pill{display:none}
+  .real-chat-layout .messages{flex:1 1 0;min-height:0;padding:12px;scrollbar-gutter:auto}
+  .real-chat-layout .composer{padding-bottom:max(11px,env(safe-area-inset-bottom));margin-top:auto}
+  .real-chat-layout .conversation-empty{min-height:0;flex:1}
+  .project-tasks-entry{align-items:flex-start;flex-wrap:wrap}
+}

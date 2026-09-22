@@ -186,8 +186,7 @@ function AppShell() {
   const startContactChat = async (contactUserId: string) => {
     const result = await openDirectConversation(contactUserId);
     if (result.error || !result.data) return { error: result.error || 'Chat konnte nicht geöffnet werden.' };
-    setRequestedConversationId(result.data);
-    navigate(routes.chats);
+    navigate(routes.chats + '?' + new URLSearchParams({ conversation: result.data }));
     return { error: null };
   };
 
@@ -385,7 +384,7 @@ function AppShell() {
       const changed = selectWorkspace(workspaceId);
       if (changed && location.pathname === routes.business) navigate(routes.business + '?' + businessSearch(workspaceId));
     }} workspaceRole={currentWorkspaceRole} workspaceLoading={dataLoading} workspaceSwitchDisabled={workspaceLifecycleBusy} identity={identity} accountName={accountName} accountSubtitle={accountSubtitle} />
-    <main><Routes>
+    <main><Suspense key={location.pathname} fallback={<div className="page" role="status">Bereich wird geladen…</div>}><Routes>
       <Route path="/" element={preferencesReady ? <Navigate to={defaultRoute} replace /> : <AppLoading />} />
       <Route
         path={routes.briefing}
@@ -410,6 +409,7 @@ function AppShell() {
         path={routes.business}
         element={
           <BusinessPage
+            onStartChat={startContactChat}
             key={auth.user?.id + ':' + selectedWorkspaceId}
             workspaceId={selectedWorkspaceId}
             workspaceName={workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.name}
@@ -424,6 +424,6 @@ function AppShell() {
       <Route path={routes.notifications} element={<NotificationsPage model={notifications} />} />
       <Route path={routes.settings} element={<SettingsPage key={auth.user?.id} notifications={notifications} identity={identity} setIdentity={setIdentity} startView={preferences.startView} onStartViewChange={startView => updatePreferences({ startView })} preferencesError={preferencesError} onWorkspaceChange={selectWorkspace} backendConfigured={auth.configured} accountEmail={auth.user?.email} currentUserId={auth.user?.id} profile={profile} businessProfiles={businessProfiles} workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} currentWorkspaceRole={currentWorkspaceRole} workspaceMembers={teamWorkspaceId === selectedWorkspaceId ? workspaceMembers : []} workspaceInvitations={teamWorkspaceId === selectedWorkspaceId ? workspaceInvitations : []} teamLoading={teamLoading || teamWorkspaceId !== selectedWorkspaceId} teamError={teamWorkspaceId === selectedWorkspaceId ? teamError : null} dataLoading={dataLoading} dataError={dataError} workspaceLifecycleBusy={workspaceLifecycleBusy} workspaceLifecycleFeedback={workspaceLifecycleFeedback} onSaveProfile={saveProfile} onCreateWorkspace={addWorkspace} onCreateBusinessProfile={addBusinessProfile} onInviteWorkspaceMember={inviteWorkspaceMember} onUpdateWorkspaceMemberRole={changeWorkspaceMemberRole} onRemoveWorkspaceMember={deleteWorkspaceMember} onRevokeWorkspaceInvitation={revokeInvitation} onRefreshWorkspaceTeam={refreshWorkspaceTeam} onAcceptWorkspaceInvitation={acceptInvitation} onRenameWorkspace={renameSelectedWorkspace} onLeaveWorkspace={leaveSelectedWorkspace} onTransferWorkspaceOwnership={transferSelectedWorkspaceOwnership} onDeleteWorkspace={deleteSelectedWorkspace} onUpdatePassword={auth.configured ? auth.updatePassword : undefined} onRequestPasswordReset={auth.configured ? auth.requestPasswordReset : undefined} onSignOut={auth.configured ? signOut : undefined} />} />
       <Route path={routes.auth} element={<Navigate to={routes.briefing} replace />} /><Route path="*" element={<Navigate to={routes.briefing} replace />} />
-    </Routes></main>
+    </Routes></Suspense></main>
   </div>;
 }

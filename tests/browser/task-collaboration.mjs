@@ -17,7 +17,7 @@ await mkdir('browser-results',{recursive:true});
 try {
   for(const [name,engine] of [['chromium',chromium],['webkit',webkit]]) {
     const browser = await engine.launch();
-    const context = await browser.newContext({viewport:{width:1440,height:1000},timezoneId:'Europe/Berlin'});
+    const context = await browser.newContext({viewport:{width:390,height:844},timezoneId:'Europe/Berlin'});
     await context.route('**/*',route=>route.request().url().startsWith('http://127.0.0.1:4185')?route.continue():route.abort());
     const page=await context.newPage();
     page.setDefaultTimeout(15_000);
@@ -31,7 +31,9 @@ try {
     const refreshed=async()=>{await collaboration.getByRole('button',{name:'Zusammenarbeit aktualisieren',exact:true}).waitFor(); await page.waitForFunction(()=>!document.querySelector('[aria-label="Zusammenarbeit aktualisieren"]')?.disabled);};
     try {
       await page.clock.setFixedTime(new Date('2026-09-16T10:00:00Z'));
-      await page.goto('http://127.0.0.1:4185/#/app/business?workspace=w1&view=tasks');
+      await page.goto('http://127.0.0.1:4185/#/app/business?workspace=w1&view=projects');
+      await page.getByRole('button',{name:'Alle Projektaufgaben',exact:true}).click();
+      assert.equal(await page.getByRole('tab',{name:/^Aufgaben /}).count(),0);
       await page.getByRole('article',{name:'Meine heutige Aufgabe',exact:true}).getByRole('button',{name:'Details & Zusammenarbeit',exact:true}).click();
       await comments.getByText('Noch keine Kommentare.',{exact:true}).waitFor();
       assert.match(page.url(),/task=mine/);
@@ -149,7 +151,7 @@ try {
       await page.evaluate(()=>{window.nexusTest.collaborationDelay=800;});
       await collaboration.getByRole('button',{name:'Zusammenarbeit aktualisieren',exact:true}).click();
       await page.getByRole('complementary').getByRole('combobox').selectOption('w2');
-      await page.getByRole('tab',{name:'Aufgaben 1',exact:true}).click();
+      await page.getByRole('button',{name:'Alle Projektaufgaben',exact:true}).click();
       await page.getByRole('article',{name:'Aufgabe im zweiten Team',exact:true}).getByRole('button',{name:'Details & Zusammenarbeit',exact:true}).click();
       await comments.getByText('Noch keine Kommentare.',{exact:true}).waitFor();
       await page.waitForFunction(()=>window.nexusTest.collaborationPending===0);
@@ -159,7 +161,7 @@ try {
       // Return, then change accounts while the first user's draft is open.
       await page.evaluate(()=>{window.nexusTest.collaborationDelay=0;});
       await page.getByRole('complementary').getByRole('combobox').selectOption('w1');
-      await page.getByRole('tab',{name:/^Aufgaben /}).click();
+      await page.getByRole('button',{name:'Alle Projektaufgaben',exact:true}).click();
       await page.getByRole('article',{name:'Meine heutige Aufgabe',exact:true}).getByRole('button',{name:'Details & Zusammenarbeit',exact:true}).click();
       await comments.getByLabel('Neuer Kommentar',{exact:true}).fill('Privater Entwurf von Konto eins');
       await page.evaluate(()=>{window.nexusTest.memberships.push({workspace_id:'w1',user_id:'other',role:'member',full_name:'Zweites Konto'});window.nexusTest.switchUser('other');});

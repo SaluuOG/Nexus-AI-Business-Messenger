@@ -24,6 +24,7 @@ export type NexusCustomer = {
   workspace_id: string;
   name: string;
   contact_name: string | null;
+  chat_user_id: string | null;
   email: string | null;
   phone: string | null;
   website: string | null;
@@ -68,7 +69,7 @@ export type NexusProjectTask = {
 };
 
 export type CustomerInput = Pick<NexusCustomer, 'name' | 'status'> &
-  Partial<Pick<NexusCustomer, 'contact_name' | 'email' | 'phone' | 'website' | 'notes'>>;
+  Partial<Pick<NexusCustomer, 'contact_name' | 'chat_user_id' | 'email' | 'phone' | 'website' | 'notes'>>;
 
 export type ProjectInput = Pick<
   NexusProject,
@@ -88,7 +89,7 @@ type DatabaseProject = Omit<NexusProject, 'value_cents' | 'progress'> & {
 };
 
 const customerColumns =
-  'id, workspace_id, name, contact_name, email, phone, website, status, notes, created_by, created_at, updated_at';
+  'id, workspace_id, name, contact_name, chat_user_id, email, phone, website, status, notes, created_by, created_at, updated_at';
 const projectColumns =
   'id, workspace_id, customer_id, title, status, priority, value_cents, currency, deadline, progress, description, created_by, created_at, updated_at';
 const taskColumns =
@@ -120,6 +121,7 @@ function publicBusinessError(message: string | undefined, fallback: string) {
   if (normalized.includes('verantwortliche personen')) {
     return 'Die verantwortliche Person muss ein aktives Team-Mitglied mit Schreibrecht sein.';
   }
+  if (normalized.includes('bestätigten nexus-kontakt')) return 'Bitte wähle einen bestätigten Nexus-Kontakt aus deiner Kontaktliste.';
   if (normalized.includes('duplicate key')) {
     return 'Dieser Datensatz ist bereits vorhanden.';
   }
@@ -222,6 +224,7 @@ export async function createCustomer(workspaceId: string, input: CustomerInput) 
       workspace_id: workspaceId,
       name: input.name.trim(),
       contact_name: nullableText(input.contact_name),
+      chat_user_id: input.chat_user_id || null,
       email: nullableText(input.email),
       phone: nullableText(input.phone),
       website: nullableText(input.website),
@@ -245,6 +248,7 @@ export async function updateCustomer(customerId: string, input: CustomerInput) {
     .update({
       name: input.name.trim(),
       contact_name: nullableText(input.contact_name),
+      chat_user_id: input.chat_user_id || null,
       email: nullableText(input.email),
       phone: nullableText(input.phone),
       website: nullableText(input.website),
@@ -300,6 +304,23 @@ export async function createProject(workspaceId: string, input: ProjectInput) {
     data: data ? normalizeProject(data as DatabaseProject) : null,
     error: publicBusinessError(error?.message, 'Das Projekt konnte nicht angelegt werden.'),
   };
+}
+
+export type InitialProjectTask = Omit<ProjectTaskInput, 'project_id'> & { id: string };
+
+// A single database transaction creates the project and its assigned tasks.
+// Keep the request ID for retries so a lost response cannot create duplicates.
+export async function createProjectWithTasks(workspaceId: string, projectId: string, input: ProjectInput, tasks: InitialProjectTask[]) {
+  if (!supabase) return { data: null, error: 'Supabase ist nicht konfiguriert.' };
+  try {
+    const { data, error } = await supabase.rpc('create_project_with_tasks', {
+      p_workspace_id: workspaceId, p_project_id: projectId, p_project: input, p_tasks: tasks,
+    });
+    return { data: data ? normalizeProject(data as DatabaseProject) : null,
+      error: publicBusinessError(error?.message, 'Projekt und Aufgaben konnten nicht angelegt werden. Bitte Eingaben prüfen und erneut speichern.') };
+  } catch {
+    return { data: null, error: 'Die Verbindung wurde unterbrochen. Bitte erneut speichern; dein Projekt wird dabei nicht doppelt angelegt.' };
+  }
 }
 
 export async function updateProject(projectId: string, input: ProjectInput) {

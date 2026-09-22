@@ -1,0 +1,19 @@
+.mobile-install{padding:18px;border:1px solid #30384a;border-radius:14px;background:#121823;min-width:0;overflow-wrap:anywhere}
+.mobile-install h3{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:15px;color:#eef2f7}
+.mobile-install h3 svg{color:#a49bff;flex-shrink:0}
+.mobile-install p,.settings-grid .mobile-install p{font-size:13px;line-height:1.6;color:#a5afc0;margin:8px 0}
+.mobile-install strong{color:#eef2f7}
+.mobile-install summary{cursor:pointer;min-height:44px;padding:12px 0;color:#beb8ff;font-size:13px}
+.mobile-install button{min-height:44px;margin:12px 0 4px;justify-content:center}
+.mobile-install :is(button,summary):focus-visible{outline:2px solid #beb8ff;outline-offset:3px}
+.auth-card .mobile-install{margin-top:22px}
+@media(max-width:900px){
+  .app{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+  .side{padding-top:max(12px,env(safe-area-inset-top))}
+  .app:not(:has(.real-chat-layout)) main{padding-bottom:env(safe-area-inset-bottom)}
+  .auth-shell{min-height:100dvh;padding-top:max(24px,env(safe-area-inset-top));padding-bottom:max(24px,env(safe-area-inset-bottom));padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+}
+@media(max-width:650px){
+  /* iOS otherwise zooms the viewport when focusing smaller form controls. */
+  input,select,textarea{font-size:16px!important}
+}

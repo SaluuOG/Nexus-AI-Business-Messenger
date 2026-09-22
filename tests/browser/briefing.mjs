@@ -39,6 +39,39 @@ try {
       assert.equal(await page.evaluate(() => window.nexusTest.writes), 0);
 
       await page.setViewportSize({ width: 390, height: 844 });
+      const mainNav = page.getByRole('navigation', { name: 'Hauptnavigation', exact: true });
+      const openMenu = page.getByRole('button', { name: 'Hauptmenü öffnen', exact: true });
+      assert.equal(await mainNav.isVisible(), false);
+      assert.ok((await openMenu.boundingBox()).x < 24, 'Mobile menu belongs at the top left');
+      for (const width of [390, 320]) {
+        await page.setViewportSize({ width, height: 844 });
+        await openMenu.click();
+        assert.equal(await page.getByRole('button', { name: 'Hauptmenü schließen', exact: true }).getAttribute('aria-expanded'), 'true');
+        assert.equal(await mainNav.getByRole('button').count(), 8);
+        assert.equal(await page.evaluate(() => ['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)), false, 'Opening navigation must not focus a text field');
+        const box = await mainNav.boundingBox();
+        assert.ok(box.x >= 0 && box.x + box.width <= width && box.y + box.height <= 844);
+        await page.screenshot({ path: `browser-results/${name}-mobile-menu-${width}.png`, fullPage: false });
+        await page.keyboard.press('Escape');
+        assert.equal(await mainNav.isVisible(), false);
+        assert.equal(await openMenu.evaluate(el => document.activeElement === el), true);
+      }
+      await openMenu.click();
+      await page.getByRole('button', { name: 'Menü schließen', exact: true }).click({ position: { x: 310, y: 800 } });
+      assert.equal(await mainNav.isVisible(), false);
+      await openMenu.click();
+      await mainNav.getByRole('button', { name: 'Chats', exact: true }).click();
+      await page.waitForURL(url => url.hash === '#/app/chats');
+      assert.equal(await mainNav.isVisible(), false);
+      await openMenu.click();
+      assert.equal(await mainNav.getByRole('button', { name: 'Chats', exact: true }).getAttribute('aria-current'), 'page');
+      await mainNav.getByRole('button', { name: 'Briefing', exact: true }).click();
+      await today.locator('.briefing-item').first().waitFor();
+      assert.equal(await mainNav.isVisible(), false);
+      await page.mouse.wheel(0, 200);
+      await page.waitForFunction(() => window.scrollY > 0);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.setViewportSize({ width: 390, height: 844 });
       assert.equal(await today.locator('.briefing-item-side').first().isVisible(), true);
       const overflow = await page.evaluate(() => ({
         width: window.innerWidth, scrollWidth: document.documentElement.scrollWidth,
@@ -47,6 +80,8 @@ try {
       assert.ok(overflow.scrollWidth <= overflow.width, JSON.stringify(overflow));
       await page.screenshot({ path: 'browser-results/' + name + '-mobile.png', fullPage: true });
       await page.setViewportSize({ width: 1440, height: 1000 });
+      assert.equal(await mainNav.isVisible(), true);
+      assert.equal(await openMenu.isVisible(), false);
 
       await today.getByRole('button', { name: /Meine heutige Aufgabe/ }).click();
       await page.locator('.task-card').getByRole('heading', { name: 'Meine heutige Aufgabe', exact: true }).waitFor();
@@ -90,7 +125,7 @@ try {
       await page.getByRole('button', { name: 'Alle Projekte anzeigen', exact: true }).click();
       await page.locator('.business-project-card').getByRole('heading', { name: 'Kommendes Projekt', exact: true }).waitFor();
       assert.equal(await page.locator('.business-project-card').count(), 3);
-      await page.getByRole('tab', { name: /Aufgaben/ }).click();
+      await page.getByRole('button', { name: /Alle Projektaufgaben/ }).click();
       await page.waitForURL(url => url.hash.includes('view=tasks'));
       assert.equal(new URL(page.url().split('#')[1], 'https://example.invalid').searchParams.has('task'), false);
       await page.getByRole('button', { name: 'Briefing', exact: true }).click();
@@ -122,6 +157,12 @@ try {
     } catch (error) {
       await page.screenshot({ path: 'browser-results/' + name + '-failure.png', fullPage: true });
       console.error('Browser errors:', errors);
+      console.error('Menu state:', await page.evaluate(() => ({
+        open: document.querySelector('.side')?.getAttribute('data-menu-open'),
+        active: document.activeElement?.tagName,
+        toggle: document.querySelector('.mobile-menu-toggle')?.getAttribute('aria-expanded'),
+        nav: document.querySelector('#nexus-main-navigation')?.getBoundingClientRect().toJSON(),
+      })));
       console.error('Test URL:', page.url());
       console.error('Test UI:', (await page.locator('body').innerText()).slice(0, 6000));
       throw error;

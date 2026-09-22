@@ -1,0 +1,18 @@
+.mobile-menu-toggle,.mobile-menu-backdrop{display:none}
+@media(max-width:900px){
+  .app{grid-template-rows:auto minmax(0,1fr)}
+  .side,.app:has(.real-chat-layout)>.side{overflow:visible;z-index:40;border-bottom:1px solid #242b38}
+  .side .brand{position:relative;z-index:42;margin-bottom:0;min-height:44px;gap:10px}
+  .side .brand .logo{width:32px;height:32px;border-radius:10px;flex-shrink:0}
+  .mobile-menu-toggle{display:grid;place-items:center;width:44px;height:44px;flex:0 0 44px;border:1px solid #30394a;border-radius:12px;background:#171e29;color:#edf0f8;cursor:pointer;padding:0}
+  .mobile-menu-toggle[aria-expanded="true"]{background:#25213e;border-color:#7169c8;color:#d6d0ff}
+  .mobile-menu-toggle:focus-visible,.side nav button:focus-visible{outline:2px solid #b6aaff;outline-offset:3px}
+  .side nav{display:none}
+  .side[data-menu-open="true"] nav{position:absolute;display:grid;grid-template-columns:1fr;gap:4px;top:calc(100% + 8px);left:12px;width:min(320px,calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)));max-height:calc(var(--nexus-visual-height,100dvh) - 104px - env(safe-area-inset-top));overflow-y:auto;overscroll-behavior:contain;padding:10px;border:1px solid #34374b;border-radius:18px;background:#121823;box-shadow:0 20px 65px #0009;z-index:43}
+  .side nav button{justify-content:flex-start;gap:13px;min-height:46px;padding:12px 14px;font-size:14px;border-radius:11px}
+  .side nav button span{display:inline}
+  .side nav button svg{width:19px;height:19px;flex-shrink:0}
+  .side nav button.active{background:#282440;color:#e5ddff;box-shadow:inset 3px 0 #a696ff}
+  .side nav button:hover{background:#202939}
+  .mobile-menu-backdrop{display:block;position:fixed;inset:0;z-index:41;border:0;padding:0;background:#03061180;cursor:default}
+}

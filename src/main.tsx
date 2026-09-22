@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
 import { App } from './app/App';
 import { AuthProvider } from './features/auth/AuthProvider';
+import { registerMobileApp } from './features/mobile/install';
 import './styles.css';
 import './auth.css';
 import './password.css';
@@ -23,6 +24,11 @@ import './chat-scan.css';
 import './chat-status.css';
 import './message-search.css';
 import './message-history.css';
+import './mobile-install.css';
+import './mobile-menu.css';
+import './mobile-conversations.css';
+
+registerMobileApp();
 
 if ('scrollRestoration' in window.history) {
   window.history.scrollRestoration = 'manual';

@@ -12,6 +12,7 @@ const task = (id, title, patch = {}) => ({
   created_at: '2026-09-14T08:00:00Z', updated_at: '2026-09-14T08:00:00Z', completed_at: null, ...patch,
 });
 const messageHistoryFixture = sessionStorage.getItem('nexusTest.messageHistoryFixture') === '1';
+const mobileBusinessFixture = sessionStorage.getItem('nexusTest.mobileBusinessFixture') === '1';
 const workspaceLifecycleFixture = sessionStorage.getItem('nexusTest.workspaceLifecycleFixture') === '1';
 const workspace = (id, name, owner_id) => ({
   id, name, owner_id, slug: `${id}-slug`, avatar_url: null,
@@ -79,6 +80,8 @@ const historyGroupMessages = [
 const state = {
   workspaces: structuredClone(workspaceLifecycleFixture ? lifecycleWorkspaces : defaultWorkspaces),
   memberships: structuredClone(workspaceLifecycleFixture ? lifecycleMemberships : defaultMemberships),
+  customers: mobileBusinessFixture ? ['w1','w2','w3'].flatMap(workspace_id => [{ id: 'customer-'+workspace_id, workspace_id, name: 'Kunde Muster', contact_name: 'Test Kontakt', chat_user_id: 'other', email: 'kunde@example.invalid', status: 'active' }, { id: 'unlinked-'+workspace_id, workspace_id, name: 'Kunde ohne Chat', chat_user_id: null, status: 'lead' }]) : [],
+  chatReadCalls: [], customerChatCalls: [], projectCreateCalls: [],
   projects: [project('p1', 'Überfälliges Projekt', 'w1', '2026-09-13'), project('p2', 'Kommendes Projekt', 'w1', '2026-09-16'), project('p3', 'Abgeschlossenes Projekt', 'w1', null, 'completed'), project('p4', 'Zweites Team', 'w2', null)],
   tasks: [
     task('mine', 'Meine heutige Aufgabe'), task('past', 'Meine überfällige Aufgabe', { due_date: '2026-09-13' }),
@@ -112,6 +115,7 @@ const state = {
 };
 state.projects.push(project('p5', 'Drittes Projekt', 'w3', null));
 state.tasks.push(...JSON.parse(sessionStorage.getItem('nexusTest.created') || '[]'));
+if (mobileBusinessFixture) state.memberships.push(membership('w3','other','member','Test Kontakt','test'), membership('w3','guest-user','guest','Nur Gast','gast'));
 const memberships = state.memberships;
 let user = { id: 'me', email: 'nexus-test@example.invalid', user_metadata: { full_name: 'Test Nutzer' } };
 const collaboration = createCollaborationService(state, () => user);
@@ -426,7 +430,7 @@ export const supabase = {
       async then(resolve, reject) {
         try {
           if (state.failure === table) return resolve({ data: null, error: { message: 'connection failed' } });
-          let rows = table === 'projects' ? state.projects : table === 'project_tasks' ? state.tasks
+          let rows = table === 'customers' ? state.customers : table === 'projects' ? state.projects : table === 'project_tasks' ? state.tasks
             : table === 'workspace_members' ? memberships
             : table === 'project_task_sources' ? state.sources.filter(s => !state.sourceDenied && !state.revoked && (s.kind === 'direct' ? state.directMessages : state.groupMessages).some(m => m.message_id === s.message_id && !m.deleted_at))
             : table === 'workspaces' ? state.workspaces.filter(workspace => !workspaceLifecycleFixture || memberships.some(member => member.workspace_id === workspace.id && member.user_id === user.id))
@@ -434,12 +438,22 @@ export const supabase = {
           rows = rows.filter(row => request.filters.every(([key, value]) => row[key] === value));
           if (request.operation !== 'select') {
             state.writes++;
-            if (request.operation !== 'update' || table !== 'project_tasks') throw new Error('Unexpected test mutation');
-            rows.forEach(row => {
-              const before = { ...row };
-              Object.assign(row, request.value, { updated_at: 'revision-' + (++state.revision) });
-              collaboration.taskChanged(before, row);
-            });
+            if (table === 'customers' && mobileBusinessFixture) {
+              const workspaceId = request.value?.workspace_id || rows[0]?.workspace_id;
+              if (!['owner','admin'].includes(currentMembership(workspaceId)?.role)) return resolve({ data: null, error: { message: 'row-level security' } });
+              if (request.operation === 'insert') {
+                const created = { id: crypto.randomUUID(), ...request.value };
+                state.customers.push(created); rows = [created];
+              } else if (request.operation === 'update') rows.forEach(row => Object.assign(row, request.value));
+              else throw new Error('Unexpected customer deletion');
+            } else {
+              if (request.operation !== 'update' || table !== 'project_tasks') throw new Error('Unexpected test mutation');
+              rows.forEach(row => {
+                const before = { ...row };
+                Object.assign(row, request.value, { updated_at: 'revision-' + (++state.revision) });
+                collaboration.taskChanged(before, row);
+              });
+            }
           }
           if (request.range) rows = rows.slice(request.range[0], request.range[1] + 1);
           const result = structuredClone({ data: request.single ? rows[0] ?? null : rows, error: null });
@@ -458,6 +472,28 @@ export const supabase = {
     return query;
   },
   async rpcResult(name, args) {
+    if (name === 'get_my_contacts' && mobileBusinessFixture) return { data: [{ contact_user_id: 'other', full_name: 'Test Kontakt', username: 'test', connected_at: '2026-01-01T00:00:00Z' }], error: null };
+    if (name === 'open_direct_conversation' && mobileBusinessFixture) {
+      state.customerChatCalls.push(args.p_contact_user_id);
+      return args.p_contact_user_id === 'other' ? { data: 'c1', error: null } : { data: null, error: { message: '1:1-Chats können nur mit Nexus-Kontakten gestartet werden.' } };
+    }
+    if (name === 'mark_direct_conversation_read' || name === 'mark_group_read') {
+      state.chatReadCalls.push({ name, args });
+      return { data: null, error: null };
+    }
+    if (name === 'create_project_with_tasks') {
+      state.projectCreateCalls.push(structuredClone(args));
+      if (state.failure === name) return { data: null, error: { message: 'Verantwortliche Personen müssen aktive Team-Mitglieder mit Schreibrecht sein.' } };
+      if (!['owner','admin'].includes(currentMembership(args.p_workspace_id)?.role)) return { data: null, error: { message: 'permission denied' } };
+      let created = state.projects.find(p => p.id === args.p_project_id);
+      if (!created) {
+        created = { ...project(args.p_project_id, args.p_project.title, args.p_workspace_id, null), ...args.p_project };
+        state.projects.push(created);
+        state.tasks.push(...args.p_tasks.map(t => ({ ...task(crypto.randomUUID(), t.title), ...t, workspace_id: args.p_workspace_id, project_id: created.id })));
+        state.writes++;
+      }
+      return { data: structuredClone(created), error: null };
+    }
     if (['get_my_chat_scan_state', 'get_my_chat_scan_states', 'set_my_chat_scan_done', 'get_my_chat_scan_result'].includes(name)) {
       const userId = user.id;
       state.chatScanStateCalls.push({ name, args: structuredClone(args), userId });
