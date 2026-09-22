@@ -13,8 +13,8 @@ try{
  for(const[name,engine]of[['chromium',chromium],['webkit',webkit]]){
   const browser=await engine.launch();const context=await browser.newContext({viewport:{width:390,height:844}});
   await context.addInitScript(()=>sessionStorage.setItem('nexusTest.mobileBusinessFixture','1'));
-  await context.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
-  const page=await context.newPage();page.setDefaultTimeout(15000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await context.route('**/*',route=>[base+'/', 'blob:'+base+'/'].some(prefix=>route.request().url().startsWith(prefix))?route.continue():route.abort());
+  const page=await context.newPage();page.setDefaultTimeout(15000);const errors=[],failedRequests=[];page.on('pageerror',e=>errors.push(e.message));page.on('requestfailed',r=>failedRequests.push({url:r.url(),failure:r.failure()}));
   const source=page.locator('.business-project-card').filter({hasText:'Drittes Projekt'});
   const dialog=page.getByRole('dialog',{name:'Neues Projekt anlegen',exact:true});
   const saveDialog=page.getByRole('dialog',{name:'Als Vorlage speichern',exact:true});
@@ -101,7 +101,7 @@ try{
    assert.equal(await page.getByRole('button',{name:'Projekt',exact:true}).count(),0);
    assert.deepEqual(errors,[]);
    console.log(`${name}: template save/select, dates, editable checklist/assignee, lost-response deduplication, manual creation, archive, 320/390px, role/account stale replies passed`);
-  }catch(error){await page.screenshot({path:`browser-results/${name}-project-template-failure.png`,fullPage:true});console.error(await page.locator('body').innerText());console.error(await page.locator('body').ariaSnapshot());throw error;}
+  }catch(error){await page.screenshot({path:`browser-results/${name}-project-template-failure.png`,fullPage:true});console.error({errors,failedRequests});console.error(await page.locator('body').innerText());console.error(await page.locator('body').ariaSnapshot());throw error;}
   finally{await context.close();await browser.close();}
  }
 }finally{await server.close();}
