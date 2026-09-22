@@ -35,8 +35,9 @@ try {for(const [name,engine] of [['chromium',chromium],['webkit',webkit]]){
     await page.evaluate(()=>window.nexusPushTest.fail='');await enable().click();
     await panel.getByText('Push ist auf diesem Gerät aktiv.',{exact:true}).waitFor();
     assert.equal(await panel.getByRole('switch',{name:'Inhalte auf dem Sperrbildschirm',exact:true}).isChecked(),false);
-    await panel.getByRole('switch',{name:'Inhalte auf dem Sperrbildschirm',exact:true}).check();
+    await panel.getByRole('switch',{name:'Inhalte auf dem Sperrbildschirm',exact:true}).click();
     await panel.getByText('Geräteeinstellung gespeichert.',{exact:true}).waitFor();
+    assert.equal(await panel.getByRole('switch',{name:'Inhalte auf dem Sperrbildschirm',exact:true}).isChecked(),true);
     await page.reload();await panel.getByText('Push ist auf diesem Gerät aktiv.',{exact:true}).waitFor();
     assert.equal(await panel.getByRole('switch',{name:'Inhalte auf dem Sperrbildschirm',exact:true}).isChecked(),true);
     await page.evaluate(()=>window.nexusPushTest.fail='options');
