@@ -1,7 +1,7 @@
 // Synthetic browser service only. Database permissions are independently tested
 // against real Postgres in tests/sql/task-collaboration-rls.sql.
 export function createCollaborationService(state, getUser) {
-  const tables = ['task_comments', 'task_checklist_items', 'task_activity'];
+  const tables = ['task_comments', 'task_checklist_items', 'task_activity', 'task_attachments'];
   const saved = JSON.parse(sessionStorage.getItem('nexusTest.collaboration') || '{}');
   state.collaboration = Object.fromEntries(tables.map(table => [table, saved[table] ?? []]));
   state.collaborationWrites = 0;
@@ -60,6 +60,7 @@ export function createCollaborationService(state, getUser) {
               for (const row of rows) {
                 if (q.operation === 'delete') {
                   state.collaboration[table] = state.collaboration[table].filter(r => r.id !== row.id);
+                  if (table === 'task_comments') state.collaboration.task_attachments = state.collaboration.task_attachments.filter(f => f.comment_id !== row.id);
                   record(row, table === 'task_comments' ? 'comment_deleted' : 'checklist_deleted');
                 } else {
                   const changed = Object.keys(q.value).filter(key => row[key] !== q.value[key]);

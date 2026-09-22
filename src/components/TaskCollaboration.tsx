@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { CheckSquare2, History, MessageSquare, Plus, RefreshCw } from 'lucide-react';
+import { CheckSquare2, History, MessageSquare, Paperclip, Plus, RefreshCw } from 'lucide-react';
 import type { NexusWorkspaceMember, WorkspaceRole } from '../features/data/nexusData';
 import { taskMemberName, taskPermissions } from '../features/data/projectTasks';
 import { addChecklistItem, addTaskComment, changeTaskEntry, taskActivityLabel, type TaskChecklistItem, type TaskComment } from '../features/data/taskCollaboration';
 import { useTaskCollaboration } from '../features/data/useTaskCollaboration';
+import { TaskAttachments } from './TaskAttachments';
 
 type Props = { workspaceId: string; taskId: string; currentUserId: string; role: WorkspaceRole; members: NexusWorkspaceMember[] };
 const dateLabel = (value: string) => new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -56,14 +57,14 @@ export function TaskCollaboration({ workspaceId, taskId, currentUserId, role, me
   };
 
   const remove = (kind: 'comment' | 'checklist', entry: TaskComment | TaskChecklistItem) => {
-    if (!window.confirm(kind === 'comment' ? 'Diesen Kommentar dauerhaft entfernen?' : 'Diesen Checklistenpunkt dauerhaft entfernen?')) return;
+    if (!window.confirm(kind === 'comment' ? 'Diesen Kommentar und seine Anhänge dauerhaft entfernen?' : 'Diesen Checklistenpunkt dauerhaft entfernen?')) return;
     void perform(() => changeTaskEntry(kind === 'comment' ? 'task_comments' : 'task_checklist_items', workspaceId, taskId, entry, 'delete'), 'Eintrag entfernt.', () => { if (editor?.entry.id === entry.id) setEditor(null); });
   };
 
   return <section className="task-collaboration" aria-labelledby={headingId}>
     <div className="task-collaboration-head"><div><h3 id={headingId}>Zusammenarbeit</h3><p>Abstimmen, nächste Schritte festhalten und Änderungen verfolgen.</p></div>
       <button className="secondary" onClick={() => void model.refresh()} disabled={saving || loading} aria-label="Zusammenarbeit aktualisieren"><RefreshCw size={15} /> Aktualisieren</button></div>
-    {!permissions.write && <p className="collaboration-note">Du hast Lesezugriff. Kommentare und Checklisten können von Mitgliedern bearbeitet werden.</p>}
+    {!permissions.write && <p className="collaboration-note">Du hast Lesezugriff und kannst Anhänge ansehen und herunterladen. Änderungen können von Mitgliedern vorgenommen werden.</p>}
     {loading && <p role="status">Zusammenarbeit wird aktualisiert…</p>}
     {error && <div className="data-alert" role="alert">{error}</div>}
     {actionError && <div className="data-alert" role="alert">{actionError}</div>}
@@ -95,8 +96,14 @@ export function TaskCollaboration({ workspaceId, taskId, currentUserId, role, me
             {entry.created_by === currentUserId && <button disabled={disabled} onClick={() => setEditor({ kind: 'comment', entry })}>Kommentar bearbeiten</button>}
             {(entry.created_by === currentUserId || permissions.delete) && <button disabled={disabled} onClick={() => remove('comment', entry)}>Kommentar entfernen</button>}
           </div>}
+          <TaskAttachments workspaceId={workspaceId} taskId={taskId} commentId={entry.id} userId={currentUserId} role={role} files={data.attachments.filter(file => file.comment_id === entry.id)} canUpload={permissions.write && entry.created_by === currentUserId} refresh={model.refresh} />
         </li>)}</ol>
         {data.moreComments && <button className="secondary" disabled={loading || saving} onClick={() => void model.more('comments')}>Ältere Kommentare laden</button>}
+      </section>
+
+      <section className="collaboration-section task-files-section" aria-label="Dateien">
+        <h4><Paperclip size={17} /> Dateien zur Aufgabe</h4>
+        <TaskAttachments workspaceId={workspaceId} taskId={taskId} userId={currentUserId} role={role} files={data.attachments.filter(file => !file.comment_id)} canUpload={permissions.write} refresh={model.refresh} />
       </section>
 
       <section className="collaboration-section task-activity" aria-label="Änderungsverlauf">

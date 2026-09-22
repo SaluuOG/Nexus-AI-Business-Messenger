@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
+import { listTaskAttachments, type TaskAttachment } from './taskAttachments';
 
 export type TaskComment = {
   id: string; workspace_id: string; task_id: string; body: string;
@@ -14,11 +15,11 @@ export type TaskActivity = {
   event_type: string; changed_fields: string[]; created_at: string;
 };
 export type TaskCollaboration = {
-  comments: TaskComment[]; checklist: TaskChecklistItem[]; activity: TaskActivity[];
+  comments: TaskComment[]; checklist: TaskChecklistItem[]; activity: TaskActivity[]; attachments: TaskAttachment[];
   moreComments: boolean; moreActivity: boolean;
 };
 export const emptyTaskCollaboration: TaskCollaboration = {
-  comments: [], checklist: [], activity: [], moreComments: false, moreActivity: false,
+  comments: [], checklist: [], activity: [], attachments: [], moreComments: false, moreActivity: false,
 };
 export const collaborationPageSize = 40;
 const commentColumns = 'id,workspace_id,task_id,body,created_by,created_at,updated_at,revision';
@@ -88,15 +89,16 @@ export async function loadTaskCollaboration(workspaceId: string, taskId: string,
   try {
     let taskQuery = supabase.from('project_tasks').select('id').eq('workspace_id', workspaceId).eq('id', taskId);
     if (signal) taskQuery = taskQuery.abortSignal(signal);
-    const [task, comments, checklist, activity] = await Promise.all([
+    const [task, comments, checklist, activity, attachments] = await Promise.all([
       taskQuery.maybeSingle(),
       readStream<TaskComment>('task_comments', commentColumns, workspaceId, taskId, counts.comments, signal),
       readChecklist(workspaceId, taskId, signal),
       readStream<TaskActivity>('task_activity', activityColumns, workspaceId, taskId, counts.activity, signal),
+      listTaskAttachments(workspaceId, taskId, signal),
     ]);
     if (task.error) throw task.error;
     if (!task.data) return { data: emptyTaskCollaboration, error: unavailable };
-    return { data: { comments: comments.rows, checklist, activity: activity.rows, moreComments: comments.more, moreActivity: activity.more }, error: null };
+    return { data: { comments: comments.rows, checklist, activity: activity.rows, attachments, moreComments: comments.more, moreActivity: activity.more }, error: null };
   } catch {
     // Clear previously visible records after every failed permission/network check.
     return { data: emptyTaskCollaboration, error: 'Die Zusammenarbeit konnte nicht geladen werden. Bitte erneut versuchen.' };
@@ -138,7 +140,7 @@ export async function changeTaskEntry(table: 'task_comments' | 'task_checklist_i
 export function subscribeTaskCollaboration(workspaceId: string, taskId: string, onChange: () => void) {
   if (!supabase) return null;
   const channel = supabase.channel(`task-collaboration:${taskId}:${crypto.randomUUID()}`);
-  for (const table of ['task_comments', 'task_checklist_items', 'task_activity', 'project_tasks', 'workspace_members']) {
+  for (const table of ['task_comments', 'task_checklist_items', 'task_activity', 'task_attachments', 'project_tasks', 'workspace_members']) {
     const filter = table === 'workspace_members' ? `workspace_id=eq.${workspaceId}` : table === 'project_tasks' ? `id=eq.${taskId}` : `task_id=eq.${taskId}`;
     channel.on('postgres_changes', { schema: 'public', table, event: 'INSERT', filter }, onChange)
       .on('postgres_changes', { schema: 'public', table, event: 'UPDATE', filter }, onChange)

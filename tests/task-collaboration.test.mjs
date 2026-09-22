@@ -69,7 +69,7 @@ test('Task collaboration data: scoped reads, stable pagination, retries, conflic
       assert.deepEqual(pages[0].orders, [['created_at',{ascending:false}],['id',{ascending:false}]]);
     });
     await t.test('Any failed read or vanished parent clears all collaboration records', async () => {
-      for (const failure of ['task_comments','task_checklist_items','task_activity','project_tasks','removed']) {
+      for (const failure of ['task_comments','task_checklist_items','task_activity','task_attachments','project_tasks','removed']) {
         stub.setResponse(r => r.table === failure ? { data: null, error: { message: 'private detail' } } : r.table === 'project_tasks' ? { data: failure === 'removed' ? null : { id:'t1' }, error:null } : {data:[entry],error:null});
         const result = await api.loadTaskCollaboration('w1','t1');
         assert.ok(result.error); assert.deepEqual(result.data, api.emptyTaskCollaboration);
@@ -81,14 +81,14 @@ test('Task collaboration data: scoped reads, stable pagination, retries, conflic
       let changes = 0;
       api.subscribeTaskCollaboration('w1','t1',() => changes++);
       assert.equal(changes, 1);
-      for (const table of ['task_comments','task_checklist_items','task_activity','project_tasks','workspace_members']) {
+      for (const table of ['task_comments','task_checklist_items','task_activity','task_attachments','project_tasks','workspace_members']) {
         const entries=stub.subscriptions.filter(s=>s.filter.table===table); assert.equal(entries.length,3);
         for(const s of entries){
           assert.equal(s.filter.filter,s.filter.event==='DELETE'?undefined:table==='workspace_members'?'workspace_id=eq.w1':table==='project_tasks'?'id=eq.t1':'task_id=eq.t1');
           s.callback({old:{id:'removed'}});
         }
       }
-      assert.equal(changes,16);
+      assert.equal(changes,19);
     });
     await t.test('Activity displays only known field labels', () => {
       assert.equal(api.taskActivityLabel({event_type:'task_updated',changed_fields:['status','assigned_to','private body']}),'Aufgabe geändert · Status, Zuständigkeit');
