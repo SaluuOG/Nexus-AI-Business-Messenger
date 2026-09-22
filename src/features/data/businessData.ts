@@ -306,7 +306,7 @@ export async function createProject(workspaceId: string, input: ProjectInput) {
   };
 }
 
-export type InitialProjectTask = Omit<ProjectTaskInput, 'project_id'> & { id: string };
+export type InitialProjectTask = Omit<ProjectTaskInput, 'project_id'> & { id: string; checklist?: string[] };
 
 // A single database transaction creates the project and its assigned tasks.
 // Keep the request ID for retries so a lost response cannot create duplicates.

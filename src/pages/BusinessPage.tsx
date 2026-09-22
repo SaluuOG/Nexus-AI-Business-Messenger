@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   Building2,
   CalendarDays,
+  Copy,
   CircleDollarSign,
   FolderKanban,
   Globe2,
@@ -22,6 +23,8 @@ import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useSearchParams } from 'react-router-dom';
 import { businessSearch, readBusinessSearch } from '../app/businessNavigation';
 import { Header } from '../components/Header';
+import { ProjectTemplatePicker, SaveProjectTemplate } from '../components/ProjectTemplates';
+import { cleanInitialChecklists } from '../features/data/projectTemplates';
 import { ProjectTasksPanel } from '../components/ProjectTasksPanel';
 import {
   createCustomer,
@@ -210,7 +213,7 @@ function normalizeWebsite(value: string) {
   }
 }
 
-export function BusinessPage({ workspaceId, workspaceName, workspaceRole, currentUserId, workspaceLoading, workspaceError, onStartChat }: BusinessPageProps) {
+export function BusinessPage({ workspaceId, workspaceName, currentUserId, workspaceLoading, workspaceError, onStartChat }: BusinessPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selection = readBusinessSearch(searchParams.toString(), workspaceId);
   const { view, projectId: requestedProjectId, taskId: requestedTaskId } = selection;
@@ -232,6 +235,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
   const [projectEditor, setProjectEditor] = useState<NexusProject | 'new' | null>(null);
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(emptyCustomerDraft);
   const [projectDraft, setProjectDraft] = useState<ProjectDraft>(emptyProjectDraft);
+  const [templateSource, setTemplateSource] = useState<NexusProject | null>(null);
   const [initialTasks, setInitialTasks] = useState<InitialProjectTask[]>([]);
   const [contacts, setContacts] = useState<NexusContact[]>([]);
   const [contactsError, setContactsError] = useState<string | null>(null);
@@ -241,12 +245,16 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
   const saveBusy = useRef(false);
   const requestVersion = useRef(0);
 
+  // Memberships refresh on Realtime/focus; the shell's initial role can be stale.
+  const workspaceRole = members.find(member => member.user_id === currentUserId)?.role;
   const canCreate = workspaceRole === 'owner' || workspaceRole === 'admin';
   const canEdit = canCreate;
   const canDelete = canCreate;
+  const editorScope = useRef(0);
+  useEffect(() => { editorScope.current += 1; return () => { editorScope.current += 1; }; }, [workspaceId, currentUserId, workspaceRole]);
 
   useEffect(() => {
-    if (!canEdit) { setCustomerEditor(null); setProjectEditor(null); }
+    if (!canEdit) { setCustomerEditor(null); setProjectEditor(null); setTemplateSource(null); setInitialTasks([]); }
   }, [canEdit]);
 
   useEffect(() => {
@@ -282,6 +290,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
         setError(result.error);
       } catch {
         if (requestId !== requestVersion.current) return;
+        setMembers([]);
         setError('Business-Daten konnten nicht geladen werden. Bitte erneut aktualisieren.');
         setTaskError('Aufgaben konnten nicht geladen werden. Bitte erneut aktualisieren.');
       } finally {
@@ -527,14 +536,18 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
       setError('Bitte gib jeder Aufgabe einen Titel mit mindestens 2 Zeichen oder entferne die leere Aufgabe.');
       return;
     }
+    let tasksToCreate: InitialProjectTask[];
+    try { tasksToCreate = projectEditor === 'new' ? cleanInitialChecklists(initialTasks) : []; } catch (reason) { setError((reason as Error).message); return; }
+    const scope = editorScope.current;
     saveBusy.current = true;
     setSaving(true);
     setError(null);
     const result = await (projectEditor === 'new'
-      ? createProjectWithTasks(workspaceId, projectRequestId.current, input, initialTasks)
+      ? createProjectWithTasks(workspaceId, projectRequestId.current, input, tasksToCreate)
       : updateProject(projectEditor.id, input)).catch(() => ({ data: null, error: 'Die Verbindung wurde unterbrochen. Bitte erneut versuchen.' }));
     saveBusy.current = false;
     setSaving(false);
+    if (scope !== editorScope.current) return;
     if (result.error) {
       setError(result.error);
       return;
@@ -612,14 +625,14 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
           {error && <div className="data-alert business-alert">{error}</div>}
           {feedback && <div className="contact-feedback business-feedback">{feedback}</div>}
 
-          <div className="business-role-note">
+          {workspaceRole && <div className="business-role-note">
             <UsersRound size={14} />
             {workspaceRole === 'guest'
               ? 'Guest: Du kannst Business-Daten ansehen.'
               : workspaceRole === 'member'
                 ? 'Member: Kunden und Projekte ansehen sowie Projektaufgaben anlegen und bearbeiten.'
                 : 'Owner/Admin: Kunden, Projekte und Aufgaben vollständig verwalten.'}
-          </div>
+          </div>}
 
           <div className="business-stats">
             <div className="stat business-stat">
@@ -748,6 +761,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
                       </div>
                         <div className="business-card-actions">
                           <button onClick={() => openTasks(project.id)}><ListTodo size={14} /> Aufgaben {taskError ? '' : `(${projectTaskCounts.get(project.id)?.done ?? 0}/${projectTaskCounts.get(project.id)?.total ?? 0})`}</button>
+                          {canEdit && <button onClick={() => setTemplateSource(project)}><Copy size={13} /> Als Vorlage speichern</button>}
                           {canEdit && <button onClick={() => openProject(project)}><SquarePen size={14} /> Bearbeiten</button>}
                           {canDelete && <button className="danger" onClick={() => void removeProject(project)}><Trash2 size={14} /> Löschen</button>}
                         </div>
@@ -853,8 +867,12 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
             </div>
             {error && <div className="data-alert business-modal-alert">{error}</div>}
             <form onSubmit={(event) => void saveProject(event)}>
+              {projectEditor === 'new' && workspaceId && <ProjectTemplatePicker workspaceId={workspaceId} disabled={saving} hasDraft={Boolean(projectDraft.title || projectDraft.description || initialTasks.length)} onApply={draft => {
+                setProjectDraft(current => ({ ...current, title: draft.title, description: draft.description, priority: draft.priority, deadline: draft.deadline, status: 'planning', progress: '0' }));
+                setInitialTasks(draft.tasks); setError(null);
+              }} />}
               <div className="business-form-grid">
-                <label className="wide"><span>Projekttitel *</span><input autoFocus required minLength={2} maxLength={160} value={projectDraft.title} onChange={(event) => setProjectDraft((current) => ({ ...current, title: event.target.value }))} placeholder="z. B. Neue Unternehmenswebsite" /></label>
+                <label className="wide"><span>Projekttitel *</span><input autoFocus={projectEditor !== 'new'} required minLength={2} maxLength={160} value={projectDraft.title} onChange={(event) => setProjectDraft((current) => ({ ...current, title: event.target.value }))} placeholder="z. B. Neue Unternehmenswebsite" /></label>
                 <label><span>Kunde</span><select value={projectDraft.customerId} onChange={(event) => setProjectDraft((current) => ({ ...current, customerId: event.target.value }))}><option value="">Ohne Kundenzuordnung</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label>
                 <label><span>Status</span><select value={projectDraft.status} onChange={(event) => setProjectDraft((current) => ({ ...current, status: event.target.value as ProjectStatus }))}>{projectStatuses.map((status) => <option key={status} value={status}>{projectStatusLabels[status]}</option>)}</select></label>
                 <label><span>Priorität</span><select value={projectDraft.priority} onChange={(event) => setProjectDraft((current) => ({ ...current, priority: event.target.value as ProjectPriority }))}>{projectPriorities.map((priority) => <option key={priority} value={priority}>{projectPriorityLabels[priority]}</option>)}</select></label>
@@ -872,6 +890,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
                     <label><span>Fällig am</span><input type="date" value={task.due_date || ''} onChange={event => updateInitialTask(task.id, { due_date: event.target.value || null })} /></label>
                     <label><span>Priorität der Aufgabe</span><select aria-label="Priorität der Aufgabe" value={task.priority} onChange={event => updateInitialTask(task.id, { priority: event.target.value as ProjectPriority })}>{projectPriorities.map(priority => <option key={priority} value={priority}>{projectPriorityLabels[priority]}</option>)}</select></label>
                     <label className="wide"><span>Aufgabendetails</span><textarea maxLength={4000} value={task.description || ''} onChange={event => updateInitialTask(task.id, { description: event.target.value })} /></label>
+                    <label className="wide"><span>Checkliste (ein Punkt pro Zeile)</span><textarea aria-label="Checkliste (ein Punkt pro Zeile)" value={(task.checklist || []).join('\n')} onChange={event => updateInitialTask(task.id, { checklist: event.target.value.split('\n') })} placeholder="z. B. Inhalte sammeln" /></label>
                   </div><button type="button" className="secondary" onClick={() => setInitialTasks(current => current.filter(item => item.id !== task.id))}><Trash2 size={14} /> Aufgabe entfernen</button>
                 </fieldset>)}
                 <button type="button" className="secondary" disabled={saving || initialTasks.length >= 50 || Boolean(taskError)} onClick={() => setInitialTasks(current => [...current, { id: crypto.randomUUID(), title: '', status: 'todo', priority: 'medium', assigned_to: null, due_date: null, description: '' }])}><Plus size={15} /> Aufgabe hinzufügen</button>
@@ -882,6 +901,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
           </div>
         </div>
       )}
+      {canEdit && templateSource && <SaveProjectTemplate key={templateSource.id} project={templateSource} onClose={() => setTemplateSource(null)} onSaved={name => { setTemplateSource(null); setFeedback(`Vorlage „${name}“ gespeichert. Beim nächsten Projekt kannst du sie auswählen.`); }} />}
     </section>
   );
 }

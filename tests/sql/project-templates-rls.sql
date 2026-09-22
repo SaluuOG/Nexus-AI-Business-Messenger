@@ -1,0 +1,75 @@
+-- Run in a rollback transaction, optionally following the uncommitted migration.
+BEGIN;
+CREATE FUNCTION pg_temp.v(k text) RETURNS uuid LANGUAGE sql AS $$SELECT current_setting('nexus.templates.'||k)::uuid;$$;
+CREATE FUNCTION pg_temp.check_template(ok boolean,why text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF ok IS NOT TRUE THEN RAISE EXCEPTION '%',why; END IF;END$$;
+CREATE FUNCTION pg_temp.template_login(k text) RETURNS void LANGUAGE sql AS $$SELECT set_config('request.jwt.claims',jsonb_build_object('sub',pg_temp.v(k),'role','authenticated','session_id',pg_temp.v(k||'_session'))::text,true);$$;
+CREATE FUNCTION pg_temp.template_denied(statement text,expected text) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN BEGIN EXECUTE statement; EXCEPTION WHEN OTHERS THEN IF SQLSTATE=expected THEN RETURN; END IF; RAISE; END;
+RAISE EXCEPTION 'Unexpectedly accepted: %',statement; END $$;
+SELECT set_config('nexus.templates.'||k,gen_random_uuid()::text,true) FROM unnest(ARRAY['owner','admin','member','guest','outsider','owner_session','admin_session','member_session','guest_session','outsider_session','ws','foreign_ws','source','foreign_project','task','template','clone','bad_clone','empty']) k;
+INSERT INTO auth.users(id,email,email_confirmed_at,raw_user_meta_data)
+SELECT pg_temp.v(k),gen_random_uuid()||'@example.invalid',now(),'{"full_name":"Template rollback acceptance"}' FROM unnest(ARRAY['owner','admin','member','guest','outsider']) k;
+INSERT INTO auth.sessions(id,user_id,created_at,updated_at)
+SELECT pg_temp.v(k||'_session'),pg_temp.v(k),now(),now() FROM unnest(ARRAY['owner','admin','member','guest','outsider']) k;
+INSERT INTO public.workspaces(id,owner_id,name) VALUES(pg_temp.v('ws'),pg_temp.v('owner'),'Template rollback'),(pg_temp.v('foreign_ws'),pg_temp.v('outsider'),'Foreign template rollback');
+INSERT INTO public.workspace_members(workspace_id,user_id,role) SELECT pg_temp.v('ws'),pg_temp.v(k),k::public.workspace_role FROM unnest(ARRAY['admin','member','guest']) k;
+INSERT INTO public.projects(id,workspace_id,title,deadline,priority,description) VALUES(pg_temp.v('source'),pg_temp.v('ws'),'Source project','2026-10-15','high','Reusable scope'),(pg_temp.v('foreign_project'),pg_temp.v('foreign_ws'),'Foreign project',NULL,'low',NULL);
+INSERT INTO public.project_tasks(id,workspace_id,project_id,title,due_date,status,assigned_to) VALUES(pg_temp.v('task'),pg_temp.v('ws'),pg_temp.v('source'),'Source task','2026-10-03','done',pg_temp.v('member'));
+SELECT pg_temp.template_login('owner');
+SET LOCAL ROLE authenticated;
+INSERT INTO public.task_checklist_items(workspace_id,task_id,label) VALUES(pg_temp.v('ws'),pg_temp.v('task'),'Prepare'),(pg_temp.v('ws'),pg_temp.v('task'),'Review');
+UPDATE public.task_checklist_items SET is_completed=true WHERE task_id=pg_temp.v('task');
+SELECT public.save_project_template(pg_temp.v('template'),pg_temp.v('ws'),pg_temp.v('source'),'Website template','2026-10-01');
+SELECT pg_temp.check_template((SELECT deadline_offset=14 AND tasks->0->>'due_offset'='2' AND tasks->0->'checklist'='["Prepare","Review"]'::jsonb AND NOT(tasks->0?'assigned_to') AND NOT(tasks->0?'status') FROM public.project_templates WHERE id=pg_temp.v('template')),'Snapshot leaked state or lost offsets/checklists');
+UPDATE public.project_tasks SET title='Changed later' WHERE id=pg_temp.v('task');
+SELECT pg_temp.check_template(public.save_project_template(pg_temp.v('template'),pg_temp.v('ws'),pg_temp.v('source'),'Changed retry','2026-11-01')->'tasks'->0->>'title'='Source task','Retry overwrote original snapshot');
+SELECT pg_temp.template_denied($q$INSERT INTO public.project_templates(id,workspace_id,name) VALUES(gen_random_uuid(),pg_temp.v('ws'),'Forged')$q$,'42501');
+SELECT pg_temp.template_denied($q$UPDATE public.project_templates SET name='Forged' WHERE id=pg_temp.v('template')$q$,'42501');
+SELECT pg_temp.template_denied($q$SELECT public.save_project_template(gen_random_uuid(),pg_temp.v('ws'),pg_temp.v('foreign_project'),'Cross tenant','2026-10-01')$q$,'23503');
+SELECT pg_temp.template_denied($q$SELECT public.save_project_template(gen_random_uuid(),pg_temp.v('foreign_ws'),pg_temp.v('foreign_project'),'Cross tenant','2026-10-01')$q$,'42501');
+-- Invalid second task/checklist rolls back project and first task/checklist too.
+SELECT pg_temp.template_denied($q$SELECT public.create_project_with_tasks(pg_temp.v('ws'),pg_temp.v('bad_clone'),'{"title":"Atomic clone"}','[{"title":"First task","checklist":["First point"]},{"title":"Invalid task","checklist":[""]}]')$q$,'22023');
+SELECT pg_temp.check_template(NOT EXISTS(SELECT 1 FROM public.projects WHERE id=pg_temp.v('bad_clone')) AND NOT EXISTS(SELECT 1 FROM public.project_tasks WHERE project_id=pg_temp.v('bad_clone')),'Invalid checklist left partial project');
+SELECT pg_temp.template_denied($q$SELECT public.create_project_with_tasks(pg_temp.v('ws'),pg_temp.v('bad_clone'),'{"title":"Atomic clone"}',jsonb_build_array(jsonb_build_object('title','Invalid assignee','assigned_to',pg_temp.v('guest'),'checklist',jsonb_build_array('Point'))))$q$,'P0001');
+SELECT pg_temp.check_template(NOT EXISTS(SELECT 1 FROM public.projects WHERE id=pg_temp.v('bad_clone')),'Invalid assignee left partial project');
+SELECT public.create_project_with_tasks(pg_temp.v('ws'),pg_temp.v('clone'),'{"title":"Template clone","deadline":"2026-11-15"}',jsonb_build_array(jsonb_build_object('title','Cloned task','due_date','2026-11-03','assigned_to',pg_temp.v('member'),'checklist',jsonb_build_array('Prepare','Review'))));
+SELECT public.create_project_with_tasks(pg_temp.v('ws'),pg_temp.v('clone'),'{"title":"Retry must not duplicate"}','[{"title":"Another task","checklist":["Another point"]}]');
+SELECT pg_temp.check_template((SELECT count(*)=1 AND bool_and(status='todo' AND due_date='2026-11-03') FROM public.project_tasks WHERE project_id=pg_temp.v('clone')),'Clone dates/state or retry deduplication failed');
+SELECT pg_temp.check_template((SELECT count(*)=2 AND bool_and(NOT c.is_completed) FROM public.task_checklist_items c JOIN public.project_tasks t ON t.id=c.task_id WHERE t.project_id=pg_temp.v('clone')),'Checklist not cloned/reset exactly once');
+SELECT public.create_project_with_tasks(pg_temp.v('ws'),pg_temp.v('empty'),'{"title":"Manual project remains supported"}');
+RESET ROLE;
+SELECT pg_temp.template_login('admin');
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.check_template(EXISTS(SELECT 1 FROM public.project_templates WHERE id=pg_temp.v('template')),'Admin cannot read');
+SELECT public.save_project_template(gen_random_uuid(),pg_temp.v('ws'),pg_temp.v('empty'),'Admin template','2026-10-01');
+RESET ROLE;
+DO $$DECLARE k text; BEGIN FOREACH k IN ARRAY ARRAY['member','guest','outsider'] LOOP
+ PERFORM pg_temp.template_login(k); SET LOCAL ROLE authenticated;
+ PERFORM pg_temp.check_template(NOT EXISTS(SELECT 1 FROM public.project_templates),'Unauthorized template read');
+ PERFORM pg_temp.template_denied($q$SELECT public.save_project_template(gen_random_uuid(),pg_temp.v('ws'),pg_temp.v('source'),'Denied template','2026-10-01')$q$,'42501');
+ PERFORM pg_temp.template_denied($q$SELECT public.archive_project_template(pg_temp.v('template'),pg_temp.v('ws'))$q$,'42501');
+ RESET ROLE;
+END LOOP; END$$;
+SELECT pg_temp.template_login('owner');
+DELETE FROM auth.sessions WHERE id=pg_temp.v('owner_session');
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.check_template(NOT EXISTS(SELECT 1 FROM public.project_templates),'Revoked session read template');
+SELECT pg_temp.template_denied($q$SELECT public.save_project_template(gen_random_uuid(),pg_temp.v('ws'),pg_temp.v('source'),'Revoked session','2026-10-01')$q$,'42501');
+RESET ROLE;
+SELECT pg_temp.template_login('admin');
+SET LOCAL ROLE authenticated;
+DELETE FROM public.projects WHERE id=pg_temp.v('source');
+SELECT pg_temp.check_template((SELECT tasks->0->>'title'='Source task' FROM public.project_templates WHERE id=pg_temp.v('template')),'Deleting source removed template');
+SELECT public.archive_project_template(pg_temp.v('template'),pg_temp.v('ws'));
+SELECT public.archive_project_template(pg_temp.v('template'),pg_temp.v('ws'));
+SELECT pg_temp.check_template(NOT EXISTS(SELECT 1 FROM public.project_templates WHERE id=pg_temp.v('template')),'Removed template still listed');
+RESET ROLE;
+INSERT INTO auth.sessions(id,user_id,created_at,updated_at) VALUES(pg_temp.v('owner_session'),pg_temp.v('owner'),now(),now());
+SELECT pg_temp.template_login('owner');
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.template_denied($q$SELECT public.save_project_template(pg_temp.v('template'),pg_temp.v('ws'),pg_temp.v('empty'),'Removed retry','2026-10-01')$q$,'22023');
+RESET ROLE;
+DELETE FROM public.workspaces WHERE id=pg_temp.v('ws');
+SELECT pg_temp.check_template(NOT EXISTS(SELECT 1 FROM public.project_templates WHERE workspace_id=pg_temp.v('ws')),'Workspace deletion retained snapshots');
+SELECT 'PASS: scoped capture, roles, revoked sessions, immutable retries, relative dates, atomic checklist creation, manual creation and lifecycle' AS result;
+ROLLBACK;

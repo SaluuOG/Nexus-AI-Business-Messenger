@@ -15,6 +15,10 @@ try {
 } catch { full = true; }
 const add = (units,browsers) => { for(const name of units)unit.add(name);for(const name of browsers)browser.add(name); };
 for(const file of changed) {
+  if (/^(src\/components\/ProjectTemplates\.tsx|src\/features\/data\/(projectTemplates|businessData)\.ts|src\/pages\/BusinessPage\.tsx|src\/project-templates\.css|supabase\/migrations\/\d+_project_templates\.sql|tests\/sql\/project-templates-rls\.sql|tests\/browser\/(project-templates|template-service)\.mjs)$/.test(file)) {
+    add(['tests/business-management.test.mjs','tests/project-tasks-workflow.test.mjs','tests/project-templates.test.mjs'],['tests/browser/project-templates.mjs']);continue;
+  }
+
   if (/^(src\/components\/(TaskAttachments|TaskCollaboration)\.tsx|src\/features\/data\/(taskAttachments|taskCollaboration|useTaskCollaboration)\.ts|src\/task-collaboration\.css|supabase\/functions\/task-file-cleanup\/|supabase\/migrations\/\d+_task_attachments\.sql|tests\/sql\/task-attachments-rls\.sql|tests\/browser\/(collaboration-service|attachment-service|task-attachments|task-collaboration)\.mjs)/.test(file)) {
     add(['tests/task-attachments.test.mjs','tests/task-collaboration.test.mjs'],['tests/browser/task-attachments.mjs','tests/browser/task-collaboration.mjs']);continue;
   }
@@ -37,7 +41,7 @@ for(const file of changed) {
 }
 if(full) {
   for(const name of readdirSync('tests').filter(name=>name.endsWith('.test.mjs')))unit.add('tests/'+name);
-  for(const name of ['mobile-push','task-attachments','task-collaboration','mobile-workflows','chat-scan','briefing','mobile-install','workspace-lifecycle','message-history','message-tasks','settings','notifications'])browser.add(`tests/browser/${name}.mjs`);
+  for(const name of ['project-templates','mobile-push','task-attachments','task-collaboration','mobile-workflows','chat-scan','briefing','mobile-install','workspace-lifecycle','message-history','message-tasks','settings','notifications'])browser.add(`tests/browser/${name}.mjs`);
 }
 const selection={unit:[...unit].sort(),browser:[...browser].sort()};
 console.log(JSON.stringify({scope:full?'full':'changed',...selection}));
