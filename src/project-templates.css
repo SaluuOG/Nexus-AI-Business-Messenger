@@ -1,0 +1,9 @@
+.project-template-picker{padding:15px;margin-bottom:20px;border:1px solid #373456;border-radius:12px;background:rgba(116,108,245,.06);min-width:0}
+.project-template-picker h3{display:flex;gap:8px;align-items:center;margin:0 0 14px;font-size:14px;color:#c6c1ff}
+.template-hint{font-size:12px;line-height:1.6;color:#a1acbd;overflow-wrap:anywhere}
+.template-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.template-actions button{margin-top:0;min-height:40px;white-space:normal}
+.template-confirm{margin-top:12px;padding:12px;border:1px solid #605888;border-radius:9px;font-size:12px;line-height:1.5}
+.template-refresh{margin-top:12px;padding:6px 0;background:none;border:0;color:#b0a9ff;text-decoration:underline;cursor:pointer;font-size:11px}
+.business-card-actions{flex-wrap:wrap}
+@media(max-width:480px){.project-template-picker{padding:12px}.template-actions button{flex:1 1 100%}.business-card-actions button{flex:1 1 auto;min-height:40px}}
