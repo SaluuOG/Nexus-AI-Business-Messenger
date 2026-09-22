@@ -1,6 +1,6 @@
 # Mobile Push-Benachrichtigungen
 
-Stand: Am 22.09.2026 veröffentlicht. Backend, gezielte Tests und Live-Prüfung der veröffentlichten App bestanden. Die Freigabe und Empfangsbestätigung auf dem persönlichen Handy erfolgen über den Testknopf.
+Stand: Am 22.09.2026 veröffentlicht und abgenommen. Backend, gezielte Tests und Live-Prüfung der veröffentlichten App bestanden. Der Benutzer hat am 22.09.2026 den erfolgreichen Empfang auf seinem Handy bestätigt; damit ist auch die ausstehende Geräteabnahme abgeschlossen.
 
 Nexus erhält nach expliziter Zustimmung Push auf dem jeweiligen Gerät. Aktivierung und Test befinden sich unter Einstellungen → Benachrichtigungen → Auf diesem Gerät. Auf iPhone/iPad wird Nexus als Home-Bildschirm-Web-App ab iOS/iPadOS 16.4 benötigt. Browser und Betriebssystem können die Zustellung durch Fokus, Berechtigungen oder fehlende Verbindung beeinflussen.
 
@@ -34,7 +34,7 @@ Keine automatische Deadline-Push-Planung, Anhänge oder bezahlte KI in diesem Sc
 - `tests/sql/mobile-push-rls.sql` in einer zurückgerollten Transaktion: synthetische Identitäten, Registrierung, Session-Bindung, Privatheit, Empfänger, Leases, Wiederholungen, Entzug, Kategorien, Testrate, Logout-Cascade. Keine echten Konten erhalten Testnachrichten.
 - Browser: mobile-push, notifications, settings und mobile-install, jeweils Chromium/WebKit. Push-Anbieter/OS-Freigabe sind im neuen UI-Test simuliert; der Produktions-Service-Worker und Offline-Cache werden separat ausgeführt.
 - CI wählt nach tatsächlich geänderten Pfaden aus (`tests/run-changed.mjs`); unbekannte Anwendungsänderungen behalten die volle Suite. `--full` bleibt möglich. Build/Typecheck bleiben immer aktiv.
-- Die tatsächliche Zustellung auf einem physischen iPhone/Android muss der Benutzer einmal über „Test senden“ bestätigen; sie kann nicht durch einen Desktop-Browsertest bewiesen werden.
+- Für weitere Geräte die tatsächliche Zustellung einmal über „Test senden“ bestätigen; ein Desktop-Browsertest beweist keinen Empfang auf einem physischen Handy. Die Geräteabnahme des Benutzers ist mit seiner Rückmeldung vom 22.09.2026 abgeschlossen.
 
 
 ## Abnahmenachweise vom 22.09.2026 (UTC)
@@ -48,3 +48,4 @@ Keine automatische Deadline-Push-Planung, Anhänge oder bezahlte KI in diesem Sc
 
 - Veröffentlichter Anwendungscommit: `c49efb58c1cf5b4545cae4aaccd6a50f034e74f8`; Script `/Nexus-AI-Business-Messenger/assets/index-QvJb0uRi.js`. Die Live-Prüfung des Deployments bestand um 03:11 UTC in Chromium und WebKit.
 - Zusätzlich im bereits angemeldeten Live-Browser: exakt dieses Script und Einstellungen → Benachrichtigungen geprüft. „Push aktivieren“, die ausgeschaltete Gerätefreigabe und die neue Kategorie „Aufgabenkommentare“ sind sichtbar. Es wurde kein reales Gerät ohne Benutzerfreigabe angemeldet.
+- Benutzerbestätigung vom 22.09.2026: „okey funktioniert“ als Antwort auf die Anleitung zum Aktivieren und Testen von Push auf dem Handy. Dies dokumentiert den vom Benutzer bestätigten Empfang und schließt die ausstehende Geräteabnahme ab. Gerätetyp und Betriebssystem wurden nicht angegeben.
