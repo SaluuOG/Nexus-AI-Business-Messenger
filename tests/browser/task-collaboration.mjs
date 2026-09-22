@@ -32,7 +32,7 @@ try {
     try {
       await page.clock.setFixedTime(new Date('2026-09-16T10:00:00Z'));
       await page.goto('http://127.0.0.1:4185/#/app/business?workspace=w1&view=projects');
-      await page.getByRole('button',{name:'Alle Projektaufgaben',exact:true}).click();
+      await page.getByRole('button',{name:/^Alle Projektaufgaben/}).click();
       assert.equal(await page.getByRole('tab',{name:/^Aufgaben /}).count(),0);
       await page.getByRole('article',{name:'Meine heutige Aufgabe',exact:true}).getByRole('button',{name:'Details & Zusammenarbeit',exact:true}).click();
       await comments.getByText('Noch keine Kommentare.',{exact:true}).waitFor();
@@ -151,7 +151,7 @@ try {
       await page.evaluate(()=>{window.nexusTest.collaborationDelay=800;});
       await collaboration.getByRole('button',{name:'Zusammenarbeit aktualisieren',exact:true}).click();
       await page.getByRole('complementary').getByRole('combobox').selectOption('w2');
-      await page.getByRole('button',{name:'Alle Projektaufgaben',exact:true}).click();
+      await page.getByRole('button',{name:/^Alle Projektaufgaben/}).click();
       await page.getByRole('article',{name:'Aufgabe im zweiten Team',exact:true}).getByRole('button',{name:'Details & Zusammenarbeit',exact:true}).click();
       await comments.getByText('Noch keine Kommentare.',{exact:true}).waitFor();
       await page.waitForFunction(()=>window.nexusTest.collaborationPending===0);
@@ -161,7 +161,7 @@ try {
       // Return, then change accounts while the first user's draft is open.
       await page.evaluate(()=>{window.nexusTest.collaborationDelay=0;});
       await page.getByRole('complementary').getByRole('combobox').selectOption('w1');
-      await page.getByRole('button',{name:'Alle Projektaufgaben',exact:true}).click();
+      await page.getByRole('button',{name:/^Alle Projektaufgaben/}).click();
       await page.getByRole('article',{name:'Meine heutige Aufgabe',exact:true}).getByRole('button',{name:'Details & Zusammenarbeit',exact:true}).click();
       await comments.getByLabel('Neuer Kommentar',{exact:true}).fill('Privater Entwurf von Konto eins');
       await page.evaluate(()=>{window.nexusTest.memberships.push({workspace_id:'w1',user_id:'other',role:'member',full_name:'Zweites Konto'});window.nexusTest.switchUser('other');});
