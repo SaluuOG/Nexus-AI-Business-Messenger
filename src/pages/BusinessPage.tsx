@@ -213,7 +213,7 @@ function normalizeWebsite(value: string) {
   }
 }
 
-export function BusinessPage({ workspaceId, workspaceName, workspaceRole, currentUserId, workspaceLoading, workspaceError, onStartChat }: BusinessPageProps) {
+export function BusinessPage({ workspaceId, workspaceName, currentUserId, workspaceLoading, workspaceError, onStartChat }: BusinessPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selection = readBusinessSearch(searchParams.toString(), workspaceId);
   const { view, projectId: requestedProjectId, taskId: requestedTaskId } = selection;
@@ -245,6 +245,8 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
   const saveBusy = useRef(false);
   const requestVersion = useRef(0);
 
+  // Memberships refresh on Realtime/focus; the shell's initial role can be stale.
+  const workspaceRole = members.find(member => member.user_id === currentUserId)?.role;
   const canCreate = workspaceRole === 'owner' || workspaceRole === 'admin';
   const canEdit = canCreate;
   const canDelete = canCreate;
@@ -288,6 +290,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
         setError(result.error);
       } catch {
         if (requestId !== requestVersion.current) return;
+        setMembers([]);
         setError('Business-Daten konnten nicht geladen werden. Bitte erneut aktualisieren.');
         setTaskError('Aufgaben konnten nicht geladen werden. Bitte erneut aktualisieren.');
       } finally {
@@ -534,7 +537,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
       return;
     }
     let tasksToCreate: InitialProjectTask[];
-    try { tasksToCreate = cleanInitialChecklists(initialTasks); } catch (reason) { setError((reason as Error).message); return; }
+    try { tasksToCreate = projectEditor === 'new' ? cleanInitialChecklists(initialTasks) : []; } catch (reason) { setError((reason as Error).message); return; }
     const scope = editorScope.current;
     saveBusy.current = true;
     setSaving(true);
