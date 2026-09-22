@@ -111,25 +111,63 @@ Workspace, Aufgabe oder Rolle verwerfen den Zustand des vorherigen Kontexts.
   [Passwortprüfung](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection),
   [Fremdschlüssel-Indizes](https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys).
 
-## Veröffentlichung und verbleibende Live-Abnahme
+## Veröffentlichung und offizieller Abschluss
 
-Die Datenbank ist vorbereitet. Der Pages-Workflow prüft den zu veröffentlichenden
-Commit erneut vollständig und kontrolliert danach das exakte öffentliche
-Release-Asset. Der jeweilige Workflow-Lauf belegt die tatsächliche Veröffentlichung.
+**Phase 3.9 ist am 22. September 2026 um 02:25 UTC offiziell abgeschlossen.**
 
-**Der formale Abschluss von Phase 3.9 bleibt bis zur Live-Abnahme offen.**
-Die automatisierte Browserprüfung verwendet synthetische Dienste; sie ersetzt
-nicht die folgende Abnahme mit angemeldeten echten Konten:
+Veröffentlichter Anwendungs-Commit:
+`49d3ad5757d148bbe983fb732a2b47e383241f22`.
+[Erfolgreiche Veröffentlichung und Live-Prüfung](https://github.com/SaluuOG/Nexus-AI-Business-Messenger/actions/runs/35678305383).
+Exaktes öffentlich geladenes Asset:
+`/Nexus-AI-Business-Messenger/assets/index-CExDxyJI.js`.
+Chromium und WebKit bestätigten das veröffentlichte Asset, konfigurierte Anmeldung,
+PWA und mobile Darstellung ohne Anwendungsfehler. Das Asset wurde zusätzlich im
+angemeldeten Browser anhand des geladenen Script-Elements bestätigt.
 
-1. Mit zwei Testkonten in einem ausschließlich dafür angelegten Test-Workspace
-   Kommentare und Checklistenzustände gegenseitig sehen und nach Neuladen prüfen.
-2. Live-Synchronisierung, Wechsel zu Member/Guest und Entzug des Schreibzugriffs
-   über den tatsächlichen Auth-/API-Weg abnehmen.
-3. Ausschließlich diese Testdaten bereinigen und den endgültigen Abschluss
-   dokumentieren. Bestehende Arbeits-Workspaces bleiben erhalten.
+### Live-Abnahme mit zwei echten Konten
 
-Im bereitgestellten Browser ist derzeit kein Konto angemeldet; für diesen letzten
-Schritt wird eine neue sichere Anmeldung benötigt.
+Die Konten Samet (Owner) und Darlyn (Member, vorübergehend Guest) wurden nacheinander
+über das sichere Anmeldeformular angemeldet. Alle folgenden UI-Aktionen liefen
+gegen die veröffentlichte App und die echte Auth-/Daten-API, ohne Browser-Mocks:
+
+- Der Owner legte den isolierten Workspace **NEXUS TEST 3.9 · 22.09.2026** an und
+  erstellte ein Projekt gemeinsam mit einer zugewiesenen Aufgabe.
+- Owner-Kommentar und Checklistenpunkt wurden gespeichert. Bearbeiten des eigenen
+  Kommentars und erneutes Laden erhielten Inhalt, Autor und Bearbeitungsvermerk.
+- Das zweite Konto sah dieselben Daten, konnte einen eigenen Kommentar speichern
+  und die Checkliste abhaken. Am fremden Owner-Kommentar gab es keine Bearbeiten-
+  oder Entfernen-Schaltfläche. Auch nach Neuladen blieben beide Kommentare und
+  der erledigte Checklistenpunkt erhalten.
+- Eine externe Änderung des Owner-Kommentars wurde im Member-Browser ohne
+  manuelles Neuladen sichtbar. Diese gezielte externe Teständerung wurde über SQL
+  unter `authenticated` mit Owner-Identität und aktiver RLS ausgelöst; sie war
+  keine zweite gleichzeitig angemeldete Browsersitzung.
+- Der Wechsel des Test-Mitglieds von Member zu Guest erfolgte ausschließlich im
+  isolierten Workspace. Ein gerade geöffneter Kommentar-Editor verschwand sofort;
+  Kommentarformular, Bearbeiten und Entfernen fehlten, die Checkliste war gesperrt.
+  Kommentare, Verlauf und Zugang zu **Alle Projektaufgaben** blieben lesbar.
+- Nach Rückkehr zur Member-Rolle waren Schreibfunktionen wieder verfügbar; der
+  verworfene Editor wurde nicht wiederhergestellt.
+- Die Datenbank bestätigte zwei Kommentare unterschiedlicher Autoren
+  (Revisionen 3 und 1), einen erledigten Checklistenpunkt (Revision 2) und sieben
+  automatisch erfasste Verlaufsereignisse. Der Verlauf speicherte keine Textkopien.
+
+Die Test-Mitgliedschaft und Rollenwechsel wurden gezielt über die Datenbank
+vorbereitet, ohne externe Einladungen zu versenden. Die UI-Rollen und API-Zugriffe
+wurden danach mit den tatsächlich angemeldeten Konten geprüft.
+
+### Bereinigung
+
+Der gerade angelegte Test-Workspace wurde über den vorhandenen geschützten
+Owner-RPC mit exakt bestätigtem Namen entfernt. Eine Transaktion prüfte vorab die
+erwarteten Testdaten und anschließend, dass Workspace, Projekt, Aufgabe,
+Kommentare, Checkliste und Verlauf vollständig entfernt waren. Beide bereits
+bestehenden Arbeits-Workspaces blieben erhalten. Im angemeldeten Member-Browser
+verschwand die gelöschte Testaufgabe automatisch.
+
+Der abschließende Commit aktualisiert ausschließlich diese Dokumentation und den
+README-Status. Anwendung, Tests, Konfiguration und Datenbankmigrationen entsprechen
+weiterhin dem vollständig geprüften und veröffentlichten Anwendungs-Commit.
 
 Neue Chat-/E-Mail-Benachrichtigungen, Anhänge an Kommentaren und KI-Funktionen
 gehören nicht zu diesem Umfang. Die kostenpflichtige KI bleibt deaktiviert.
