@@ -602,6 +602,15 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   }, [currentUserId]);
 
   useEffect(() => {
+    const activeRecorder = recorderRef.current as NexusMediaRecorder | null;
+    if (activeRecorder && activeRecorder.state !== 'inactive') {
+      activeRecorder.__cancel = true;
+      activeRecorder.stop();
+    }
+    if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null; }
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+    setRecording(false); setRecordSeconds(0);
     messageRequest.current++;
     olderMessageRequest.current++;
     activityRequest.current++;
@@ -839,6 +848,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   }, [messages]);
 
   useEffect(() => () => {
+    selectedRef.current = null;
     if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     if (typingStopRef.current) clearTimeout(typingStopRef.current);
     if (typingRecheckRef.current) clearTimeout(typingRecheckRef.current);
@@ -1096,6 +1106,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
 
   const startRecording = async () => {
     if (recording || saving || editing || failedTextSend || !selectedId) return;
+    const recordingChatId = selectedId;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setError('Sprachaufnahme wird von diesem Browser nicht unterstützt.');
       return;
@@ -1106,6 +1117,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       lastTypingRef.current = 0;
       clearPendingFile();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (selectedRef.current !== recordingChatId) { stream.getTracks().forEach(track => track.stop()); return; }
       streamRef.current = stream;
       const candidates = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
       const mimeType = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || '';

@@ -664,6 +664,20 @@ export function ChatsPage({
       selectedRef.current === selectedId
       && realtimeGenerationRef.current === realtimeGeneration
     );
+    const activeRecorder = recorderRef.current;
+    if (activeRecorder?.state && activeRecorder.state !== 'inactive') {
+      (activeRecorder as MediaRecorder & { __cancel?: boolean }).__cancel = true;
+      activeRecorder.stop();
+    }
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setRecording(false);
+    setRecordSeconds(0);
+
     if (!selectedId) {
       messageRequestRef.current += 1;
       messageCountRef.current = 0;
@@ -696,20 +710,6 @@ export function ChatsPage({
     clearScrollTimers();
     pendingScrollRef.current = null;
     scrollLockRef.current = null;
-    const activeRecorder = recorderRef.current;
-    if (activeRecorder?.state && activeRecorder.state !== 'inactive') {
-      (activeRecorder as MediaRecorder & { __cancel?: boolean }).__cancel = true;
-      activeRecorder.stop();
-    }
-    if (recordTimerRef.current) {
-      clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
-    }
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    setRecording(false);
-    setRecordSeconds(0);
-
     const scope = draftScope(selectedId);
     setDraft(scope ? readChatDraft(scope) : '');
     setTextRetry(scope ? retryStoreRef.current.get(scope) : null);
@@ -786,6 +786,7 @@ export function ChatsPage({
   }, [selectedId, linkedConversationId, linkedMessageId, currentUserId]);
 
   useEffect(() => () => {
+    selectedRef.current = null;
     if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     clearScrollTimers();
     for (const timer of markReadTimerRef.current.values()) clearTimeout(timer);
@@ -875,7 +876,8 @@ export function ChatsPage({
   };
 
   const startRecording = async () => {
-    if (recording || sending || editing) return;
+    if (!selectedId || recording || sending || editing) return;
+    const recordingChatId = selectedId;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setError('Sprachaufnahme wird von diesem Browser nicht unterstützt.');
       return;
@@ -884,6 +886,7 @@ export function ChatsPage({
       setError(null);
       clearPending();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (selectedRef.current !== recordingChatId) { stream.getTracks().forEach(track => track.stop()); return; }
       streamRef.current = stream;
       const candidates = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
       const mimeType = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || '';

@@ -25,6 +25,18 @@ try {
         await context.addInitScript(() => {
           sessionStorage.setItem('nexusTest.mobileBusinessFixture', '1');
           sessionStorage.setItem('nexusTest.messageHistoryFixture', '1');
+          // Test-only microphone: exercise cleanup without capturing any audio.
+          window.voiceFixture = { stops: 0, delayed: false, resolve: null };
+          Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: () => {
+            const stream = { getTracks: () => [{ stop: () => { window.voiceFixture.stops++; } }] };
+            return window.voiceFixture.delayed ? new Promise(resolve => { window.voiceFixture.resolve = () => resolve(stream); }) : Promise.resolve(stream);
+          } } });
+          window.MediaRecorder = class {
+            static isTypeSupported() { return true; }
+            constructor(stream, options) { this.mimeType = options?.mimeType || 'audio/webm'; this.state = 'inactive'; }
+            start() { this.state = 'recording'; }
+            stop() { this.state = 'inactive'; this.onstop?.(); }
+          };
         });
         await context.route('**/*', route => route.request().url().startsWith(base) ? route.continue() : route.abort());
         const page = await context.newPage();
@@ -47,7 +59,10 @@ try {
           await input.fill('Entwurf für Kunden');
           await fits(page);
           await page.screenshot({ path: `browser-results/${name}-chat-conversation-${width}.png` });
+          await page.getByRole('button', { name: 'Sprachnachricht aufnehmen', exact: true }).click();
+          await page.locator('.voice-recording').waitFor();
           await page.getByRole('button', { name: 'Alle Chats', exact: true }).click();
+          await page.waitForFunction(() => window.voiceFixture.stops > 0);
           await contact.waitFor();
           await page.locator('.chat-list .chat').filter({ hasText: 'Zweiter Kontakt' }).click();
           await page.waitForURL(/conversation=c2/);
@@ -57,9 +72,17 @@ try {
           assert.equal(await page.locator('.conversation').isVisible(), false);
           await contact.click();
           await page.waitForFunction(() => document.querySelector('[data-testid="direct-message-composer"]')?.value === 'Entwurf für Kunden');
+          assert.equal(await page.locator('.voice-recording').count(), 0);
           await input.fill('Nachricht aus mobilem Kundentest');
           await page.locator('.composer').getByRole('button', { name: 'Nachricht senden', exact: true }).click();
           await page.locator('.messages').getByText('Nachricht aus mobilem Kundentest', { exact: true }).waitFor();
+          const stoppedBeforePrompt = await page.evaluate(() => { window.voiceFixture.delayed = true; return window.voiceFixture.stops; });
+          await page.getByRole('button', { name: 'Sprachnachricht aufnehmen', exact: true }).click();
+          await page.waitForFunction(() => Boolean(window.voiceFixture.resolve));
+          await page.getByRole('button', { name: 'Alle Chats', exact: true }).click();
+          await contact.waitFor();
+          await page.evaluate(() => { window.voiceFixture.resolve(); window.voiceFixture.delayed = false; });
+          await page.waitForFunction(before => window.voiceFixture.stops > before, stoppedBeforePrompt);
           await navigate(page, 'Gruppen');
           const group = page.locator('.chat-list .chat').filter({ hasText: 'Projektgruppe' });
           await group.waitFor();
@@ -69,7 +92,11 @@ try {
           assert.equal(await page.locator('.chat-list').isVisible(), false);
           await page.getByRole('button', { name: 'Mitglieder', exact: true }).click();
           await page.getByRole('button', { name: 'Mitglieder', exact: true }).click();
+          const beforeGroupBack = await page.evaluate(() => window.voiceFixture.stops);
+          await page.getByRole('button', { name: 'Sprachnachricht aufnehmen', exact: true }).click();
+          await page.locator('.voice-recording').waitFor();
           await page.getByRole('button', { name: 'Alle Gruppen', exact: true }).click();
+          await page.waitForFunction(before => window.voiceFixture.stops > before, beforeGroupBack);
           await group.waitFor();
           // Member and Guest retain the task entry, without customer/project editing.
           for (const [workspaceId, writableTasks] of [['w1', true], ['w2', false]]) {
