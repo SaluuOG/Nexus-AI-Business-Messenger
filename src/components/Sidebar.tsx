@@ -65,13 +65,18 @@ export function Sidebar({
 }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuLocationKey, setMenuLocationKey] = useState<string | null>(null);
+  const menuOpen = menuLocationKey === location.key;
   const menuToggle = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => { setMenuOpen(false); }, [location.key]);
+  // Derive visibility from the route: a delayed effect must never close a menu
+  // that the user has already reopened after navigation.
+  useEffect(() => {
+    setMenuLocationKey(key => key === location.key ? key : null);
+  }, [location.key]);
   useEffect(() => {
     const desktop = window.matchMedia('(min-width: 901px)');
-    const closeOnDesktop = () => { if (desktop.matches) setMenuOpen(false); };
+    const closeOnDesktop = () => { if (desktop.matches) setMenuLocationKey(null); };
     desktop.addEventListener('change', closeOnDesktop);
     return () => desktop.removeEventListener('change', closeOnDesktop);
   }, []);
@@ -80,7 +85,7 @@ export function Sidebar({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      setMenuOpen(false);
+      setMenuLocationKey(null);
       menuToggle.current?.focus({ preventScroll: true });
     };
     document.addEventListener('keydown', onKeyDown);
@@ -97,13 +102,16 @@ export function Sidebar({
 
   return (
     <aside className="side" data-menu-open={menuOpen} onBlur={event => {
-      if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false);
+      if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setMenuLocationKey(null);
     }}>
       <div className="brand">
         <button ref={menuToggle} type="button" className="mobile-menu-toggle"
           aria-label={menuOpen ? 'Hauptmenü schließen' : 'Hauptmenü öffnen'}
           aria-expanded={menuOpen} aria-controls="nexus-main-navigation"
-          onClick={() => setMenuOpen(open => !open)}>
+          onClick={() => {
+            menuToggle.current?.focus({ preventScroll: true });
+            setMenuLocationKey(key => key === location.key ? null : location.key);
+          }}>
           {menuOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
         <span className="logo">
@@ -120,7 +128,7 @@ export function Sidebar({
 
       {menuOpen && <button type="button" className="mobile-menu-backdrop" tabIndex={-1}
         aria-label="Menü schließen" onClick={() => {
-          setMenuOpen(false);
+          setMenuLocationKey(null);
           menuToggle.current?.focus({ preventScroll: true });
         }} />}
 
@@ -131,7 +139,7 @@ export function Sidebar({
             key={path}
             className={location.pathname === path ? 'active' : ''}
             onClick={() => {
-              setMenuOpen(false);
+              setMenuLocationKey(null);
               if (menuOpen) menuToggle.current?.focus({ preventScroll: true });
               navigate(path);
             }}

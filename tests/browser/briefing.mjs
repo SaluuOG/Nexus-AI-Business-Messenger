@@ -157,6 +157,12 @@ try {
     } catch (error) {
       await page.screenshot({ path: 'browser-results/' + name + '-failure.png', fullPage: true });
       console.error('Browser errors:', errors);
+      console.error('Menu state:', await page.evaluate(() => ({
+        open: document.querySelector('.side')?.getAttribute('data-menu-open'),
+        active: document.activeElement?.tagName,
+        toggle: document.querySelector('.mobile-menu-toggle')?.getAttribute('aria-expanded'),
+        nav: document.querySelector('#nexus-main-navigation')?.getBoundingClientRect().toJSON(),
+      })));
       console.error('Test URL:', page.url());
       console.error('Test UI:', (await page.locator('body').innerText()).slice(0, 6000));
       throw error;
