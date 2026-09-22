@@ -22,4 +22,6 @@ Vorlagen sind unveränderliche Momentaufnahmen innerhalb eines Workspace. Änder
 - `tests/browser/project-templates.mjs`: Chromium/WebKit mit synthetischem Dienst, Speichern/Übernehmen, angepasste Fristen/Zuständigkeiten/Checklisten, verlorene Antworten, manuelle Anlage, Bestätigung zum Entfernen, 320/390 Pixel und verspätete Antworten bei Rollen-/Kontowechsel.
 - Zusätzlich direkt betroffene Business- und Aufgaben-Datentests; TypeScript und Produktionsbuild.
 
+Backend-Migration `20260922171611_project_templates.sql` am 22.09.2026 eingespielt. SQL-Abnahme vor und nach der Migration erfolgreich. Keine neuen Security-Advisory-Funde; nur die drei zunächst unbenutzten neuen Indizes werden als Performance-Information gemeldet. Die Business-Verwaltungsrechte folgen jetzt der per Realtime/Fokus aktualisierten Teammitgliedschaft.
+
 Veröffentlichung und Live-Abnahme werden nach erfolgreicher Bereitstellung ergänzt.

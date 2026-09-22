@@ -92,7 +92,8 @@ try{
    await page.evaluate(()=>{window.nexusTest.memberships.find(m=>m.workspace_id==='w3'&&m.user_id==='me').role='admin';window.nexusTest.emit('workspace_members','UPDATE');});
    await page.getByRole('button',{name:'Projekt',exact:true}).waitFor();
    await page.evaluate(()=>{window.nexusTemplateTest.delayRead=true;});await openNew();
-   await page.waitForFunction(()=>window.nexusTemplateTest.pending.length===1);
+   // StrictMode may start both a discarded and a current read. Release both.
+   await page.waitForFunction(()=>window.nexusTemplateTest.pending.length>0);
    await page.evaluate(()=>{window.nexusTest.memberships.find(m=>m.workspace_id==='w3'&&m.user_id==='other').role='guest';window.nexusTest.switchUser('other');});
    await dialog.waitFor({state:'hidden'});
    await page.evaluate(()=>{window.nexusTemplateTest.delayRead=false;window.nexusTemplateTest.pending.splice(0).forEach(resolve=>resolve());});

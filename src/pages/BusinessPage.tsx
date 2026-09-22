@@ -625,14 +625,14 @@ export function BusinessPage({ workspaceId, workspaceName, currentUserId, worksp
           {error && <div className="data-alert business-alert">{error}</div>}
           {feedback && <div className="contact-feedback business-feedback">{feedback}</div>}
 
-          <div className="business-role-note">
+          {workspaceRole && <div className="business-role-note">
             <UsersRound size={14} />
             {workspaceRole === 'guest'
               ? 'Guest: Du kannst Business-Daten ansehen.'
               : workspaceRole === 'member'
                 ? 'Member: Kunden und Projekte ansehen sowie Projektaufgaben anlegen und bearbeiten.'
                 : 'Owner/Admin: Kunden, Projekte und Aufgaben vollständig verwalten.'}
-          </div>
+          </div>}
 
           <div className="business-stats">
             <div className="stat business-stat">
