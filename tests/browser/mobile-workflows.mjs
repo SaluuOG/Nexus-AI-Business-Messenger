@@ -68,6 +68,7 @@ try {
           await page.waitForURL(/conversation=c2/);
           assert.equal(await input.inputValue(), '');
           await page.goBack();
+          assert.ok(!new URL(page.url()).hash.includes('conversation='));
           await contact.waitFor();
           assert.equal(await page.locator('.conversation').isVisible(), false);
           await contact.click();
@@ -101,6 +102,7 @@ try {
           await group.click();
           await page.waitForURL(/group=/);
           await page.goBack();
+          assert.ok(!new URL(page.url()).hash.includes('group='));
           await group.waitFor();
           assert.equal(await page.locator('.conversation').isVisible(), false);
           // Member and Guest retain the task entry, without customer/project editing.
