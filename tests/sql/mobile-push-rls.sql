@@ -71,8 +71,12 @@ DO $$ BEGIN
   IF (SELECT count(*) FROM public.notifications WHERE kind='task_comment' AND recipient_id=current_setting('nexus.test.member')::uuid)<>1 THEN RAISE EXCEPTION 'Comment recipient missing'; END IF;
   IF EXISTS(SELECT 1 FROM public.notifications WHERE kind='task_comment' AND recipient_id=current_setting('nexus.test.owner')::uuid) THEN RAISE EXCEPTION 'Self comment notified'; END IF;
 END $$;
+INSERT INTO private.push_wakes(token_hash) VALUES(encode(extensions.digest(repeat('a',64),'sha256'),'hex'));
 SELECT set_config('request.jwt.claims','{"role":"service_role"}',true);
 SET LOCAL ROLE service_role;
+DO $$ BEGIN
+ IF public.consume_push_wake(repeat('b',64)) OR NOT public.consume_push_wake(repeat('a',64)) OR public.consume_push_wake(repeat('a',64)) THEN RAISE EXCEPTION 'Wake token is not single-use'; END IF;
+END $$;
 DO $$ DECLARE jobs jsonb; j jsonb; item jsonb;
 BEGIN
   jobs := public.claim_push_deliveries();

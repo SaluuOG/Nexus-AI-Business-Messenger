@@ -39,10 +39,10 @@ export function NotificationsPage({ model }: { model: NotificationsModel }) {
     {(model.error || model.actionError) && <div className="data-alert" role="alert">{model.error || model.actionError}{model.error && <button className="secondary" onClick={() => void model.refresh()}>Erneut versuchen</button>}</div>}
     {!model.error && !model.loading && !model.items.length && <div className="panel notification-empty"><CheckCheck size={32} /><h2>{model.unreadOnly ? 'Keine ungelesenen Hinweise' : 'Noch keine Benachrichtigungen'}</h2><p>{model.unreadOnly ? 'Du hast alle sichtbaren Hinweise gelesen.' : 'Hier erscheinen neue Nachrichten, Anfragen und Hinweise zu deinen Aufgaben. Deine Auswahl findest du in den Einstellungen.'}</p></div>}
     <ul className="notification-list" aria-label="Deine Benachrichtigungen" aria-busy={model.loading}>
-      {model.items.map(item => { const Icon = icons[item.kind]; const target = notificationTarget(item); return <li key={item.id} className={'notification-item' + (item.read_at ? '' : ' unread')}>
+      {model.items.map(item => { const Icon = icons[item.kind] ?? Bell; const target = notificationTarget(item); return <li key={item.id} className={'notification-item' + (item.read_at ? '' : ' unread')}>
         <span className={'notification-icon kind-' + item.kind}><Icon size={20} /></span>
         <button className="notification-open" disabled={!target || model.busy} onClick={() => void open(item)}>
-          <span className="notification-meta"><span>{notificationLabels[item.kind]}</span><time dateTime={item.created_at}>{dateLabel(item.created_at)}</time></span>
+          <span className="notification-meta"><span>{notificationLabels[item.kind] ?? 'Hinweis'}</span><time dateTime={item.created_at}>{dateLabel(item.created_at)}</time></span>
           <b>{item.details.title}</b><span className="notification-detail">{item.details.detail}</span>
           {!target && <span>Dieser Inhalt ist nicht mehr verfügbar.</span>}
         </button>

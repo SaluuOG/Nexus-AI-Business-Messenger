@@ -3,6 +3,7 @@
 CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
+
 ALTER TABLE public.notification_preferences ADD COLUMN comments boolean NOT NULL DEFAULT true;
 ALTER TABLE public.notifications DROP CONSTRAINT notifications_kind_check;
 ALTER TABLE public.notifications ADD CONSTRAINT notifications_kind_check CHECK (kind IN
@@ -181,16 +182,32 @@ ALTER TABLE private.push_deliveries ENABLE ROW LEVEL SECURITY;
 CREATE POLICY push_deliveries_no_client_access ON private.push_deliveries FOR ALL TO authenticated USING (false) WITH CHECK (false);
 REVOKE ALL ON private.push_deliveries FROM PUBLIC,anon,authenticated,service_role;
 
--- Configuration secrets never appear in migration source, browser responses or logs.
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM vault.secrets WHERE name='nexus_push_dispatch_token') THEN
-    PERFORM vault.create_secret(encode(extensions.gen_random_bytes(32),'hex'),'nexus_push_dispatch_token','Nexus database-to-push dispatcher');
-  END IF;
+-- pg_net internals are extension-owned. Never place a reusable credential in
+-- its HTTP queue: each wake carries a one-use, two-minute nonce, stored hashed.
+CREATE TABLE private.push_wakes (
+  token_hash text PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE private.push_wakes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY push_wakes_no_client_access ON private.push_wakes FOR ALL TO authenticated USING (false) WITH CHECK (false);
+REVOKE ALL ON private.push_wakes FROM PUBLIC,anon,authenticated,service_role;
+CREATE FUNCTION private.consume_push_wake(p_token text)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+  IF p_token IS NULL OR p_token !~ '^[a-f0-9]{64}$' THEN RETURN false; END IF;
+  DELETE FROM private.push_wakes WHERE token_hash=encode(extensions.digest(p_token,'sha256'),'hex') AND created_at>now()-interval '2 minutes';
+  RETURN FOUND;
 END $$;
+REVOKE ALL ON FUNCTION private.consume_push_wake(text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION private.consume_push_wake(text) TO service_role;
+CREATE FUNCTION public.consume_push_wake(p_token text)
+RETURNS boolean LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$ SELECT private.consume_push_wake(p_token); $$;
+REVOKE ALL ON FUNCTION public.consume_push_wake(text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.consume_push_wake(text) TO service_role;
 
 CREATE FUNCTION private.push_server_keys(p_seed jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
-DECLARE v_keys jsonb; v_token text;
+DECLARE v_keys jsonb;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('nexus-push-vapid',0));
   SELECT decrypted_secret::jsonb INTO v_keys FROM vault.decrypted_secrets WHERE name='nexus_push_vapid';
@@ -199,8 +216,7 @@ BEGIN
     PERFORM vault.create_secret(p_seed::text,'nexus_push_vapid','Nexus stable Web Push signing keys');
     v_keys := p_seed;
   END IF;
-  SELECT decrypted_secret INTO v_token FROM vault.decrypted_secrets WHERE name='nexus_push_dispatch_token';
-  RETURN jsonb_build_object('public_key',v_keys->>'publicKey','private_key',v_keys->>'privateKey','dispatch_token',v_token);
+  RETURN jsonb_build_object('public_key',v_keys->>'publicKey','private_key',v_keys->>'privateKey');
 END $$;
 REVOKE ALL ON FUNCTION private.push_server_keys(jsonb) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION private.push_server_keys(jsonb) TO service_role;
@@ -214,10 +230,12 @@ CREATE FUNCTION private.wake_push_worker(p_force boolean DEFAULT false)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE v_url text; v_token text;
 BEGIN
+  DELETE FROM private.push_wakes WHERE created_at<now()-interval '2 minutes';
   IF NOT p_force AND NOT EXISTS (SELECT 1 FROM private.push_deliveries WHERE status IN ('queued','sending') AND next_attempt_at<=now() AND attempts<5) THEN RETURN; END IF;
   SELECT decrypted_secret INTO v_url FROM vault.decrypted_secrets WHERE name='nexus_push_dispatch_url';
   IF v_url IS NULL THEN RETURN; END IF; -- Configured once after deploying the worker.
-  SELECT decrypted_secret INTO v_token FROM vault.decrypted_secrets WHERE name='nexus_push_dispatch_token';
+  v_token := encode(extensions.gen_random_bytes(32),'hex');
+  INSERT INTO private.push_wakes(token_hash) VALUES(encode(extensions.digest(v_token,'sha256'),'hex'));
   PERFORM net.http_post(url:=v_url,headers:=jsonb_build_object('Content-Type','application/json','x-nexus-push-token',v_token),body:='{}'::jsonb,timeout_milliseconds:=10000);
 EXCEPTION WHEN OTHERS THEN
   -- Push infrastructure must never roll back a message or task. Cron retries.

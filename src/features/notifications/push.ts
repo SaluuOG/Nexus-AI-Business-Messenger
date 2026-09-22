@@ -19,8 +19,10 @@ export function pushSupport(): 'supported' | 'install' | 'unavailable' {
 function localDevice(): LocalDevice {
   const saved = localStorage.getItem(storageKey);
   if (saved) {
-    const value = JSON.parse(saved) as LocalDevice;
-    if (/^[0-9a-f-]{36}$/.test(value.id) && value.status) return value;
+    try {
+      const value = JSON.parse(saved) as LocalDevice;
+      if (/^[0-9a-f-]{36}$/.test(value.id) && value.status) return value;
+    } catch { /* A corrupt device marker can be replaced without resetting the account. */ }
   }
   const value = { id: crypto.randomUUID(), userId: null, status: { ...defaultPushStatus } };
   localStorage.setItem(storageKey, JSON.stringify(value));
@@ -73,8 +75,9 @@ export function syncPushAccount(userId: string | null): Promise<void> {
   accountReady = (async () => {
     await previous;
     if (pushSupport() !== 'supported' || started !== generation) return;
+    let reg: ServiceWorkerRegistration | undefined;
     try {
-      const reg = await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL);
+      reg = await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL);
       if (!reg?.active || started !== generation) return;
       const device = localDevice();
       if (device.userId !== userId || !userId) {
@@ -85,7 +88,10 @@ export function syncPushAccount(userId: string | null): Promise<void> {
         if (started !== generation) return;
         localStorage.setItem(storageKey, JSON.stringify({ ...device, userId, status: { ...defaultPushStatus } }));
       } else await binding(reg, device);
-    } catch { /* Settings exposes recoverable errors; never prompt automatically. */ }
+    } catch {
+      // Fail closed even if local storage or unsubscription is blocked.
+      if (reg?.active && started === generation) await binding(reg, null).catch(() => {});
+    }
   })();
   return accountReady;
 }
