@@ -5,16 +5,16 @@ import { createServer } from 'vite';
 const {chromium,webkit}=await import(pathToFileURL(process.env.NEXUS_PLAYWRIGHT_MODULE).href);
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const stub=fileURLToPath(new URL('./template-service.mjs',import.meta.url));
-const base='http://127.0.0.1:4190';
-const server=await createServer({root,configFile:false,base:'/',server:{host:'127.0.0.1',port:4190,strictPort:true,hmr:false},plugins:[{name:'template-browser',enforce:'pre',resolveId(source){if(source.endsWith('/lib/supabase')||source.endsWith('/lib/env'))return stub;}}]});
+const base='http://127.0.0.1:4182';
+const server=await createServer({root,configFile:false,base:'/',server:{host:'127.0.0.1',port:4182,strictPort:true,hmr:false},plugins:[{name:'template-browser',enforce:'pre',resolveId(source){if(source.endsWith('/lib/supabase')||source.endsWith('/lib/env'))return stub;}}]});
 await server.listen();await mkdir('browser-results',{recursive:true});
 const fits=async page=>assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Mobile overflow');
 try{
  for(const[name,engine]of[['chromium',chromium],['webkit',webkit]]){
   const browser=await engine.launch();const context=await browser.newContext({viewport:{width:390,height:844}});
-  await context.addInitScript(()=>sessionStorage.setItem('nexusTest.mobileBusinessFixture','1'));
+  await context.addInitScript(()=>{ if(location.origin==='http://127.0.0.1:4182')sessionStorage.setItem('nexusTest.mobileBusinessFixture','1'); });
   await context.route('**/*',route=>[base+'/', 'blob:'+base+'/'].some(prefix=>route.request().url().startsWith(prefix))?route.continue():route.abort());
-  const page=await context.newPage();page.setDefaultTimeout(15000);const errors=[],failedRequests=[];page.on('pageerror',e=>errors.push(e.message));page.on('requestfailed',r=>failedRequests.push({url:r.url(),failure:r.failure()}));
+  const page=await context.newPage();page.setDefaultTimeout(15000);const errors=[],failedRequests=[];page.on('pageerror',e=>errors.push(e.stack || e.message));page.on('requestfailed',r=>failedRequests.push({url:r.url(),failure:r.failure()}));
   const source=page.locator('.business-project-card').filter({hasText:'Drittes Projekt'});
   const dialog=page.getByRole('dialog',{name:'Neues Projekt anlegen',exact:true});
   const saveDialog=page.getByRole('dialog',{name:'Als Vorlage speichern',exact:true});
@@ -101,7 +101,7 @@ try{
    assert.equal(await page.getByRole('button',{name:'Projekt',exact:true}).count(),0);
    assert.deepEqual(errors,[]);
    console.log(`${name}: template save/select, dates, editable checklist/assignee, lost-response deduplication, manual creation, archive, 320/390px, role/account stale replies passed`);
-  }catch(error){await page.screenshot({path:`browser-results/${name}-project-template-failure.png`,fullPage:true});console.error({errors,failedRequests});console.error(await page.locator('body').innerText());console.error(await page.locator('body').ariaSnapshot());throw error;}
+  }catch(error){await page.screenshot({path:`browser-results/${name}-project-template-failure.png`,fullPage:true});console.error({url:page.url(),errors,failedRequests});console.error(await page.locator('body').innerText());console.error(await page.locator('body').ariaSnapshot());throw error;}
   finally{await context.close();await browser.close();}
  }
 }finally{await server.close();}
