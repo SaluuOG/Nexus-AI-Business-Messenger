@@ -25,6 +25,7 @@ import './message-search.css';
 import './message-history.css';
 import './mobile-install.css';
 import './mobile-menu.css';
+import './mobile-conversations.css';
 
 registerMobileApp();
 

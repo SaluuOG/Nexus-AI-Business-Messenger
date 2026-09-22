@@ -1,10 +1,12 @@
 import {
+  ArrowLeft,
   Building2,
   CalendarDays,
   CircleDollarSign,
   FolderKanban,
   Globe2,
   Mail,
+  MessageCircle,
   ListTodo,
   Phone,
   Plus,
@@ -23,7 +25,7 @@ import { Header } from '../components/Header';
 import { ProjectTasksPanel } from '../components/ProjectTasksPanel';
 import {
   createCustomer,
-  createProject,
+  createProjectWithTasks,
   customerStatuses,
   deleteCustomer,
   deleteProject,
@@ -42,7 +44,10 @@ import {
   type ProjectInput,
   type ProjectPriority,
   type ProjectStatus,
+  type InitialProjectTask,
 } from '../features/data/businessData';
+import { loadNexusContacts, type NexusContact } from '../features/data/contactsData';
+import { taskMemberName } from '../features/data/projectTasks';
 import type { NexusWorkspaceMember, WorkspaceRole } from '../features/data/nexusData';
 
 type BusinessPageProps = {
@@ -52,11 +57,13 @@ type BusinessPageProps = {
   currentUserId?: string;
   workspaceLoading?: boolean;
   workspaceError?: string | null;
+  onStartChat: (contactUserId: string) => Promise<{ error: string | null }>;
 };
 
 type CustomerDraft = {
   name: string;
   contactName: string;
+  chatUserId: string;
   email: string;
   phone: string;
   website: string;
@@ -100,6 +107,7 @@ const projectPriorityLabels: Record<ProjectPriority, string> = {
 const emptyCustomerDraft: CustomerDraft = {
   name: '',
   contactName: '',
+  chatUserId: '',
   email: '',
   phone: '',
   website: '',
@@ -167,6 +175,7 @@ function customerDraftFrom(customer: NexusCustomer): CustomerDraft {
   return {
     name: customer.name,
     contactName: customer.contact_name ?? '',
+    chatUserId: customer.chat_user_id ?? '',
     email: customer.email ?? '',
     phone: customer.phone ?? '',
     website: customer.website ?? '',
@@ -201,7 +210,7 @@ function normalizeWebsite(value: string) {
   }
 }
 
-export function BusinessPage({ workspaceId, workspaceName, workspaceRole, currentUserId, workspaceLoading, workspaceError }: BusinessPageProps) {
+export function BusinessPage({ workspaceId, workspaceName, workspaceRole, currentUserId, workspaceLoading, workspaceError, onStartChat }: BusinessPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selection = readBusinessSearch(searchParams.toString(), workspaceId);
   const { view, projectId: requestedProjectId, taskId: requestedTaskId } = selection;
@@ -223,11 +232,33 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
   const [projectEditor, setProjectEditor] = useState<NexusProject | 'new' | null>(null);
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(emptyCustomerDraft);
   const [projectDraft, setProjectDraft] = useState<ProjectDraft>(emptyProjectDraft);
+  const [initialTasks, setInitialTasks] = useState<InitialProjectTask[]>([]);
+  const [contacts, setContacts] = useState<NexusContact[]>([]);
+  const [contactsError, setContactsError] = useState<string | null>(null);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [openingChat, setOpeningChat] = useState<string | null>(null);
+  const projectRequestId = useRef('');
+  const saveBusy = useRef(false);
   const requestVersion = useRef(0);
 
   const canCreate = workspaceRole === 'owner' || workspaceRole === 'admin';
-  const canEdit = canCreate || workspaceRole === 'member';
+  const canEdit = canCreate;
   const canDelete = canCreate;
+
+  useEffect(() => {
+    if (!canEdit) { setCustomerEditor(null); setProjectEditor(null); }
+  }, [canEdit]);
+
+  useEffect(() => {
+    if (!customerEditor) return;
+    let active = true;
+    setContactsLoading(true); setContactsError(null);
+    void loadNexusContacts().then(result => {
+      if (!active) return;
+      setContacts(result.data); setContactsError(result.error); setContactsLoading(false);
+    }).catch(() => { if (active) { setContactsError('Kontakte konnten nicht geladen werden. Bitte den Dialog erneut öffnen.'); setContactsLoading(false); } });
+    return () => { active = false; };
+  }, [customerEditor]);
 
   const refresh = useCallback(
     async (showLoader = true) => {
@@ -381,6 +412,8 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
     setFeedback(null);
     setError(null);
     setProjectDraft(emptyProjectDraft);
+    setInitialTasks([]);
+    projectRequestId.current = crypto.randomUUID();
     setProjectEditor('new');
   };
 
@@ -391,9 +424,35 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
     setProjectEditor(project);
   };
 
+  const updateInitialTask = (id: string, patch: Partial<InitialProjectTask>) => {
+    setInitialTasks(current => current.map(task => task.id === id ? { ...task, ...patch } : task));
+  };
+
+  const openCustomerChat = async (customer: NexusCustomer) => {
+    if (openingChat) return;
+    if (!customer.chat_user_id) {
+      if (canEdit) {
+        openCustomer(customer);
+        setFeedback('Wähle im Kundenformular den Nexus-Kontakt für den Kundenchat aus.');
+      } else setFeedback('Für diesen Kunden ist noch kein Nexus-Kontakt verknüpft. Bitte einen Owner oder Admin darum bitten.');
+      return;
+    }
+    if (customer.chat_user_id === currentUserId) {
+      setFeedback('Dieser Kunde ist mit deinem eigenen Nexus-Konto verknüpft.');
+      return;
+    }
+    setOpeningChat(customer.id); setError(null); setFeedback(null);
+    try {
+      const result = await onStartChat(customer.chat_user_id);
+      if (result.error) setError(result.error.includes('Nexus-Kontakten')
+        ? 'Verbinde dich zuerst im Bereich Kontakte mit diesem Kunden. Danach öffnet die Sprechblase euren privaten Chat.' : result.error);
+    } catch { setError('Der Kundenchat konnte nicht geöffnet werden. Bitte erneut versuchen.'); }
+    finally { setOpeningChat(null); }
+  };
+
   const saveCustomer = async (event: FormEvent) => {
     event.preventDefault();
-    if (!workspaceId || !customerEditor) return;
+    if (!workspaceId || !customerEditor || !canEdit || saveBusy.current) return;
     if (customerDraft.name.trim().length < 2) {
       setError('Der Kundenname muss mindestens 2 Zeichen lang sein.');
       return;
@@ -411,18 +470,20 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
     const input: CustomerInput = {
       name: customerDraft.name,
       contact_name: customerDraft.contactName,
+      chat_user_id: customerDraft.chatUserId || null,
       email: customerDraft.email,
       phone: customerDraft.phone,
       website: website.value,
       status: customerDraft.status,
       notes: customerDraft.notes,
     };
+    saveBusy.current = true;
     setSaving(true);
     setError(null);
-    const result =
-      customerEditor === 'new'
-        ? await createCustomer(workspaceId, input)
-        : await updateCustomer(customerEditor.id, input);
+    const result = await (customerEditor === 'new'
+      ? createCustomer(workspaceId, input)
+      : updateCustomer(customerEditor.id, input)).catch(() => ({ data: null, error: 'Die Verbindung wurde unterbrochen. Bitte erneut versuchen.' }));
+    saveBusy.current = false;
     setSaving(false);
     if (result.error) {
       setError(result.error);
@@ -436,7 +497,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
 
   const saveProject = async (event: FormEvent) => {
     event.preventDefault();
-    if (!workspaceId || !projectEditor) return;
+    if (!workspaceId || !projectEditor || !canEdit || saveBusy.current) return;
     const value = Number(projectDraft.value.replace(',', '.') || 0);
     const progress = Number(projectDraft.progress);
     if (projectDraft.title.trim().length < 2) {
@@ -462,12 +523,17 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
       progress,
       description: projectDraft.description,
     };
+    if (projectEditor === 'new' && initialTasks.some(task => task.title.trim().length < 2)) {
+      setError('Bitte gib jeder Aufgabe einen Titel mit mindestens 2 Zeichen oder entferne die leere Aufgabe.');
+      return;
+    }
+    saveBusy.current = true;
     setSaving(true);
     setError(null);
-    const result =
-      projectEditor === 'new'
-        ? await createProject(workspaceId, input)
-        : await updateProject(projectEditor.id, input);
+    const result = await (projectEditor === 'new'
+      ? createProjectWithTasks(workspaceId, projectRequestId.current, input, initialTasks)
+      : updateProject(projectEditor.id, input)).catch(() => ({ data: null, error: 'Die Verbindung wurde unterbrochen. Bitte erneut versuchen.' }));
+    saveBusy.current = false;
     setSaving(false);
     if (result.error) {
       setError(result.error);
@@ -551,7 +617,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
             {workspaceRole === 'guest'
               ? 'Guest: Du kannst Business-Daten ansehen.'
               : workspaceRole === 'member'
-                ? 'Member: Kunden und Projekte bearbeiten sowie Aufgaben anlegen und bearbeiten.'
+                ? 'Member: Kunden und Projekte ansehen sowie Projektaufgaben anlegen und bearbeiten.'
                 : 'Owner/Admin: Kunden, Projekte und Aufgaben vollständig verwalten.'}
           </div>
 
@@ -577,10 +643,10 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
           <div className="business-toolbar panel">
             <div className="business-tabs" role="tablist" aria-label="Business-Bereich">
               <button
-                className={view === 'projects' ? 'active' : ''}
+                className={view !== 'customers' ? 'active' : ''}
                 onClick={() => setView('projects')}
                 role="tab"
-                aria-selected={view === 'projects'}
+                aria-selected={view !== 'customers'}
               >
                 Projekte <span>{projects.length}</span>
               </button>
@@ -591,9 +657,6 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
                 aria-selected={view === 'customers'}
               >
                 Kunden <span>{customers.length}</span>
-              </button>
-              <button className={view === 'tasks' ? 'active' : ''} onClick={() => openTasks()} role="tab" aria-selected={view === 'tasks'}>
-                Aufgaben <span>{tasks.length}</span>
               </button>
             </div>
             {view !== 'tasks' && !requestedProjectId && <div className="business-filters">
@@ -630,6 +693,9 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
           </div>
 
           {view === 'projects' && requestedProjectId && <div className="business-focus-note" role="status"><span>Geöffnetes Projekt</span><button className="secondary" onClick={() => setView('projects')}>Alle Projekte anzeigen</button></div>}
+
+          {view === 'projects' && <div className="project-tasks-entry"><span>Aufgaben direkt im Projekt öffnen und verteilen.</span><button className="secondary" onClick={() => openTasks()}><ListTodo size={16} /> Alle Projektaufgaben ({tasks.length})</button></div>}
+          {view === 'tasks' && <div className="project-tasks-entry"><button className="secondary" onClick={() => setView('projects')}><ArrowLeft size={16} /> Zurück zu Projekten</button><b>{projects.find(project => project.id === requestedProjectId)?.title ?? 'Alle Projektaufgaben'}</b></div>}
 
           {view === 'tasks' ? <ProjectTasksPanel key={`${workspaceId}:${taskProjectId}:${requestedTaskId ?? ''}`} workspaceId={workspaceId} currentUserId={currentUserId} tasks={tasks} projects={projects} members={members} defaultProjectId={taskProjectId} initialTaskId={requestedTaskId} onClearTaskFocus={() => openTasks(taskProjectId)} loading={loading} loadError={taskError || error} onRefresh={() => refresh(false)} /> : loading && customers.length === 0 && projects.length === 0 ? (
             <div className="panel business-loading">Business-Daten werden geladen…</div>
@@ -714,6 +780,7 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
                     <div className="business-customer-top">
                       <div className="business-customer-avatar">{customer.name.slice(0, 2).toUpperCase()}</div>
                       <span className={`business-badge customer-${customer.status}`}>{customerStatusLabels[customer.status]}</span>
+                      <button className="customer-chat-button" type="button" aria-label={`Chat mit ${customer.name} öffnen`} title="Kundenchat öffnen" disabled={Boolean(openingChat)} onClick={() => void openCustomerChat(customer)}><MessageCircle size={19} /></button>
                     </div>
                     <h3>{customer.name}</h3>
                     {customer.contact_name && <p><UserRound size={14} /> {customer.contact_name}</p>}
@@ -759,6 +826,11 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
                 <label><span>Telefon</span><input type="tel" maxLength={60} value={customerDraft.phone} onChange={(event) => setCustomerDraft((current) => ({ ...current, phone: event.target.value }))} placeholder="+49 …" /></label>
                 <label className="wide"><span>Website</span><input type="text" maxLength={500} value={customerDraft.website} onChange={(event) => setCustomerDraft((current) => ({ ...current, website: event.target.value }))} placeholder="www.firma.de" /></label>
                 <label className="wide"><span>Notizen</span><textarea maxLength={4000} value={customerDraft.notes} onChange={(event) => setCustomerDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="Wichtige Kundendetails…" /></label>
+                <label className="wide"><span>Nexus-Kontakt für Kundenchat</span><select value={customerDraft.chatUserId} disabled={contactsLoading || Boolean(contactsError)} onChange={event => setCustomerDraft(current => ({ ...current, chatUserId: event.target.value }))}>
+                  <option value="">Noch nicht verknüpft</option>
+                  {customerDraft.chatUserId && !contacts.some(contact => contact.contact_user_id === customerDraft.chatUserId) && <option value={customerDraft.chatUserId}>Verknüpfter Kontakt (nicht in deiner Kontaktliste)</option>}
+                  {contacts.map(contact => <option key={contact.contact_user_id} value={contact.contact_user_id}>{contact.full_name || contact.username || 'Nexus-Kontakt'}{contact.username ? ` (@${contact.username})` : ''}</option>)}
+                </select><small className="customer-chat-hint">{contactsLoading ? 'Kontakte werden geladen…' : contactsError || 'Wähle einen bestätigten Nexus-Kontakt. Neue Kontakte kannst du im Bereich Kontakte verbinden.'}</small></label>
               </div>
               <div className="business-modal-actions"><button type="button" className="secondary" onClick={() => setCustomerEditor(null)} disabled={saving}>Abbrechen</button><button className="primary" disabled={saving}>{saving ? 'Speichert…' : customerEditor === 'new' ? 'Kunde anlegen' : 'Änderungen speichern'}</button></div>
             </form>
@@ -791,6 +863,20 @@ export function BusinessPage({ workspaceId, workspaceName, workspaceRole, curren
                 <label><span>Fortschritt (%)</span><input type="number" min="0" max="100" step="1" value={projectDraft.progress} onChange={(event) => setProjectDraft((current) => ({ ...current, progress: event.target.value }))} /></label>
                 <label className="wide"><span>Beschreibung / Notizen</span><textarea maxLength={4000} value={projectDraft.description} onChange={(event) => setProjectDraft((current) => ({ ...current, description: event.target.value }))} placeholder="Leistungsumfang, nächste Schritte, Besonderheiten…" /></label>
               </div>
+              {projectEditor === 'new' && <div className="project-task-drafts">
+                <h3>Aufgaben verteilen</h3><p>Plane die ersten Schritte. Projekt und Aufgaben werden gemeinsam gespeichert.</p>
+                {initialTasks.map((task, index) => <fieldset className="project-task-draft" key={task.id} disabled={saving}>
+                  <legend>Aufgabe {index + 1}</legend><div className="business-form-grid">
+                    <label className="wide"><span>Aufgabentitel *</span><input required minLength={2} maxLength={180} value={task.title} onChange={event => updateInitialTask(task.id, { title: event.target.value })} /></label>
+                    <label><span>Verantwortlich</span><select value={task.assigned_to || ''} onChange={event => updateInitialTask(task.id, { assigned_to: event.target.value || null })}><option value="">Nicht zugewiesen</option>{members.filter(member => member.role !== 'guest').map(member => <option key={member.user_id} value={member.user_id}>{taskMemberName(member)}</option>)}</select></label>
+                    <label><span>Fällig am</span><input type="date" value={task.due_date || ''} onChange={event => updateInitialTask(task.id, { due_date: event.target.value || null })} /></label>
+                    <label><span>Priorität der Aufgabe</span><select value={task.priority} onChange={event => updateInitialTask(task.id, { priority: event.target.value as ProjectPriority })}>{projectPriorities.map(priority => <option key={priority} value={priority}>{projectPriorityLabels[priority]}</option>)}</select></label>
+                    <label className="wide"><span>Aufgabendetails</span><textarea maxLength={4000} value={task.description || ''} onChange={event => updateInitialTask(task.id, { description: event.target.value })} /></label>
+                  </div><button type="button" className="secondary" onClick={() => setInitialTasks(current => current.filter(item => item.id !== task.id))}><Trash2 size={14} /> Aufgabe entfernen</button>
+                </fieldset>)}
+                <button type="button" className="secondary" disabled={saving || initialTasks.length >= 50 || Boolean(taskError)} onClick={() => setInitialTasks(current => [...current, { id: crypto.randomUUID(), title: '', status: 'todo', priority: 'medium', assigned_to: null, due_date: null, description: '' }])}><Plus size={15} /> Aufgabe hinzufügen</button>
+                {taskError && <p role="alert">Das Team konnte nicht vollständig geladen werden. Bitte vor dem Verteilen von Aufgaben aktualisieren.</p>}
+              </div>}
               <div className="business-modal-actions"><button type="button" className="secondary" onClick={() => setProjectEditor(null)} disabled={saving}>Abbrechen</button><button className="primary" disabled={saving}>{saving ? 'Speichert…' : projectEditor === 'new' ? 'Projekt anlegen' : 'Änderungen speichern'}</button></div>
             </form>
           </div>

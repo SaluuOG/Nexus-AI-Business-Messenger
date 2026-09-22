@@ -125,7 +125,7 @@ try {
       await page.getByRole('button', { name: 'Alle Projekte anzeigen', exact: true }).click();
       await page.locator('.business-project-card').getByRole('heading', { name: 'Kommendes Projekt', exact: true }).waitFor();
       assert.equal(await page.locator('.business-project-card').count(), 3);
-      await page.getByRole('tab', { name: /Aufgaben/ }).click();
+      await page.getByRole('button', { name: /Alle Projektaufgaben/ }).click();
       await page.waitForURL(url => url.hash.includes('view=tasks'));
       assert.equal(new URL(page.url().split('#')[1], 'https://example.invalid').searchParams.has('task'), false);
       await page.getByRole('button', { name: 'Briefing', exact: true }).click();

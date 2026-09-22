@@ -1,6 +1,8 @@
 import { Camera, CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
+import { useMobileLayout } from '../features/mobile/useMobileLayout';
 import { ChatScanAction } from '../components/ChatScanAction';
 import { ChatStatusBadge, ChatStatusFilter, matchesChatStatus, type ChatStatusFilterValue } from '../components/ChatStatusFilter';
 import { useChatScanWorkflows } from '../features/ai/useChatScanWorkflows';
@@ -139,6 +141,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   const [chatSearch, setChatSearch] = useSearchParams();
   const linkedGroupId = chatSearch.get('group');
   const linkedMessageId = chatSearch.get('message');
+  const isMobile = useMobileLayout();
   const selectedRef = useRef<string | null>(null);
   const messageRequest = useRef(0);
   const olderMessageRequest = useRef(0);
@@ -149,6 +152,18 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   const [groups, setGroups] = useState<GroupChat[]>([]);
   const [contacts, setContacts] = useState<NexusContact[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const previousMobile = useRef(isMobile);
+  const continuingDesktopChat = isMobile && !previousMobile.current && Boolean(selectedId);
+  const mobileConversationOpen = Boolean(linkedGroupId || chatSearch.get('task') || continuingDesktopChat);
+  const mobileListOnly = isMobile && !mobileConversationOpen;
+  const mobileListOnlyRef = useRef(mobileListOnly);
+  mobileListOnlyRef.current = mobileListOnly;
+  useEffect(() => {
+    if (continuingDesktopChat && selectedId && !linkedGroupId && !chatSearch.get('task')) {
+      setChatSearch({ group: selectedId }, { replace: true });
+    }
+    previousMobile.current = isMobile;
+  }, [isMobile, continuingDesktopChat, selectedId, linkedGroupId]);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [olderCursor, setOlderCursor] = useState<MessageCursor | null>(null);
@@ -266,6 +281,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     setGroups(result.data);
     if (!silent && linkedGroupId && !result.data.some(group => group.group_id === linkedGroupId)) setError('Die verlinkte Gruppe ist nicht mehr verfügbar.');
     setSelectedId((current) => {
+      if (mobileListOnlyRef.current) return null;
       const target = preferred || linkedGroupId || current;
       return target && result.data.some((group) => group.group_id === target)
         ? target
@@ -276,7 +292,11 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
 
   refreshGroupsRef.current = refreshGroups;
 
-  useEffect(() => { void refreshGroups(linkedGroupId); }, [linkedGroupId]);
+  useEffect(() => {
+    if (mobileListOnly) setSelectedId(null);
+    else if (linkedGroupId) setSelectedId(linkedGroupId);
+    void refreshGroups(linkedGroupId);
+  }, [linkedGroupId, mobileListOnly]);
 
   const refreshActivity = async (groupId: string, shouldApply?: () => boolean) => {
     if (shouldApply && !shouldApply()) return;
@@ -1138,7 +1158,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     setSelectedContacts([]);
     await refreshGroups(result.data);
     setSelectedId(result.data);
-    setChatSearch({ group: result.data }, { replace: true });
+    setChatSearch({ group: result.data });
   };
 
   const returnToLatestMessages = () => {
@@ -1296,7 +1316,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   const canSend = Boolean(editing ? draft.trim() : draft.trim() || pendingFile) && !saving && !recording && !awaitingManualRetry;
 
   return (
-    <div className="chat-layout real-chat-layout group-chat-layout">
+    <div className="chat-layout real-chat-layout group-chat-layout" data-mobile-pane={mobileConversationOpen ? 'conversation' : 'list'}>
       <section className="chat-list">
         <div className="chat-list-title">
           <Header kicker="PHASE 3.7" title="Gruppen" sub="Echte Gruppen- und Team-Chats mit vollständigem Verlauf." />
@@ -1332,11 +1352,12 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
 
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Gruppen durchsuchen" /></div>
         <ChatStatusFilter value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
+        {mobileListOnly && error && <div className="chat-error" role="alert">{error}</div>}
         {!loading && groups.length > 0 && filteredGroups.length === 0 && <div className="chat-list-empty">Keine Gruppen für diese Auswahl.</div>}
         {loading && groups.length === 0 && <div className="chat-list-empty">Gruppen werden geladen…</div>}
         {!loading && groups.length === 0 && <div className="chat-list-empty"><UsersRound size={24} /><b>Noch keine Gruppen</b><span>Erstelle deine erste Gruppe mit einem Nexus-Kontakt.</span></div>}
         {filteredGroups.map((group) => (
-          <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setContextWarning(null); setSelectedId(group.group_id); setChatSearch({ group: group.group_id }, { replace: true }); }} key={group.group_id}>
+          <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setContextWarning(null); setSelectedId(group.group_id); setChatSearch({ group: group.group_id }); }} key={group.group_id}>
             <div className="avatar group-avatar"><GroupAvatar group={group} size={16} /></div>
             <span><b>{group.name}</b><small>{group.member_count} Mitglieder · {roleLabel(group.role)}</small><p>{group.last_message || 'Neue Gruppe'}</p><ChatStatusBadge state={workflows.states.get(group.group_id)} /></span>
             <em>{formatTime(group.last_message_at)}{group.unread_count > 0 && <i>{group.unread_count > 99 ? '99+' : group.unread_count}</i>}</em>
@@ -1345,6 +1366,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       </section>
 
       <section className="conversation">
+        <div className="mobile-chat-backbar"><button type="button" onClick={() => { setSelectedId(null); setError(null); setContextWarning(null); setChatSearch({}); }}><ArrowLeft size={20} /> Alle Gruppen</button></div>
         <TaskMessageContext kind="group" onChatResolved={id => { setSelectedId(id); void refreshGroups(id); }} />
         {(error || contextWarning) && <div className="chat-error">{error || contextWarning}</div>}
         {!currentGroup ? (

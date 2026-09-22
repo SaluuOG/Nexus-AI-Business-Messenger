@@ -186,8 +186,7 @@ function AppShell() {
   const startContactChat = async (contactUserId: string) => {
     const result = await openDirectConversation(contactUserId);
     if (result.error || !result.data) return { error: result.error || 'Chat konnte nicht geöffnet werden.' };
-    setRequestedConversationId(result.data);
-    navigate(routes.chats);
+    navigate(routes.chats + '?' + new URLSearchParams({ conversation: result.data }));
     return { error: null };
   };
 
@@ -410,6 +409,7 @@ function AppShell() {
         path={routes.business}
         element={
           <BusinessPage
+            onStartChat={startContactChat}
             key={auth.user?.id + ':' + selectedWorkspaceId}
             workspaceId={selectedWorkspaceId}
             workspaceName={workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.name}
