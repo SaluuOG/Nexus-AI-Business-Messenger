@@ -7,7 +7,7 @@ const root=fileURLToPath(new URL('../../',import.meta.url));
 const stub=fileURLToPath(new URL('./attachment-service.mjs',import.meta.url));
 const server=await createServer({root,configFile:false,base:'/',server:{host:'127.0.0.1',port:4189,strictPort:true,hmr:false},plugins:[{name:'attachment-browser',enforce:'pre',resolveId(source){if(source.endsWith('/lib/supabase')||source.endsWith('/lib/env'))return stub;}}]});
 await server.listen();await mkdir('browser-results',{recursive:true});
-const png={name:'Entwurf.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=','base64')};
+const png={name:'Entwurf.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAGUlEQVR4nGNsL37GQApgIkn1qIZRDUNKAwDuPAIA42gH+gAAAABJRU5ErkJggg==','base64')};
 const txt={name:'Notizen.txt',mimeType:'text/plain',buffer:Buffer.from('Nexus attachment acceptance')};
 try{
  for(const[name,engine]of[['chromium',chromium],['webkit',webkit]]){
