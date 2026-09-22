@@ -1,6 +1,6 @@
 # Mobile Push-Benachrichtigungen
 
-Stand: Implementierung, gezielte Abnahme und Veröffentlichung in Arbeit.
+Stand: Am 22.09.2026 veröffentlicht. Backend, gezielte Tests und Live-Prüfung der veröffentlichten App bestanden. Die Freigabe und Empfangsbestätigung auf dem persönlichen Handy erfolgen über den Testknopf.
 
 Nexus erhält nach expliziter Zustimmung Push auf dem jeweiligen Gerät. Aktivierung und Test befinden sich unter Einstellungen → Benachrichtigungen → Auf diesem Gerät. Auf iPhone/iPad wird Nexus als Home-Bildschirm-Web-App ab iOS/iPadOS 16.4 benötigt. Browser und Betriebssystem können die Zustellung durch Fokus, Berechtigungen oder fehlende Verbindung beeinflussen.
 
@@ -35,3 +35,16 @@ Keine automatische Deadline-Push-Planung, Anhänge oder bezahlte KI in diesem Sc
 - Browser: mobile-push, notifications, settings und mobile-install, jeweils Chromium/WebKit. Push-Anbieter/OS-Freigabe sind im neuen UI-Test simuliert; der Produktions-Service-Worker und Offline-Cache werden separat ausgeführt.
 - CI wählt nach tatsächlich geänderten Pfaden aus (`tests/run-changed.mjs`); unbekannte Anwendungsänderungen behalten die volle Suite. `--full` bleibt möglich. Build/Typecheck bleiben immer aktiv.
 - Die tatsächliche Zustellung auf einem physischen iPhone/Android muss der Benutzer einmal über „Test senden“ bestätigen; sie kann nicht durch einen Desktop-Browsertest bewiesen werden.
+
+
+## Abnahmenachweise vom 22.09.2026 (UTC)
+
+- Migration `20260922030203_mobile_push_notifications.sql` angewendet; exakt dieser Stand auch nach Anwendung mit synthetischen Identitäten und Rollback geprüft.
+- Edge Function `mobile-push`, Version 2, aktiv. Der interne Aufruf antwortet HTTP 200; fehlende Authentifizierung und gefälschte Einmal-Nonce antworten beide HTTP 401. Stabile VAPID-Schlüssel wurden erzeugt, ohne private Schlüssel auszugeben.
+- Zusätzliche gezielte Live-Prüfung des neuen Versandwegs: synthetische Sitzung und gültige ECDH-Schlüssel, ausdrücklich nicht existierender FCM-Endpunkt. Der Worker verschlüsselte und verschickte den Test-Request, erkannte 404/410 als abgelaufen und entfernte Abonnement/Warteschlangeneintrag (`expired: 1`, keine Wiederholung, HTTP 200). Testkonto und Sitzung anschließend unter Identitätsprüfung gelöscht. Kein echtes Gerät adressiert; dies bestätigt keine physische Handy-Zustellung.
+- Supabase Advisors: keine neuen Sicherheitsfunde oder fehlenden FK-Indizes. Die bisherigen Hinweise bleiben unverändert; unbenutzte neue FK-Indizes sind direkt nach Einrichtung erwartbar.
+- [Gezielte Browser- und Unit-Abnahme](https://github.com/SaluuOG/Nexus-AI-Business-Messenger/actions/runs/35681775270): Push und Benachrichtigungen in Chromium/WebKit bestanden. Ein vorheriger Test musste auf die asynchrone Speicherbestätigung warten, statt unmittelbar nach dem Klick den Checkbox-Zustand zu erzwingen; diese Korrektur ist integriert.
+- [Veröffentlichung und direkt betroffene Regressionen](https://github.com/SaluuOG/Nexus-AI-Business-Messenger/actions/runs/35681952822): 17 ausgewählte Unit-Tests sowie Push, Benachrichtigungen, Einstellungen und PWA/Offline jeweils in Chromium/WebKit bestanden. Keine vollständige Wiederholung der Phase-3.9-Abnahme.
+
+- Veröffentlichter Anwendungscommit: `c49efb58c1cf5b4545cae4aaccd6a50f034e74f8`; Script `/Nexus-AI-Business-Messenger/assets/index-QvJb0uRi.js`. Die Live-Prüfung des Deployments bestand um 03:11 UTC in Chromium und WebKit.
+- Zusätzlich im bereits angemeldeten Live-Browser: exakt dieses Script und Einstellungen → Benachrichtigungen geprüft. „Push aktivieren“, die ausgeschaltete Gerätefreigabe und die neue Kategorie „Aufgabenkommentare“ sind sichtbar. Es wurde kein reales Gerät ohne Benutzerfreigabe angemeldet.
