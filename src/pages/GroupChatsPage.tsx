@@ -152,18 +152,10 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   const [groups, setGroups] = useState<GroupChat[]>([]);
   const [contacts, setContacts] = useState<NexusContact[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const previousMobile = useRef(isMobile);
-  const continuingDesktopChat = isMobile && !previousMobile.current && Boolean(selectedId);
-  const mobileConversationOpen = Boolean(linkedGroupId || chatSearch.get('task') || continuingDesktopChat);
+  const mobileConversationOpen = Boolean(selectedId || linkedGroupId || chatSearch.get('task'));
   const mobileListOnly = isMobile && !mobileConversationOpen;
   const mobileListOnlyRef = useRef(mobileListOnly);
   mobileListOnlyRef.current = mobileListOnly;
-  useEffect(() => {
-    if (continuingDesktopChat && selectedId && !linkedGroupId && !chatSearch.get('task')) {
-      setChatSearch({ group: selectedId }, { replace: true });
-    }
-    previousMobile.current = isMobile;
-  }, [isMobile, continuingDesktopChat, selectedId, linkedGroupId]);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [olderCursor, setOlderCursor] = useState<MessageCursor | null>(null);
@@ -293,10 +285,10 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   refreshGroupsRef.current = refreshGroups;
 
   useEffect(() => {
-    if (mobileListOnly) setSelectedId(null);
+    if (isMobile && !linkedGroupId && !chatSearch.get('task')) setSelectedId(null);
     else if (linkedGroupId) setSelectedId(linkedGroupId);
     void refreshGroups(linkedGroupId);
-  }, [linkedGroupId, mobileListOnly]);
+  }, [linkedGroupId]);
 
   const refreshActivity = async (groupId: string, shouldApply?: () => boolean) => {
     if (shouldApply && !shouldApply()) return;

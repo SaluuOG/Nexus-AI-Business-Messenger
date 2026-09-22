@@ -220,18 +220,10 @@ export function ChatsPage({
 
   const [conversations, setConversations] = useState<DirectConversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(requestedConversationId ?? null);
-  const previousMobile = useRef(isMobile);
-  const continuingDesktopChat = isMobile && !previousMobile.current && Boolean(selectedId);
-  const mobileConversationOpen = Boolean(linkedConversationId || chatSearch.get('task') || continuingDesktopChat);
+  const mobileConversationOpen = Boolean(selectedId || linkedConversationId || chatSearch.get('task'));
   const mobileListOnly = isMobile && !mobileConversationOpen;
   const mobileListOnlyRef = useRef(mobileListOnly);
   mobileListOnlyRef.current = mobileListOnly;
-  useEffect(() => {
-    if (continuingDesktopChat && selectedId && !linkedConversationId && !chatSearch.get('task')) {
-      setChatSearch({ conversation: selectedId }, { replace: true });
-    }
-    previousMobile.current = isMobile;
-  }, [isMobile, continuingDesktopChat, selectedId, linkedConversationId]);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [oldestCursor, setOldestCursor] = useState<MessageCursor | null>(null);
   const [hasOlder, setHasOlder] = useState(false);
@@ -619,10 +611,10 @@ export function ChatsPage({
   }, [currentUserId]);
 
   useEffect(() => {
-    if (mobileListOnly) setSelectedId(null);
+    if (isMobile && !linkedConversationId && !chatSearch.get('task')) setSelectedId(null);
     else if (linkedConversationId) setSelectedId(linkedConversationId);
     void refreshConversations(linkedConversationId || requestedConversationId);
-  }, [linkedConversationId, mobileListOnly]);
+  }, [linkedConversationId]);
 
   useEffect(() => {
     if (!requestedConversationId) return;
