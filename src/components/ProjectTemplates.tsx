@@ -107,7 +107,7 @@ export function ProjectTemplatePicker({ workspaceId, disabled, hasDraft, onApply
   return <section className="project-template-picker" role="region" aria-label="Projektvorlagen">
     <h3><Copy size={16} /> Mit Vorlage starten</h3>
     <div className="business-form-grid">
-      <label className="wide"><span>Projektvorlage</span><select value={selected} disabled={locked} onChange={event => { setSelected(event.target.value); setConfirm(null); setFeedback(''); }}>
+      <label className="wide"><span>Projektvorlage</span><select aria-label="Projektvorlage" value={selected} disabled={locked} onChange={event => { setSelected(event.target.value); setConfirm(null); setFeedback(''); }}>
         <option value="">{loading ? 'Vorlagen werden geladen…' : 'Ohne Vorlage starten'}</option>
         {templates.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}
       </select></label>
