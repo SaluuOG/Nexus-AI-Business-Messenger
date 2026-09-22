@@ -23,4 +23,12 @@ Kalendertage werden vor der Zeitzonenumrechnung bestimmt. Sommer-/Winterzeit fol
 
 ## Veröffentlichung
 
-In Umsetzung; Ergebnisse und veröffentlichter Commit werden nach der Abnahme ergänzt.
+Am 22.09.2026 zur Veröffentlichung freigegeben. Nachweise:
+
+- Migration `20260922091033_deadline_push_reminders.sql` dauerhaft angewandt; die gezielte SQL-Abnahme bestand vor und nach der Anwendung. Migration zunächst mit der Supabase-CLI erstellt, danach auf den tatsächlich angewandten Versionsstempel abgeglichen.
+- Edge Function `mobile-push`, Version 3, aktiv; die bestehende Authentifizierung und VAPID-Schlüssel bleiben erhalten.
+- [Gezielte CI-Abnahme](https://github.com/SaluuOG/Nexus-AI-Business-Messenger/actions/runs/35708791497): TypeScript, Build, elf Unit-Tests sowie Push-/Benachrichtigungsabläufe in Chromium und WebKit bestanden. Die PWA-Prüfung bestand bereits im [vorherigen Lauf](https://github.com/SaluuOG/Nexus-AI-Business-Messenger/actions/runs/35708584805); dessen uneindeutige Zeitzonen-Beschriftung wurde korrigiert und erfolgreich nachgeprüft.
+- Live-Prüfung des neuen Versandwegs: Ein ausschließlich synthetisches Konto mit isoliertem Workspace, Projekt und Aufgabe erhielt einen fälligen Warteschlangeneintrag. Der echte Minutenjob verarbeitete ihn um 09:13 UTC. Edge antwortete HTTP 200 mit `expired: 1`, ohne Fehler oder Wiederholung; der ausdrücklich nicht existierende FCM-Endpunkt wurde erwartungsgemäß als abgelaufen erkannt. Abonnement und Job wurden automatisch entfernt. Testkonto, Sitzung, Workspace, Projekt und Aufgabe wurden anschließend unter Identitätsprüfung vollständig gelöscht. Kein echtes Gerät wurde adressiert; dies ist kein erneuter physischer Handy-Test.
+- Supabase Advisors: keine neuen Sicherheitsfunde und kein fehlender neuer Fremdschlüssel-Index. Der neue FK-Index wird direkt nach Einrichtung noch als unbenutzt gemeldet. Bestehende Hinweise bleiben unverändert; siehe die [Sicherheitsnachweise der Phase 3.9](phase-3-9.md).
+
+Veröffentlichter Commit und Live-Prüfung der App folgen nach Abschluss des Deployments.
