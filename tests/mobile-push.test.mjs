@@ -84,3 +84,28 @@ test('Service worker enforces device/account/privacy, suppresses retries and ope
   await h.emit('message',{source:{url:'https://evil.test/'},data:{type:'NEXUS_PUSH_BINDING',binding:bind},ports:[]});
   assert.equal(h.state.has('binding'),false);
 });
+
+test('Deadline payloads preserve privacy, distinguish both days and open the assigned task', () => {
+  for (const [kind, word] of [['task_reminder_before','morgen'],['task_reminder_due','heute']]) {
+    const item = { delivery_id:'reminder', user_id:'user', device_id:'device', kind, previews:false,
+      details:{title:'Confidential task',workspace_id:'workspace',project_id:'project',task_id:'task'} };
+    const payload = pushPayload(item);
+    assert.equal(payload.title,'Nexus'); assert.match(payload.body,new RegExp(word));
+    assert.equal(payload.body.includes('Confidential'),false);
+    assert.equal(payload.path,'/app/business?workspace=workspace&view=tasks&project=project&task=task');
+    assert.equal(pushPayload({...item,previews:true}).title,'Confidential task');
+  }
+});
+
+test('Service worker requires reminder opt-in including devices from the previous app version', async () => {
+  const h = await workerHarness();
+  const binding = {userId:'user',deviceId:'device',enabled:true,messages:true,previews:false};
+  const bind = value => h.emit('message',{source:{url:h.scope},data:{type:'NEXUS_PUSH_BINDING',binding:value},ports:[]});
+  const payload = pushPayload({delivery_id:'reminder',user_id:'user',device_id:'device',kind:'task_reminder_due',previews:true,
+    details:{title:'Private task',workspace_id:'w',project_id:'p',task_id:'t'}});
+  const push = p => h.emit('push',{data:{json:()=>p}});
+  await bind(binding); await push(payload); assert.equal(h.shown.length,0);
+  await bind({...binding,deadlines:true}); await push(payload); await push(payload);
+  assert.equal(h.shown.length,1); assert.equal(h.shown[0].title,'Nexus'); assert.match(h.shown[0].body,/heute/);
+  await bind({...binding,deadlines:false}); await push({...payload,id:'next'}); assert.equal(h.shown.length,1);
+});

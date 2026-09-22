@@ -19,4 +19,13 @@
 .push-preferences > p { line-height: 1.6; }
 .push-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
 .push-note { font-size: 12px; color: var(--text-secondary); }
+.push-reminders { margin-top: 24px; }
+.push-reminders fieldset { min-width: 0; margin: 0; padding: 16px; border: 1px solid #373047; border-radius: 12px; }
+.push-reminders legend { padding: 0 6px; font-size: 14px; font-weight: 650; }
+.reminder-fields { display: grid; gap: 16px; margin: 18px 0; min-width: 0; }
+.reminder-fields > label:not(.reminder-check) { display: grid; gap: 8px; font-size: 13px; min-width: 0; }
+.reminder-fields input[type=time], .reminder-fields select { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; padding: 10px; font-size: 16px; color: #eee5ff; background: #141824; border: 1px solid #49405f; border-radius: 8px; color-scheme: dark; }
+.reminder-check { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.reminder-check input { width: 20px; height: 20px; accent-color: #a793dd; }
+.push-reminders button { white-space: normal; }
 @media (max-width: 600px) { .push-actions > button { width: 100%; } }

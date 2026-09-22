@@ -1,8 +1,10 @@
 import { supabase } from '../../lib/supabase';
 
-export type PushOptions = { messages: boolean; assignments: boolean; comments: boolean; previews: boolean };
+export type ReminderOptions = { deadlines: boolean; reminder_before: boolean; reminder_due: boolean; reminder_time: string; reminder_timezone: string };
+export type PushOptions = { messages: boolean; assignments: boolean; comments: boolean; previews: boolean } & ReminderOptions;
 export type PushStatus = PushOptions & { enabled: boolean };
-export const defaultPushStatus: PushStatus = { enabled: false, messages: true, assignments: true, comments: true, previews: false };
+export const defaultPushStatus: PushStatus = { enabled: false, messages: true, assignments: true, comments: true, previews: false,
+  deadlines: false, reminder_before: true, reminder_due: true, reminder_time: '09:00', reminder_timezone: '' };
 const storageKey = 'nexus-push-device-v1';
 type LocalDevice = { id: string; userId: string | null; status: PushStatus };
 let account: string | null | undefined;

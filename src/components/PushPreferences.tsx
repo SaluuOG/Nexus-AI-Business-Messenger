@@ -1,13 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
 import { BellRing, Smartphone } from 'lucide-react';
-import { changePushOptions, defaultPushStatus, disablePush, enablePush, loadPushStatus, pushSupport, testPush, type PushOptions, type PushStatus } from '../features/notifications/push';
+import { changePushOptions, defaultPushStatus, disablePush, enablePush, loadPushStatus, pushSupport, testPush, type ReminderOptions, type PushStatus } from '../features/notifications/push';
 
-const options: { id: keyof PushOptions; label: string; detail: string }[] = [
+const options: { id: 'messages' | 'assignments' | 'comments' | 'previews'; label: string; detail: string }[] = [
   { id: 'messages', label: 'Chats und Gruppen', detail: 'Neue Nachrichten auf diesem Gerät.' },
   { id: 'assignments', label: 'Neue Zuweisungen', detail: 'Wenn dir jemand eine Aufgabe zuweist.' },
   { id: 'comments', label: 'Kommentare zu Aufgaben', detail: 'Bei deinen Aufgaben und Gesprächen, an denen du beteiligt bist.' },
   { id: 'previews', label: 'Inhalte auf dem Sperrbildschirm', detail: 'Namen und eine kurze Vorschau anzeigen. Standardmäßig ausgeschaltet.' },
 ];
+
+function ReminderPreferences({ status, busy, save }: { status: PushStatus; busy: boolean; save: (value: ReminderOptions) => void }) {
+  const [draft, setDraft] = useState<ReminderOptions>({ deadlines: status.deadlines, reminder_before: status.reminder_before,
+    reminder_due: status.reminder_due, reminder_time: status.reminder_time,
+    reminder_timezone: status.reminder_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' });
+  const zones = [...new Set([draft.reminder_timezone, 'Europe/Berlin', 'UTC', ...(Intl.supportedValuesOf?.('timeZone') || [])])].sort();
+  const valid = !draft.deadlines || draft.reminder_before || draft.reminder_due;
+  return <form className="push-reminders" onSubmit={event => { event.preventDefault(); if (valid && !busy) save(draft); }}>
+    <fieldset disabled={busy}>
+      <legend>Aufgaben-Erinnerungen</legend>
+      <label className="notification-option"><span><b>Fristerinnerungen auf diesem Gerät</b><small>Für offene Aufgaben, die dir zugewiesen sind – auch bei geschlossener App.</small></span>
+        <input type="checkbox" role="switch" checked={draft.deadlines} onChange={e => setDraft({ ...draft, deadlines: e.target.checked })} /></label>
+      {draft.deadlines && <div className="reminder-fields">
+        <label className="reminder-check"><input type="checkbox" checked={draft.reminder_before} onChange={e => setDraft({ ...draft, reminder_before: e.target.checked })} />Am Vortag</label>
+        <label className="reminder-check"><input type="checkbox" checked={draft.reminder_due} onChange={e => setDraft({ ...draft, reminder_due: e.target.checked })} />Am Fälligkeitstag</label>
+        <label>Uhrzeit<input type="time" required step="60" value={draft.reminder_time} onChange={e => setDraft({ ...draft, reminder_time: e.target.value })} /></label>
+        <label>Zeitzone<select value={draft.reminder_timezone} onChange={e => setDraft({ ...draft, reminder_timezone: e.target.value })}>{zones.map(zone => <option key={zone} value={zone}>{zone}</option>)}</select></label>
+        <p className="push-note">Die gewählte Zeitzone bleibt auch auf Reisen erhalten. Erledigte Aufgaben und geänderte Termine werden vor dem Versand berücksichtigt. „Fällige Aufgaben“ unter „Deine Hinweise“ muss eingeschaltet sein.</p>
+        {!valid && <p role="alert" className="form-feedback error">Wähle mindestens einen Erinnerungstag.</p>}
+      </div>}
+      <button className="secondary" type="submit" disabled={!valid}>Erinnerungen speichern</button>
+    </fieldset>
+  </form>;
+}
 
 export function PushPreferences({ userId }: { userId: string }) {
   const support = pushSupport();
@@ -45,6 +69,8 @@ export function PushPreferences({ userId }: { userId: string }) {
             <span><b>{option.label}</b><small>{option.detail}</small></span>
             <input type="checkbox" role="switch" aria-label={option.label} checked={status[option.id]} disabled={busy} onChange={e => void run(() => changePushOptions(userId, { [option.id]: e.target.checked }), 'Geräteeinstellung gespeichert.')} />
           </label>)}</div>
+          <ReminderPreferences key={JSON.stringify([status.deadlines, status.reminder_before, status.reminder_due, status.reminder_time, status.reminder_timezone])}
+            status={status} busy={busy} save={value => void run(() => changePushOptions(userId, value), 'Erinnerungen gespeichert.')} />
           <div className="push-actions">
             <button className="secondary" disabled={busy} onClick={() => void run(() => testPush(userId), 'Test angefordert. Prüfe jetzt die Mitteilungen auf deinem Gerät.')}>Test senden</button>
             <button className="secondary" disabled={busy} onClick={() => void run(() => disablePush(userId), 'Push wurde auf diesem Gerät ausgeschaltet.')}>Auf diesem Gerät ausschalten</button>

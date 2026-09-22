@@ -1,6 +1,7 @@
 import { supabase as base } from './supabase.mjs';
 export { backendConfigured, initialAuthCallback, supabaseConfig } from './supabase.mjs';
-const device = { enabled:false,messages:true,assignments:true,comments:true,previews:false };
+const device = { enabled:false,messages:true,assignments:true,comments:true,previews:false,
+  deadlines:false,reminder_before:true,reminder_due:true,reminder_time:'09:00',reminder_timezone:'' };
 const fixture = window.nexusPushTest = { devices: JSON.parse(sessionStorage.getItem('nexusPush.server') || '{}'), calls:[], fail:'', hold:false, pending:[] };
 export const supabase = { ...base,
   functions: { ...base.functions, async invoke(name,args) {

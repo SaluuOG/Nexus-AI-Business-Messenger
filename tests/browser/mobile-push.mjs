@@ -44,6 +44,30 @@ try {for(const [name,engine] of [['chromium',chromium],['webkit',webkit]]){
     await panel.getByRole('switch',{name:'Chats und Gruppen',exact:true}).click();
     await panel.getByRole('alert').waitFor();assert.equal(await panel.getByRole('switch',{name:'Chats und Gruppen',exact:true}).isChecked(),true);
     await page.evaluate(()=>window.nexusPushTest.fail='');
+    const reminders=panel.getByRole('group',{name:'Aufgaben-Erinnerungen',exact:true});
+    assert.equal(await reminders.getByRole('switch').isChecked(),false);
+    await reminders.getByRole('switch').click();
+    await reminders.getByLabel('Uhrzeit',{exact:true}).fill('08:45');
+    await reminders.getByLabel('Zeitzone',{exact:true}).selectOption('Europe/Berlin');
+    await reminders.getByLabel('Am Vortag',{exact:true}).uncheck();
+    await reminders.getByLabel('Am Fälligkeitstag',{exact:true}).uncheck();
+    assert.equal(await reminders.getByRole('button',{name:'Erinnerungen speichern'}).isDisabled(),true);
+    await reminders.getByRole('alert').getByText('Wähle mindestens einen Erinnerungstag.').waitFor();
+    await reminders.getByLabel('Am Fälligkeitstag',{exact:true}).check();
+    await page.evaluate(()=>window.nexusPushTest.fail='options');
+    await reminders.getByRole('button',{name:'Erinnerungen speichern'}).click();
+    await panel.getByRole('alert').getByText('Simulierter Push-Fehler.').waitFor();
+    assert.equal(await reminders.getByLabel('Uhrzeit',{exact:true}).inputValue(),'08:45');
+    await page.evaluate(()=>window.nexusPushTest.fail='');
+    await reminders.getByRole('button',{name:'Erinnerungen speichern'}).click();
+    await panel.getByText('Erinnerungen gespeichert.',{exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('pushBinding')).deadlines),true);
+    await page.reload();await panel.getByText('Push ist auf diesem Gerät aktiv.',{exact:true}).waitFor();
+    assert.equal(await reminders.getByRole('switch').isChecked(),true);
+    assert.equal(await reminders.getByLabel('Uhrzeit',{exact:true}).inputValue(),'08:45');
+    assert.equal(await reminders.getByLabel('Zeitzone',{exact:true}).inputValue(),'Europe/Berlin');
+    assert.equal(await reminders.getByLabel('Am Vortag',{exact:true}).isChecked(),false);
+    assert.equal(await reminders.getByLabel('Am Fälligkeitstag',{exact:true}).isChecked(),true);
     await panel.getByRole('button',{name:'Test senden',exact:true}).click();
     await panel.getByText(/Test angefordert/).waitFor();assert.equal(await page.evaluate(()=>window.nexusPushTest.calls.filter(c=>c.action==='test').length),1);
     for(const width of [390,320]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:`browser-results/${name}-push-${width}.png`,fullPage:true});}
@@ -56,6 +80,6 @@ try {for(const [name,engine] of [['chromium',chromium],['webkit',webkit]]){
     await panel.getByText('Push ist auf diesem Gerät ausgeschaltet.',{exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('pushBinding'))),null);
     assert.deepEqual(errors,[]);
-    console.log(`${name}: explicit opt-in, permission denial, failed registration, privacy defaults, persistence, errors, test, disable, account switch and 320/390px passed (vendor delivery mocked)`);
+    console.log(`${name}: push plus deadline opt-in, time/zone/day preferences, validation, persistence, failed saves, account switch and 320/390px passed (vendor delivery mocked)`);
   }finally{await browser.close();}
 }}finally{await server.close();}

@@ -15,6 +15,9 @@ try {
 } catch { full = true; }
 const add = (units,browsers) => { for(const name of units)unit.add(name);for(const name of browsers)browser.add(name); };
 for(const file of changed) {
+  if (/^(supabase\/migrations\/\d+_deadline_push_reminders\.sql|tests\/sql\/deadline-reminders-rls\.sql)$/.test(file)) {
+    add(['tests/mobile-push.test.mjs','tests/notifications.test.mjs'],['tests/browser/mobile-push.mjs','tests/browser/notifications.mjs']);continue;
+  }
   if (/^(README\.md|docs\/|\.github\/|tests\/run-changed\.mjs)/.test(file)) continue;
   if (/^tests\/[^/]+\.test\.mjs$/.test(file)) { unit.add(file); continue; }
   if (/^tests\/browser\/(mobile-push|notifications|settings|mobile-install)\.mjs$/.test(file)) { browser.add(file); continue; }

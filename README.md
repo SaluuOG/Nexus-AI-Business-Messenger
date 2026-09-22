@@ -308,3 +308,5 @@ Nexus verwendet Supabase Row Level Security und Security-Definer-RPCs für sensi
 ### Mobile Push-Benachrichtigungen
 
 Einstellungen → Benachrichtigungen → Auf diesem Gerät: Push für Chats, Zuweisungen und Aufgabenkommentare aktivieren, Kategorien wählen und eine Testmeldung anfordern. Vorschauen sind standardmäßig aus. Auf iPhone/iPad Nexus zuerst zum Home-Bildschirm hinzufügen. [Umfang, Betrieb und gezielte Abnahme](docs/mobile-push.md).
+
+Unter **Aufgaben-Erinnerungen** lassen sich zusätzlich Frist-Pushs am Vortag und Fälligkeitstag mit eigener Uhrzeit und Zeitzone pro Gerät aktivieren. Erledigung, Terminänderungen und aktuelle Berechtigungen werden vor dem Versand berücksichtigt. [Terminplanung und gezielte Abnahme](docs/deadline-reminders.md).

@@ -26,7 +26,7 @@ Die Funktion mobile-push nutzt absichtlich verify_jwt=false: Browseraufrufe prü
 
 Nach dem Deploy muss Vault `nexus_push_dispatch_url` auf die Projekt-URL `/functions/v1/mobile-push` zeigen. `private.wake_push_worker(true)` initialisiert die VAPID-Schlüssel über einen intern autorisierten Aufruf. Dies benötigt weder einen zusätzlichen Push-Dienstvertrag noch eine kostenpflichtige KI. Bestehende Supabase-Kontingente gelten weiter.
 
-Keine automatische Deadline-Push-Planung, Anhänge oder bezahlte KI in diesem Schritt. Fälligkeitshinweise bleiben wie bisher innerhalb der App.
+Die nachfolgende Erweiterung ergänzt [automatische Fristerinnerungen](deadline-reminders.md). Anhänge und bezahlte KI gehören weiterhin nicht zum Push-Umfang. Die bisherigen Fälligkeitshinweise innerhalb der App bleiben erhalten.
 
 ## Gezielt prüfen
 
