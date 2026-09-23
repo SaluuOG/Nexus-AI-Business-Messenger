@@ -1,19 +1,22 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { CheckSquare2, History, MessageSquare, Paperclip, Plus, RefreshCw } from 'lucide-react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { AtSign, CheckSquare2, History, MessageSquare, Paperclip, Plus, RefreshCw, X } from 'lucide-react';
 import type { NexusWorkspaceMember, WorkspaceRole } from '../features/data/nexusData';
 import { taskMemberName, taskPermissions } from '../features/data/projectTasks';
 import { addChecklistItem, addTaskComment, changeTaskEntry, taskActivityLabel, type TaskChecklistItem, type TaskComment } from '../features/data/taskCollaboration';
+import { beginTaskMention, findTaskMentionQuery, insertTaskMention, pruneTaskMentions, removeTaskMention, taskMentionCandidates, taskMentionLabel, taskMentionLimit, type TaskMentionDraft, type TaskMentionQuery } from '../features/data/taskMentions';
 import { useTaskCollaboration } from '../features/data/useTaskCollaboration';
 import { TaskAttachments } from './TaskAttachments';
 
-type Props = { workspaceId: string; taskId: string; currentUserId: string; role: WorkspaceRole; members: NexusWorkspaceMember[] };
+type Props = { workspaceId: string; taskId: string; initialCommentId?: string | null; currentUserId: string; role: WorkspaceRole; members: NexusWorkspaceMember[] };
 const dateLabel = (value: string) => new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 
-export function TaskCollaboration({ workspaceId, taskId, currentUserId, role, members }: Props) {
-  const model = useTaskCollaboration(workspaceId, taskId);
+export function TaskCollaboration({ workspaceId, taskId, initialCommentId, currentUserId, role, members }: Props) {
+  const model = useTaskCollaboration(workspaceId, taskId, initialCommentId);
   const { data, loading, error } = model;
   const permissions = taskPermissions(role);
   const [comment, setComment] = useState('');
+  const [mentions, setMentions] = useState<TaskMentionDraft[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<TaskMentionQuery | null>(null);
   const [label, setLabel] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -21,13 +24,62 @@ export function TaskCollaboration({ workspaceId, taskId, currentUserId, role, me
   const [editor, setEditor] = useState<{ kind: 'comment'; entry: TaskComment } | { kind: 'checklist'; entry: TaskChecklistItem } | null>(null);
   const busy = useRef(false);
   const mounted = useRef(false);
-  const intents = useRef<{ comment?: { id: string; value: string }; checklist?: { id: string; value: string } }>({});
+  const intents = useRef<{ comment?: { id: string; value: string; mentionIds?: string[] }; checklist?: { id: string; value: string; mentionIds?: string[] } }>({});
+  const commentInput = useRef<HTMLTextAreaElement>(null);
+  const commentCaret = useRef<number | null>(null);
+  const focusedComment = useRef<string | null>(null);
   const headingId = useId();
   const commentInputId = useId();
+  const mentionMenuId = useId();
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const disabled = saving || Boolean(error);
   const author = (id: string | null) => id === currentUserId ? 'Du' : id ? taskMemberName(members.find(member => member.user_id === id)) : 'Ehemaliges Konto / System';
   const done = data.checklist.filter(item => item.is_completed).length;
+  const mentionChoices = useMemo(() => taskMentionCandidates(members, currentUserId, mentions, mentionQuery?.query ?? ''), [members, currentUserId, mentions, mentionQuery?.query]);
+
+  useLayoutEffect(() => {
+    const caret = commentCaret.current;
+    if (caret === null) return;
+    commentCaret.current = null;
+    commentInput.current?.focus();
+    commentInput.current?.setSelectionRange(caret, caret);
+    setMentionQuery(findTaskMentionQuery(comment, caret));
+  }, [comment]);
+
+  useEffect(() => {
+    if (!initialCommentId) { focusedComment.current = null; return; }
+    if (loading || error || focusedComment.current === initialCommentId || !data.comments.some(entry => entry.id === initialCommentId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`nexus-comment-${initialCommentId}`);
+      if (!target) return;
+      focusedComment.current = initialCommentId;
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [data.comments, error, initialCommentId, loading]);
+
+  const setCommentAndCaret = (value: string, caret: number) => {
+    commentCaret.current = caret;
+    setComment(value);
+  };
+
+  const chooseMention = (member: NexusWorkspaceMember) => {
+    if (!mentionQuery || mentions.length >= taskMentionLimit) return;
+    const label = taskMentionLabel(member);
+    const next = insertTaskMention(comment, mentionQuery, label);
+    if (next.value.length > 4000) return;
+    setMentions(current => [...current, { userId: member.user_id, label }]);
+    setMentionQuery(null);
+    setCommentAndCaret(next.value, next.caret);
+  };
+
+  const startMention = () => {
+    if (comment.length >= 4000) return;
+    const input = commentInput.current;
+    const next = beginTaskMention(comment, input?.selectionStart ?? comment.length, input?.selectionEnd ?? comment.length);
+    setMentionQuery(next.query); setCommentAndCaret(next.value, next.caret);
+  };
 
   const perform = async (action: () => Promise<{ error: string | null }>, success: string, after?: () => void) => {
     if (busy.current || !permissions.write || error) return;
@@ -47,12 +99,16 @@ export function TaskCollaboration({ workspaceId, taskId, currentUserId, role, me
     event.preventDefault();
     const value = (kind === 'comment' ? comment : label).trim();
     if (!value) return;
-    if (intents.current[kind]?.value !== value) intents.current[kind] = { id: crypto.randomUUID(), value };
+    const mentionIds = kind === 'comment' ? mentions.map(mention => mention.userId).sort() : [];
+    const previous = intents.current[kind];
+    if (previous?.value !== value || kind === 'comment' && JSON.stringify(previous?.mentionIds ?? []) !== JSON.stringify(mentionIds)) {
+      intents.current[kind] = kind === 'comment' ? { id: crypto.randomUUID(), value, mentionIds } : { id: crypto.randomUUID(), value };
+    }
     const id = intents.current[kind]!.id;
-    void perform(() => kind === 'comment' ? addTaskComment(workspaceId, taskId, currentUserId, id, value)
+    void perform(() => kind === 'comment' ? addTaskComment(workspaceId, taskId, currentUserId, id, value, mentionIds)
       : addChecklistItem(workspaceId, taskId, currentUserId, id, value), kind === 'comment' ? 'Kommentar gespeichert.' : 'Checklistenpunkt hinzugefügt.', () => {
       delete intents.current[kind];
-      if (kind === 'comment') setComment(''); else setLabel('');
+      if (kind === 'comment') { setComment(''); setMentions([]); setMentionQuery(null); } else setLabel('');
     });
   };
 
@@ -86,12 +142,29 @@ export function TaskCollaboration({ workspaceId, taskId, currentUserId, role, me
 
       <section className="collaboration-section" aria-label="Kommentare">
         <h4><MessageSquare size={17} /> Kommentare</h4>
-        {permissions.write && <form className="collaboration-comment-form" onSubmit={event => add(event, 'comment')}><label htmlFor={commentInputId}><span>Neuer Kommentar</span></label><textarea id={commentInputId} value={comment} maxLength={4000} required disabled={disabled} onChange={event => setComment(event.target.value)} placeholder="Teile einen Zwischenstand oder stelle eine Frage…" /><div><small>Für alle Mitglieder dieses Workspaces sichtbar.</small><button className="primary" disabled={disabled || !comment.trim()}>Kommentar senden</button></div></form>}
+        {permissions.write && <form className="collaboration-comment-form" onSubmit={event => add(event, 'comment')} onBlur={event => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMentionQuery(null);
+        }}><label htmlFor={commentInputId}><span>Neuer Kommentar</span></label>
+          <textarea ref={commentInput} id={commentInputId} value={comment} maxLength={4000} required disabled={disabled}
+            aria-expanded={Boolean(mentionQuery)} aria-controls={mentionQuery ? mentionMenuId : undefined}
+            onChange={event => { const value = event.target.value; setComment(value); setMentions(current => pruneTaskMentions(value, current)); setMentionQuery(findTaskMentionQuery(value, event.target.selectionStart)); }}
+            onClick={event => setMentionQuery(findTaskMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart))}
+            onKeyUp={event => { if (event.key === 'Escape') setMentionQuery(null); else setMentionQuery(findTaskMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart)); }}
+            placeholder="Teile einen Zwischenstand oder erwähne jemanden mit @…" />
+          <div className="mention-toolbar"><button type="button" className="mention-start" disabled={disabled || mentions.length >= taskMentionLimit || members.length < 2} onClick={startMention}><AtSign size={14} /> Person erwähnen</button><small>Nur ausgewählte Teammitglieder werden gezielt benachrichtigt.</small></div>
+          {mentions.length > 0 && <div className="mention-chips" aria-label="Ausgewählte Erwähnungen">{mentions.map(mention => <span key={mention.userId}>@{mention.label}<button type="button" disabled={disabled} aria-label={`Erwähnung von ${mention.label} entfernen`} onClick={() => { setComment(current => removeTaskMention(current, mention.label)); setMentions(current => current.filter(item => item.userId !== mention.userId)); setMentionQuery(null); }}><X size={12} /></button></span>)}</div>}
+          {mentionQuery && <div id={mentionMenuId} className="mention-suggestions" aria-label="Teammitglied auswählen">
+            {mentionChoices.map(member => { const name = taskMentionLabel(member); return <button type="button" key={member.user_id} onMouseDown={event => event.preventDefault()} onClick={() => chooseMention(member)}><b>{name}</b>{member.username && member.username !== name && <span>@{member.username}</span>}<small>{member.role === 'guest' ? 'Gast · Lesezugriff' : 'Teammitglied'}</small></button>; })}
+            {!mentionChoices.length && <p>Keine weitere passende Person gefunden.</p>}
+          </div>}
+          <div><small>Für alle Mitglieder dieses Workspaces sichtbar.</small><button className="primary" disabled={disabled || !comment.trim()}>Kommentar senden</button></div>
+        </form>}
         {!loading && !data.comments.length && <p className="collaboration-empty">Noch keine Kommentare.</p>}
         {data.comments.length > 0 && <p className="collaboration-note">Neueste Kommentare zuerst</p>}
-        <ol className="task-comments">{data.comments.map(entry => <li key={entry.id}>
+        <ol className="task-comments">{data.comments.map(entry => <li id={`nexus-comment-${entry.id}`} tabIndex={-1} className={initialCommentId === entry.id ? 'is-mentioned-target' : undefined} key={entry.id}>
           <div className="comment-byline"><b>{author(entry.created_by)}</b><time dateTime={entry.created_at}>{dateLabel(entry.created_at)}</time>{entry.revision > 1 && <small>bearbeitet</small>}</div>
           {editor?.kind === 'comment' && editor.entry.id === entry.id ? <EntryEditor key={entry.id} initial={editor.entry.body} maxLength={4000} label="Kommentar bearbeiten" disabled={disabled} onCancel={() => setEditor(null)} onSave={value => void perform(() => changeTaskEntry('task_comments', workspaceId, taskId, editor.entry, { body: value }), 'Kommentar gespeichert.', () => setEditor(null))} /> : <p className="task-comment-body">{entry.body}</p>}
+          <CommentMentions entry={entry} members={members} currentUserId={currentUserId} />
           {permissions.write && <div className="collaboration-actions">
             {entry.created_by === currentUserId && <button disabled={disabled} onClick={() => setEditor({ kind: 'comment', entry })}>Kommentar bearbeiten</button>}
             {(entry.created_by === currentUserId || permissions.delete) && <button disabled={disabled} onClick={() => remove('comment', entry)}>Kommentar entfernen</button>}
@@ -114,6 +187,12 @@ export function TaskCollaboration({ workspaceId, taskId, currentUserId, role, me
       </section>
     </div>}
   </section>;
+}
+
+function CommentMentions({ entry, members, currentUserId }: { entry: TaskComment; members: NexusWorkspaceMember[]; currentUserId: string }) {
+  const ids = entry.mentioned_user_ids ?? [];
+  if (!ids.length) return null;
+  return <div className="comment-mentions" aria-label="Erwähnte Personen"><AtSign size={13} /><span>Erwähnt:</span>{ids.map(id => <b key={id}>{id === currentUserId ? 'Du' : taskMemberName(members.find(member => member.user_id === id))}</b>)}</div>;
 }
 
 function EntryEditor({ initial, maxLength, label, disabled, onSave, onCancel }: {

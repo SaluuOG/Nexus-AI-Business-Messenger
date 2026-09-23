@@ -260,7 +260,9 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Kommentare und Verlauf werden mit stabilen Cursorn nachgeladen; Realtime, erneuter Fokus und ein sichtbarkeitsabhängiger Abgleich aktualisieren die geladene Ansicht
 - Konto-, Rollen- und Workspace-Wechsel verwerfen alte Antworten und Eingaben; fehlgeschlagene Zugriffsprüfungen entfernen zuvor geladene Inhalte
 - der Verlauf speichert Aktionsarten und geänderte Feldnamen, keine Kopien privater Chat- oder Kommentartexte
+- `@`-Erwähnungen benachrichtigen gezielt aktuelle Teammitglieder oder Gäste und öffnen den exakten Kommentar; unveränderliche Benutzer-IDs verhindern Verwechslungen bei gleichen oder später geänderten Namen
 - [Umfang, Testnachweise und Freigabeschritte](docs/phase-3-9.md); beide Migrationen sind angewandt, die veröffentlichte Version sowie Owner-/Member-/Guest-Abnahme mit zwei echten Konten sind bestätigt und der Test-Workspace ist bereinigt
+- [Rechte, Benachrichtigungen und gezielte Prüfung der Aufgaben-Erwähnungen](docs/task-mentions.md)
 
 ### Einstellungen nach Kategorien
 - Allgemein: Startansicht sowie private oder geschäftliche Identität; die Auswahl wird pro Konto in diesem Browser gespeichert
@@ -307,7 +309,7 @@ Nexus verwendet Supabase Row Level Security und Security-Definer-RPCs für sensi
 
 ### Mobile Push-Benachrichtigungen
 
-Einstellungen → Benachrichtigungen → Auf diesem Gerät: Push für Chats, Zuweisungen und Aufgabenkommentare aktivieren, Kategorien wählen und eine Testmeldung anfordern. Vorschauen sind standardmäßig aus. Auf iPhone/iPad Nexus zuerst zum Home-Bildschirm hinzufügen. [Umfang, Betrieb und gezielte Abnahme](docs/mobile-push.md).
+Einstellungen → Benachrichtigungen → Auf diesem Gerät: Push für Chats, Zuweisungen, Aufgabenkommentare und gezielte `@`-Erwähnungen aktivieren, Kategorien wählen und eine Testmeldung anfordern. Vorschauen sind standardmäßig aus. Auf iPhone/iPad Nexus zuerst zum Home-Bildschirm hinzufügen. [Umfang, Betrieb und gezielte Abnahme](docs/mobile-push.md).
 
 Unter **Aufgaben-Erinnerungen** lassen sich zusätzlich Frist-Pushs am Vortag und Fälligkeitstag mit eigener Uhrzeit und Zeitzone pro Gerät aktivieren. Erledigung, Terminänderungen und aktuelle Berechtigungen werden vor dem Versand berücksichtigt. [Terminplanung und gezielte Abnahme](docs/deadline-reminders.md).
 

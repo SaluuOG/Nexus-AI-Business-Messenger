@@ -13,10 +13,10 @@ export const notificationCategories = [
 export type NotificationCategory = typeof notificationCategories[number]['id'];
 export type NotificationPreferences = Record<NotificationCategory, boolean>;
 export const defaultNotificationPreferences: NotificationPreferences = { messages: true, contacts: true, invitations: true, assignments: true, deadlines: true, comments: true };
-export type NotificationKind = 'direct_message' | 'group_message' | 'contact_request' | 'workspace_invitation' | 'task_assigned' | 'task_due' | 'task_overdue' | 'task_comment';
+export type NotificationKind = 'direct_message' | 'group_message' | 'contact_request' | 'workspace_invitation' | 'task_assigned' | 'task_due' | 'task_overdue' | 'task_comment' | 'task_mention';
 export type NexusNotification = {
   id: string; kind: NotificationKind; created_at: string; read_at: string | null;
-  details: { title: string; detail: string; chat_id?: string; invite_token?: string; workspace_id?: string; project_id?: string; task_id?: string; due_date?: string | null };
+  details: { title: string; detail: string; chat_id?: string; invite_token?: string; workspace_id?: string; project_id?: string; task_id?: string; comment_id?: string; due_date?: string | null };
 };
 export type NotificationFeed = {
   items: NexusNotification[]; unread_count: number; total_count: number;
@@ -32,15 +32,15 @@ export function notificationTarget(item: NexusNotification): string | null {
   if (item.kind === 'group_message' && d.chat_id) return routes.groups + '?' + new URLSearchParams({ group: d.chat_id });
   if (item.kind === 'contact_request') return routes.contacts;
   if (item.kind === 'workspace_invitation' && d.invite_token) return routes.settings + '?' + new URLSearchParams({ category: 'workspace', invite: d.invite_token });
-  if (['task_assigned', 'task_due', 'task_overdue', 'task_comment'].includes(item.kind) && d.workspace_id && d.project_id && d.task_id) {
-    return routes.business + '?' + businessSearch(d.workspace_id, { view: 'tasks', projectId: d.project_id, taskId: d.task_id });
+  if (['task_assigned', 'task_due', 'task_overdue', 'task_comment', 'task_mention'].includes(item.kind) && d.workspace_id && d.project_id && d.task_id) {
+    return routes.business + '?' + businessSearch(d.workspace_id, { view: 'tasks', projectId: d.project_id, taskId: d.task_id, commentId: d.comment_id });
   }
   return null;
 }
 export const notificationLabels: Record<NotificationKind, string> = {
   direct_message: 'Nachricht', group_message: 'Gruppennachricht', contact_request: 'Kontaktanfrage',
   workspace_invitation: 'Einladung', task_assigned: 'Dir zugewiesen', task_due: 'Heute fällig', task_overdue: 'Überfällig',
-  task_comment: 'Aufgabenkommentar',
+  task_comment: 'Aufgabenkommentar', task_mention: 'Du wurdest erwähnt',
 };
 
 async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {

@@ -6,8 +6,9 @@ Nexus erhält nach expliziter Zustimmung Push auf dem jeweiligen Gerät. Aktivie
 
 ## Umfang
 
-- Neue direkte Nachrichten und Gruppennachrichten, fremde Aufgabenzuweisungen, neue Aufgabenkommentare.
+- Neue direkte Nachrichten und Gruppennachrichten, fremde Aufgabenzuweisungen, neue Aufgabenkommentare und gezielte `@`-Erwähnungen.
 - Kommentare benachrichtigen den Aufgabenersteller, den Verantwortlichen und bisherige Kommentierende, jeweils nur aktuelle Workspace-Mitglieder und ohne den Autor selbst. Sie erscheinen auch im bisherigen Hinweiszentrum.
+- Erwähnte Personen erhalten stattdessen genau einen gezielten Hinweis. Dieser öffnet den exakten Kommentar und folgt denselben Kommentar- und Vorschau-Einstellungen.
 - Geräteschalter für Nachrichten, Zuweisungen, Kommentare und Vorschauen. Kontoweite Kategorieeinstellungen gelten zusätzlich.
 - Namen und Inhalte auf dem Sperrbildschirm standardmäßig verborgen. Antippen öffnet die konkrete Unterhaltung bzw. die Aufgabe mit Workspace-/Projektkontext.
 - Persönlicher Testknopf, maximal alle 30 Sekunden. Aktivierung bestätigt die Registrierung, nicht den tatsächlichen OS-Empfang.
@@ -35,6 +36,10 @@ Die nachfolgende Erweiterung ergänzt [automatische Fristerinnerungen](deadline-
 - Browser: mobile-push, notifications, settings und mobile-install, jeweils Chromium/WebKit. Push-Anbieter/OS-Freigabe sind im neuen UI-Test simuliert; der Produktions-Service-Worker und Offline-Cache werden separat ausgeführt.
 - CI wählt nach tatsächlich geänderten Pfaden aus (`tests/run-changed.mjs`); unbekannte Anwendungsänderungen behalten die volle Suite. `--full` bleibt möglich. Build/Typecheck bleiben immer aktiv.
 - Für weitere Geräte die tatsächliche Zustellung einmal über „Test senden“ bestätigen; ein Desktop-Browsertest beweist keinen Empfang auf einem physischen Handy. Die Geräteabnahme des Benutzers ist mit seiner Rückmeldung vom 22.09.2026 abgeschlossen.
+
+Die Aufgaben-Erwähnungen erweitern `mobile-push` mit Version 4. Empfänger werden
+serverseitig über unveränderliche Benutzer-IDs gebunden; die vorhandenen
+Deadline-Erinnerungen bleiben erhalten. Details: [Aufgaben-Erwähnungen](task-mentions.md).
 
 
 ## Abnahmenachweise vom 22.09.2026 (UTC)

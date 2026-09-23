@@ -16,6 +16,9 @@ test('Push payload hides private content by default and creates only scoped inte
   assert.equal(hidden.path, '/app/chats?conversation=id%26redirect%3Dhttps%3A%2F%2Fevil.test');
   assert.equal(pushPayload({ ...item, previews: true }).body, 'Secret message');
   assert.equal(pushPayload({ ...item, kind: 'task_comment', details: { workspace_id:'w',project_id:'p',task_id:'t' } }).path, '/app/business?workspace=w&view=tasks&project=p&task=t');
+  const mention = pushPayload({ ...item, kind: 'task_mention', details: { workspace_id:'w',project_id:'p',task_id:'t',comment_id:'c&unsafe=1' } });
+  assert.equal(mention.path, '/app/business?workspace=w&view=tasks&project=p&task=t&comment=c%26unsafe%3D1');
+  assert.match(mention.generic, /erwähnt/);
   assert.throws(() => pushPayload({ ...item, kind:'task_comment', details:{} }), /Missing/);
 });
 

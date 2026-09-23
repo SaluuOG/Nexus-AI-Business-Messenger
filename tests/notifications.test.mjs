@@ -17,10 +17,11 @@ test('Notification data, navigation, pagination and persistence errors', async t
       assert.equal(target('group_message', { chat_id: 'g2' }), '/app/groups?group=g2');
       assert.equal(target('workspace_invitation', { invite_token: 'secret?token' }), '/app/settings?category=workspace&invite=secret%3Ftoken');
       assert.equal(target('contact_request', {}), '/app/contacts');
-      for (const kind of ['task_assigned','task_due','task_overdue','task_comment']) {
+      for (const kind of ['task_assigned','task_due','task_overdue','task_comment','task_mention']) {
         assert.equal(target(kind, { workspace_id: 'w2', project_id: 'p2', task_id: 't2' }), '/app/business?workspace=w2&view=tasks&project=p2&task=t2');
         assert.equal(target(kind, { task_id: 't2' }), null);
       }
+      assert.equal(target('task_mention', { workspace_id:'w2',project_id:'p2',task_id:'t2',comment_id:'c&next=https://example.invalid' }), '/app/business?workspace=w2&view=tasks&project=p2&task=t2&comment=c%26next%3Dhttps%3A%2F%2Fexample.invalid');
       assert.equal(target('redirect', { url: 'https://example.invalid' }), null);
       assert.equal(target('direct_message', {}), null);
     });

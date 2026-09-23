@@ -67,7 +67,7 @@ self.addEventListener('push', event => {
     if (!payload || payload.v !== 1 || typeof payload.id !== 'string' || payload.expires < Date.now()) return;
     const current = await pushStore('readonly', store => store.get('binding')).catch(() => null);
     if (!current || !current.enabled || current.userId !== payload.recipient || current.deviceId !== payload.device) return;
-    const category = { direct_message: 'messages', group_message: 'messages', task_assigned: 'assignments', task_comment: 'comments', task_reminder_before: 'deadlines', task_reminder_due: 'deadlines' }[payload.kind];
+    const category = { direct_message: 'messages', group_message: 'messages', task_assigned: 'assignments', task_comment: 'comments', task_mention: 'comments', task_reminder_before: 'deadlines', task_reminder_due: 'deadlines' }[payload.kind];
     if (payload.kind !== 'test' && (!category || !current[category])) return;
     const url = pushTarget(payload.path);
     if (!url) return;

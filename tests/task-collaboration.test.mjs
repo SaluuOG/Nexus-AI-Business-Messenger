@@ -12,15 +12,17 @@ test('Task collaboration data: scoped reads, stable pagination, retries, conflic
   try {
     const stub = await server.ssrLoadModule('/tests/support/supabaseStub.mjs');
     const api = await server.ssrLoadModule('/src/features/data/taskCollaboration.ts');
-    const entry = { id: 'intent-1', workspace_id: 'w1', task_id: 't1', body: 'Hello', created_by: 'me', revision: 2, created_at: '2026-09-16T08:00:00Z' };
+    const entry = { id: 'intent-1', workspace_id: 'w1', task_id: 't1', body: 'Hello', mentioned_user_ids: [], created_by: 'me', revision: 2, created_at: '2026-09-16T08:00:00Z' };
 
     await t.test('Creation trims text, reuses the supplied intent and excludes audit fields', async () => {
       stub.setResponse(() => ({ data: { id: entry.id }, error: null }));
-      assert.equal((await api.addTaskComment('w1', 't1', 'me', entry.id, '  Hello  ')).error, null);
-      assert.deepEqual(stub.requests[0].value, { id: entry.id, workspace_id: 'w1', task_id: 't1', body: 'Hello' });
+      assert.equal((await api.addTaskComment('w1', 't1', 'me', entry.id, '  Hello  ', ['guest','member','guest'])).error, null);
+      assert.deepEqual(stub.requests[0].value, { id: entry.id, workspace_id: 'w1', task_id: 't1', body: 'Hello', mentioned_user_ids: ['guest','member'] });
       assert.equal((await api.addChecklistItem('w1', 't1', 'me', 'check-1', '  Draft  ')).error, null);
       assert.deepEqual(stub.requests[1].value, { id: 'check-1', workspace_id: 'w1', task_id: 't1', label: 'Draft' });
       assert.ok((await api.addTaskComment('w1', 't1', 'me', 'empty', ' ')).error);
+      assert.ok((await api.addTaskComment('w1', 't1', 'me', 'self', 'Hello', ['me'])).error);
+      assert.ok((await api.addTaskComment('w1', 't1', 'me', 'many', 'Hello', Array.from({length:21},(_,i)=>'user-'+i))).error);
       assert.ok((await api.addChecklistItem('w1', 't1', 'me', 'long', 'x'.repeat(241))).error);
       assert.equal(stub.requests.length, 2);
     });
@@ -30,6 +32,7 @@ test('Task collaboration data: scoped reads, stable pagination, retries, conflic
       assert.deepEqual(stub.requests[1].filters, [['id', entry.id], ['workspace_id', 'w1'], ['task_id', 't1']]);
       assert.ok((await api.addTaskComment('w1', 't1', 'someone-else', entry.id, 'Hello')).error);
       assert.ok((await api.addTaskComment('w1', 't1', 'me', entry.id, 'Changed input')).error);
+      assert.ok((await api.addTaskComment('w1', 't1', 'me', entry.id, 'Hello', ['another-user'])).error);
       stub.setResponse(r => r.operation === 'insert' ? { data: null, error: { code: '23505' } } : { data: null, error: null });
       assert.ok((await api.addTaskComment('w2', 't2', 'me', entry.id, 'Hello')).error);
     });
@@ -67,6 +70,20 @@ test('Task collaboration data: scoped reads, stable pagination, retries, conflic
       assert.equal(pages.length, 3); assert.equal(pages[2].limit, 1);
       assert.match(pages[1].or, /created_at.lt.*and\(created_at.eq.*id.lt.comment-046\)/);
       assert.deepEqual(pages[0].orders, [['created_at',{ascending:false}],['id',{ascending:false}]]);
+    });
+    await t.test('A notification target outside the first page is merged into the visible comments', async () => {
+      const recent = Array.from({ length: 45 }, (_, i) => ({ ...entry, id: `recent-${String(i).padStart(3,'0')}`, created_at: `2026-09-16T08:${String(i).padStart(2,'0')}:00Z` }));
+      const focused = { ...entry, id: 'focused-comment', body: 'Gezielte Erwähnung', created_at: '2026-01-01T08:00:00Z' };
+      stub.setResponse(r => {
+        if (r.table === 'project_tasks') return { data: { id: 't1' }, error: null };
+        if (r.table === 'task_comments' && r.filters.some(([key,value]) => key === 'id' && value === focused.id)) return { data: focused, error: null };
+        if (r.table === 'task_comments') return { data: recent.slice(0, r.limit), error: null };
+        return { data: [], error: null };
+      });
+      const result = await api.loadTaskCollaboration('w1','t1',undefined,undefined,focused.id);
+      assert.equal(result.error, null);
+      assert.equal(result.data.comments.some(comment => comment.id === focused.id), true);
+      assert.equal(result.data.comments.filter(comment => comment.id === focused.id).length, 1);
     });
     await t.test('Any failed read or vanished parent clears all collaboration records', async () => {
       for (const failure of ['task_comments','task_checklist_items','task_activity','task_attachments','project_tasks','removed']) {

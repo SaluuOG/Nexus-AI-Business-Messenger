@@ -216,7 +216,7 @@ function normalizeWebsite(value: string) {
 export function BusinessPage({ workspaceId, workspaceName, currentUserId, workspaceLoading, workspaceError, onStartChat }: BusinessPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selection = readBusinessSearch(searchParams.toString(), workspaceId);
-  const { view, projectId: requestedProjectId, taskId: requestedTaskId } = selection;
+  const { view, projectId: requestedProjectId, taskId: requestedTaskId, commentId: requestedCommentId } = selection;
   const taskProjectId = requestedProjectId || 'all';
   const setView = (next: 'projects' | 'customers' | 'tasks') => setSearchParams(businessSearch(workspaceId, { view: next }));
   const [customers, setCustomers] = useState<NexusCustomer[]>([]);
@@ -710,7 +710,7 @@ export function BusinessPage({ workspaceId, workspaceName, currentUserId, worksp
           {view === 'projects' && <div className="project-tasks-entry"><span>Aufgaben direkt im Projekt öffnen und verteilen.</span><button className="secondary" onClick={() => openTasks()}><ListTodo size={16} /> Alle Projektaufgaben ({tasks.length})</button></div>}
           {view === 'tasks' && <div className="project-tasks-entry"><button className="secondary" onClick={() => setView('projects')}><ArrowLeft size={16} /> Zurück zu Projekten</button><b>{projects.find(project => project.id === requestedProjectId)?.title ?? 'Alle Projektaufgaben'}</b></div>}
 
-          {view === 'tasks' ? <ProjectTasksPanel key={`${workspaceId}:${taskProjectId}:${requestedTaskId ?? ''}`} workspaceId={workspaceId} currentUserId={currentUserId} tasks={tasks} projects={projects} members={members} defaultProjectId={taskProjectId} initialTaskId={requestedTaskId} onClearTaskFocus={() => openTasks(taskProjectId)} loading={loading} loadError={taskError || error} onRefresh={() => refresh(false)} /> : loading && customers.length === 0 && projects.length === 0 ? (
+          {view === 'tasks' ? <ProjectTasksPanel key={`${workspaceId}:${taskProjectId}:${requestedTaskId ?? ''}:${requestedCommentId ?? ''}`} workspaceId={workspaceId} currentUserId={currentUserId} tasks={tasks} projects={projects} members={members} defaultProjectId={taskProjectId} initialTaskId={requestedTaskId} initialCommentId={requestedCommentId} onClearTaskFocus={() => openTasks(taskProjectId)} loading={loading} loadError={taskError || error} onRefresh={() => refresh(false)} /> : loading && customers.length === 0 && projects.length === 0 ? (
             <div className="panel business-loading">Business-Daten werden geladen…</div>
           ) : error && !projects.length && !customers.length ? <div className="panel business-empty-state">Business-Daten derzeit nicht verfügbar.</div> : view === 'projects' ? (
             visibleProjects.length === 0 ? (

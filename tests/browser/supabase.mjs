@@ -14,6 +14,7 @@ const task = (id, title, patch = {}) => ({
 const messageHistoryFixture = sessionStorage.getItem('nexusTest.messageHistoryFixture') === '1';
 const mobileBusinessFixture = sessionStorage.getItem('nexusTest.mobileBusinessFixture') === '1';
 const workspaceLifecycleFixture = sessionStorage.getItem('nexusTest.workspaceLifecycleFixture') === '1';
+const taskMentionsFixture = sessionStorage.getItem('nexusTest.taskMentionsFixture') === '1';
 const workspace = (id, name, owner_id) => ({
   id, name, owner_id, slug: `${id}-slug`, avatar_url: null,
   created_at: '2026-01-01T08:00:00Z', updated_at: '2026-01-01T08:00:00Z',
@@ -116,6 +117,10 @@ const state = {
 state.projects.push(project('p5', 'Drittes Projekt', 'w3', null));
 state.tasks.push(...JSON.parse(sessionStorage.getItem('nexusTest.created') || '[]'));
 if (mobileBusinessFixture) state.memberships.push(membership('w3','other','member','Test Kontakt','test'), membership('w3','guest-user','guest','Nur Gast','gast'));
+if (taskMentionsFixture) state.memberships.push(
+  membership('w1','other','member','Darlyn Beispiel','darlyn'),
+  membership('w1','guest-user','guest','Gast Person','gast-person'),
+);
 const memberships = state.memberships;
 let user = { id: 'me', email: 'nexus-test@example.invalid', user_metadata: { full_name: 'Test Nutzer' } };
 const collaboration = createCollaborationService(state, () => user);
@@ -148,8 +153,8 @@ state.switchUser = id => {
   user = { id, email: id + '@example.invalid', user_metadata: { full_name: 'Other Test User' } };
   for (const listener of authListeners) listener('SIGNED_IN', { user });
 };
-const notificationCategory = kind => ({ direct_message: 'messages', group_message: 'messages', contact_request: 'contacts', workspace_invitation: 'invitations', task_assigned: 'assignments', task_due: 'deadlines', task_overdue: 'deadlines' })[kind];
-const notificationPrefs = id => ({ messages: true, contacts: true, invitations: true, assignments: true, deadlines: true, ...state.notificationPreferences[id] });
+const notificationCategory = kind => ({ direct_message: 'messages', group_message: 'messages', contact_request: 'contacts', workspace_invitation: 'invitations', task_assigned: 'assignments', task_comment: 'comments', task_mention: 'comments', task_due: 'deadlines', task_overdue: 'deadlines' })[kind];
+const notificationPrefs = id => ({ messages: true, contacts: true, invitations: true, assignments: true, comments: true, deadlines: true, ...state.notificationPreferences[id] });
 state.persistNotifications = () => {
   sessionStorage.setItem('nexusTest.notifications', JSON.stringify(state.notifications));
   sessionStorage.setItem('nexusTest.notificationPreferences', JSON.stringify(state.notificationPreferences));

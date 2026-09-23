@@ -22,6 +22,7 @@ export function deliveryOutcome(status) {
 export function pushPayload(item) {
   const generic = { direct_message: 'Du hast eine neue Nachricht.', group_message: 'Es gibt eine neue Gruppennachricht.',
     task_assigned: 'Dir wurde eine Aufgabe zugewiesen.', task_comment: 'Es gibt einen neuen Aufgabenkommentar.',
+    task_mention: 'Du wurdest in einem Aufgabenkommentar erwähnt.',
     task_reminder_before: 'Eine deiner Aufgaben ist morgen fällig.', task_reminder_due: 'Eine deiner Aufgaben ist heute fällig.',
     test: 'Push ist auf diesem Gerät eingerichtet.' }[item.kind];
   if (!generic) throw new Error('Unsupported push kind');
@@ -32,6 +33,7 @@ export function pushPayload(item) {
   else if (item.kind === 'group_message' && d.chat_id) path = '/app/groups?' + new URLSearchParams({ group: d.chat_id });
   else if (item.kind.startsWith('task_') && d.workspace_id && d.project_id && d.task_id) {
     params.set('workspace', d.workspace_id); params.set('view', 'tasks'); params.set('project', d.project_id); params.set('task', d.task_id);
+    if (d.comment_id) params.set('comment', d.comment_id);
     path = '/app/business?' + params;
   } else if (item.kind !== 'test') throw new Error('Missing push target');
   return {

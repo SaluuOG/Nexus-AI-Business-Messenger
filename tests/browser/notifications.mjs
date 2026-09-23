@@ -34,7 +34,7 @@ try {
         s.notifications = [
           ...Array.from({ length: 30 }, (_, i) => item(i + 1, 'task_assigned', 'Team-Aufgabe ' + (i + 1), { workspace_id: 'w1', project_id: 'p1', task_id: 'mine' })),
           item(31, 'task_overdue', 'Überfällige Aufgabe', { workspace_id: 'w1', project_id: 'p1', task_id: 'past' }),
-          item(32, 'task_due', 'Meine heutige Aufgabe', { workspace_id: 'w1', project_id: 'p1', task_id: 'mine' }),
+          item(32, 'task_mention', 'Erwähnung bei Meine heutige Aufgabe', { workspace_id: 'w1', project_id: 'p1', task_id: 'mine', comment_id: 'notification-comment' }),
           item(33, 'workspace_invitation', 'Einladung zu einem neuen Team', { invite_token: 'test-notification-invite' }),
           item(34, 'contact_request', 'Neue Kontaktanfrage'),
           item(35, 'group_message', 'Neue Nachricht in Projektgruppe', { chat_id: 'g1' }),
@@ -42,6 +42,8 @@ try {
           item(37, 'task_assigned', '<script>window.unsafe = true</script>', { workspace_id: 'w1', project_id: 'p1', task_id: 'mine' }, true),
           { ...item(999, 'direct_message', 'Privater fremder Hinweis', { chat_id: 'private' }), recipient_id: 'different' },
         ];
+        s.collaboration.task_comments.push({ id:'notification-comment',workspace_id:'w1',task_id:'mine',body:'Bitte diesen Entwurf prüfen.',mentioned_user_ids:['me'],created_by:'other',created_at:'2026-09-15T10:00:00Z',updated_at:'2026-09-15T10:00:00Z',revision:1 });
+        s.persistCollaboration();
         s.persistNotifications(); s.emit('notifications', 'INSERT');
       });
       await page.getByRole('link', { name: 'Benachrichtigungen: 36 ungelesen', exact: true }).waitFor();
@@ -78,9 +80,10 @@ try {
       await page.waitForURL(url => url.hash === '#/app/groups?group=g1');
       await page.locator('.chat-head').getByText('Projektgruppe', { exact: true }).waitFor();
       await returnToFeed();
-      await row('Meine heutige Aufgabe').locator('.notification-open').click();
+      await row('Erwähnung bei Meine heutige Aufgabe').locator('.notification-open').click();
       await page.locator('.task-card').getByRole('heading', { name: 'Meine heutige Aufgabe', exact: true }).waitFor();
-      assert.match(page.url(), /workspace=w1&view=tasks&project=p1&task=mine/);
+      await page.locator('#nexus-comment-notification-comment.is-mentioned-target').waitFor();
+      assert.match(page.url(), /workspace=w1&view=tasks&project=p1&task=mine&comment=notification-comment/);
       await page.goBack();
       await page.getByRole('heading', { name: 'Benachrichtigungen', exact: true }).waitFor();
       await row('Einladung zu einem neuen Team').locator('.notification-open').click();

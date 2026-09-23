@@ -9,6 +9,7 @@ export function createCollaborationService(state, getUser) {
   state.collaborationWriteDelay = 0;
   state.collaborationPending = 0;
   state.loseCollaborationResponse = false;
+  state.mentionNotifications = [];
   const persist = () => sessionStorage.setItem('nexusTest.collaboration', JSON.stringify(state.collaboration));
   const role = workspaceId => state.revoked ? undefined : state.memberships.find(m => m.user_id === getUser().id && m.workspace_id === workspaceId)?.role;
   const canWrite = workspaceId => ['owner', 'admin', 'member'].includes(role(workspaceId));
@@ -51,9 +52,14 @@ export function createCollaborationService(state, getUser) {
               if (!canWrite(q.value.workspace_id)) return resolve({data:null,error:{code:'42501'}});
               if (!state.tasks.some(t => t.id === q.value.task_id && t.workspace_id === q.value.workspace_id)) return resolve({data:null,error:{code:'23503'}});
               if (state.collaboration[table].some(row => row.id === q.value.id)) return resolve({data:null,error:{code:'23505'}});
-              const row = {...q.value,created_by:getUser().id,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),revision:1};
+              const mentionIds = table === 'task_comments' ? [...new Set(q.value.mentioned_user_ids ?? [])].sort() : [];
+              if (table === 'task_comments' && (mentionIds.length > 20 || mentionIds.includes(getUser().id) || mentionIds.some(id => !state.memberships.some(member => member.workspace_id === q.value.workspace_id && member.user_id === id)))) {
+                return resolve({data:null,error:{code:'42501'}});
+              }
+              const row = {...q.value,...(table === 'task_comments' ? {mentioned_user_ids:mentionIds} : {}),created_by:getUser().id,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),revision:1};
               if (table === 'task_checklist_items') row.is_completed = false;
               state.collaboration[table].push(row); rows = [row];
+              if (table === 'task_comments') state.mentionNotifications.push(...mentionIds.map(user_id => ({user_id,comment_id:row.id})));
               record(row, table === 'task_comments' ? 'comment_created' : 'checklist_added');
             } else if (q.operation !== 'select') {
               rows = rows.filter(row => canWrite(row.workspace_id) && (table !== 'task_comments' || row.created_by === getUser().id || q.operation === 'delete' && ['owner','admin'].includes(role(row.workspace_id))));

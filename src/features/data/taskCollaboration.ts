@@ -4,7 +4,7 @@ import { listTaskAttachments, type TaskAttachment } from './taskAttachments';
 
 export type TaskComment = {
   id: string; workspace_id: string; task_id: string; body: string;
-  created_by: string | null; created_at: string; updated_at: string; revision: number;
+  mentioned_user_ids: string[]; created_by: string | null; created_at: string; updated_at: string; revision: number;
 };
 export type TaskChecklistItem = {
   id: string; workspace_id: string; task_id: string; label: string; is_completed: boolean;
@@ -22,7 +22,7 @@ export const emptyTaskCollaboration: TaskCollaboration = {
   comments: [], checklist: [], activity: [], attachments: [], moreComments: false, moreActivity: false,
 };
 export const collaborationPageSize = 40;
-const commentColumns = 'id,workspace_id,task_id,body,created_by,created_at,updated_at,revision';
+const commentColumns = 'id,workspace_id,task_id,body,mentioned_user_ids,created_by,created_at,updated_at,revision';
 const checklistColumns = 'id,workspace_id,task_id,label,is_completed,created_by,created_at,updated_at,revision';
 const activityColumns = 'id,workspace_id,task_id,actor_id,event_type,changed_fields,created_at';
 const unavailable = 'Die Aufgabe ist nicht mehr verfügbar oder dein Zugriff wurde entzogen.';
@@ -84,21 +84,31 @@ async function readChecklist(workspaceId: string, taskId: string, signal?: Abort
 
 export async function loadTaskCollaboration(workspaceId: string, taskId: string,
   counts = { comments: collaborationPageSize, activity: collaborationPageSize }, signal?: AbortSignal,
+  focusedCommentId?: string | null,
 ): Promise<{ data: TaskCollaboration; error: string | null }> {
   if (!supabase) return { data: emptyTaskCollaboration, error: 'Supabase ist nicht konfiguriert.' };
   try {
     let taskQuery = supabase.from('project_tasks').select('id').eq('workspace_id', workspaceId).eq('id', taskId);
     if (signal) taskQuery = taskQuery.abortSignal(signal);
-    const [task, comments, checklist, activity, attachments] = await Promise.all([
+    let focusedQuery = focusedCommentId ? supabase.from('task_comments').select(commentColumns)
+      .eq('workspace_id', workspaceId).eq('task_id', taskId).eq('id', focusedCommentId) : null;
+    if (signal && focusedQuery) focusedQuery = focusedQuery.abortSignal(signal);
+    const [task, comments, checklist, activity, attachments, focusedComment] = await Promise.all([
       taskQuery.maybeSingle(),
       readStream<TaskComment>('task_comments', commentColumns, workspaceId, taskId, counts.comments, signal),
       readChecklist(workspaceId, taskId, signal),
       readStream<TaskActivity>('task_activity', activityColumns, workspaceId, taskId, counts.activity, signal),
       listTaskAttachments(workspaceId, taskId, signal),
+      focusedQuery?.maybeSingle() ?? Promise.resolve({ data: null, error: null }),
     ]);
     if (task.error) throw task.error;
+    if (focusedComment.error) throw focusedComment.error;
     if (!task.data) return { data: emptyTaskCollaboration, error: unavailable };
-    return { data: { comments: comments.rows, checklist, activity: activity.rows, attachments, moreComments: comments.more, moreActivity: activity.more }, error: null };
+    const visibleComments = [...comments.rows];
+    const target = focusedComment.data as TaskComment | null;
+    if (target && !visibleComments.some(entry => entry.id === target.id)) visibleComments.push(target);
+    visibleComments.sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+    return { data: { comments: visibleComments, checklist, activity: activity.rows, attachments, moreComments: comments.more, moreActivity: activity.more }, error: null };
   } catch {
     // Clear previously visible records after every failed permission/network check.
     return { data: emptyTaskCollaboration, error: 'Die Zusammenarbeit konnte nicht geladen werden. Bitte erneut versuchen.' };
@@ -106,24 +116,31 @@ export async function loadTaskCollaboration(workspaceId: string, taskId: string,
 }
 
 async function createEntry(table: 'task_comments' | 'task_checklist_items', workspaceId: string, taskId: string,
-  userId: string, id: string, text: string) {
+  userId: string, id: string, text: string, mentionedUserIds: string[] = []) {
   if (!supabase) return { error: 'Supabase ist nicht konfiguriert.' };
   const field = table === 'task_comments' ? 'body' : 'label';
   const value = text.trim();
   if (!value || value.length > (field === 'body' ? 4000 : 240)) return { error: 'Bitte prüfe die Länge und den Inhalt deiner Eingabe.' };
-  const { data, error } = await supabase.from(table).insert({ id, workspace_id: workspaceId, task_id: taskId, [field]: value }).select('id').maybeSingle();
+  const mentionIds = table === 'task_comments' ? [...new Set(mentionedUserIds)].sort() : [];
+  if (mentionIds.length > 20 || mentionIds.some(user => !user || user === userId)) return { error: 'Bitte prüfe die ausgewählten Erwähnungen.' };
+  const insert = { id, workspace_id: workspaceId, task_id: taskId, [field]: value,
+    ...(table === 'task_comments' ? { mentioned_user_ids: mentionIds } : {}) };
+  const { data, error } = await supabase.from(table).insert(insert).select('id').maybeSingle();
   if (error?.code === '23505') {
     // A lost response may be retried with the same intent ID. Never overwrite an
     // existing row or accept an ID belonging to another task, author or input.
-    const existing = await supabase.from(table).select(`id,${field},created_by`)
+    const existing = await supabase.from(table).select(`id,${field},created_by${table === 'task_comments' ? ',mentioned_user_ids' : ''}`)
       .eq('id', id).eq('workspace_id', workspaceId).eq('task_id', taskId).maybeSingle();
-    if (!existing.error && existing.data && existing.data.created_by === userId && (existing.data as unknown as Record<string, unknown>)[field] === value) return { error: null };
+    const record = existing.data as unknown as Record<string, unknown> | null;
+    const storedMentions = Array.isArray(record?.mentioned_user_ids) ? [...record.mentioned_user_ids as string[]].sort() : [];
+    if (!existing.error && record && record.created_by === userId && record[field] === value &&
+      (table !== 'task_comments' || JSON.stringify(storedMentions) === JSON.stringify(mentionIds))) return { error: null };
   }
   return { error: publicError(error, 'Speichern fehlgeschlagen. Bitte erneut versuchen.') || (!data ? conflict : null) };
 }
 
-export const addTaskComment = (workspaceId: string, taskId: string, userId: string, id: string, body: string) =>
-  createEntry('task_comments', workspaceId, taskId, userId, id, body);
+export const addTaskComment = (workspaceId: string, taskId: string, userId: string, id: string, body: string, mentionedUserIds: string[] = []) =>
+  createEntry('task_comments', workspaceId, taskId, userId, id, body, mentionedUserIds);
 export const addChecklistItem = (workspaceId: string, taskId: string, userId: string, id: string, label: string) =>
   createEntry('task_checklist_items', workspaceId, taskId, userId, id, label);
 

@@ -2,6 +2,7 @@ export type BusinessTarget = {
   view?: 'projects' | 'customers' | 'tasks';
   projectId?: string;
   taskId?: string;
+  commentId?: string;
 };
 
 export function businessSearch(workspaceId: string | null, target: BusinessTarget = {}) {
@@ -10,6 +11,7 @@ export function businessSearch(workspaceId: string | null, target: BusinessTarge
   params.set('view', target.view ?? (target.taskId ? 'tasks' : 'projects'));
   if (target.projectId) params.set('project', target.projectId);
   if (target.taskId) params.set('task', target.taskId);
+  if (target.taskId && target.commentId) params.set('comment', target.commentId);
   return params.toString();
 }
 
@@ -17,10 +19,11 @@ export function readBusinessSearch(search: string, workspaceId: string | null) {
   const params = new URLSearchParams(search);
   // A target from another workspace must never be applied to the current data.
   if (params.get('workspace') && params.get('workspace') !== workspaceId) {
-    return { view: 'projects' as const, projectId: null, taskId: null };
+    return { view: 'projects' as const, projectId: null, taskId: null, commentId: null };
   }
   const rawView = params.get('view');
   const view = rawView === 'tasks' || rawView === 'customers' || rawView === 'projects'
     ? rawView : params.get('task') ? 'tasks' : 'projects';
-  return { view, projectId: params.get('project'), taskId: params.get('task') };
+  const taskId = params.get('task');
+  return { view, projectId: params.get('project'), taskId, commentId: taskId ? params.get('comment') : null };
 }

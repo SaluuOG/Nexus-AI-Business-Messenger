@@ -3,7 +3,7 @@ import { collaborationPageSize, emptyTaskCollaboration, loadTaskCollaboration, s
 
 // The view is keyed by account, workspace, task and role. A generation additionally
 // rejects late responses after refresh/unmount even if the transport ignores abort.
-export function useTaskCollaboration(workspaceId: string, taskId: string) {
+export function useTaskCollaboration(workspaceId: string, taskId: string, focusedCommentId?: string | null) {
   const [data, setData] = useState(emptyTaskCollaboration);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,10 +17,10 @@ export function useTaskCollaboration(workspaceId: string, taskId: string) {
     const controller = new AbortController();
     request.current = controller;
     if (active.current) setLoading(true);
-    const result = await loadTaskCollaboration(workspaceId, taskId, counts.current, controller.signal);
+    const result = await loadTaskCollaboration(workspaceId, taskId, counts.current, controller.signal, focusedCommentId);
     if (!active.current || id !== generation.current) return;
     setData(result.data); setError(result.error); setLoading(false);
-  }, [workspaceId, taskId]);
+  }, [workspaceId, taskId, focusedCommentId]);
 
   useEffect(() => {
     active.current = true;

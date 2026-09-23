@@ -23,6 +23,7 @@ type Props = {
   members: NexusWorkspaceMember[];
   defaultProjectId: string;
   initialTaskId?: string | null;
+  initialCommentId?: string | null;
   onClearTaskFocus?: () => void;
   loading: boolean;
   loadError: string | null;
@@ -33,7 +34,7 @@ function dueLabel(value: string | null) {
   return value ? new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : 'Keine Deadline';
 }
 
-export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects, members, defaultProjectId, initialTaskId, onClearTaskFocus, loading, loadError, onRefresh }: Props) {
+export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects, members, defaultProjectId, initialTaskId, initialCommentId, onClearTaskFocus, loading, loadError, onRefresh }: Props) {
   const navigate = useNavigate();
   const sources = useTaskSourceLinks(workspaceId, tasks);
   const sourcesByTask = new Map(sources.sources.map(source => [source.task_id, source.kind]));
@@ -166,7 +167,7 @@ export function ProjectTasksPanel({ workspaceId, currentUserId, tasks, projects,
           </div>
           {initialTaskId === task.id && currentUserId && membersById.get(currentUserId)?.role && !loadError && <TaskCollaboration
             key={`${currentUserId}:${workspaceId}:${task.id}:${membersById.get(currentUserId)!.role}`}
-            workspaceId={workspaceId} taskId={task.id} currentUserId={currentUserId} role={membersById.get(currentUserId)!.role} members={members} />}
+            workspaceId={workspaceId} taskId={task.id} initialCommentId={initialCommentId} currentUserId={currentUserId} role={membersById.get(currentUserId)!.role} members={members} />}
         </article>;
       })}</div>}
 
