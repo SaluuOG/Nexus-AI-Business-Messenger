@@ -36,6 +36,7 @@ const errorMessages = {
   history_changed: 'Der Verlauf hat sich geändert. Bitte erneut auswerten.',
   chat_done: 'Dieser Chat ist für dich als fertig markiert. Öffne ihn wieder, bevor du ihn auswertest.',
   already_processed: 'Dieser Verlauf wurde bereits ausgewertet. Öffne die gespeicherte Auswertung.',
+  consent_required: 'Bestätige vor der Auswertung, dass der Chattext an den angezeigten KI-Anbieter übertragen werden darf.',
   status_changed: 'Der Chatstatus hat sich inzwischen geändert. Bitte prüfe den aktuellen Stand.',
   scan_expired: 'Die Auswertung hat zu lange gedauert. Bitte erneut versuchen.',
   invalid_response: 'Die Auswertung konnte nicht sicher zu diesem Chat zugeordnet werden. Bitte versuche es erneut.',
@@ -126,7 +127,10 @@ async function invoke(action: 'status' | 'scan', scope: ChatScanScope, signal: A
   signal.throwIfAborted();
   if (!supabase) throw new ChatScanError('connection_error');
   try {
-    const { data, error } = await supabase.functions.invoke('chat-scan', { body: { action, ...scope }, signal });
+    const { data, error } = await supabase.functions.invoke('chat-scan', {
+      body: { action, ...scope, ...(action === 'scan' ? { consentVersion: '2026-09-23' } : {}) },
+      signal,
+    });
     signal.throwIfAborted();
     if (error) {
       // Supabase places an HTTP error response in context. Never surface raw

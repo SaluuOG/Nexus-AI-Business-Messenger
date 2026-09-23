@@ -269,7 +269,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Profil & Business: Name, Username, Bio und Business-Profil
 - Workspace & Team: aktiven Workspace auch mobil auswählen, Workspace erstellen oder umbenennen, Mitglieder, Rollen und Einladungen verwalten sowie Ownership übertragen, verlassen oder sicher löschen
 - Benachrichtigungen: Hinweise nach Art ein-/ausschalten; Auswahl wird pro Konto auf allen Geräten gespeichert
-- Datenschutz & Sicherheit: Passwort ändern, Wiederherstellungslink an die eigene Konto-Adresse senden und abmelden
+- Datenschutz & Sicherheit: Passwort ändern, Wiederherstellungslink an die eigene Konto-Adresse senden, abmelden und das Konto nach sicherer Ownership-Prüfung dauerhaft löschen
 - klare Fehlermeldungen und eine Sendepause nach erfolgreicher Reset-Anforderung; Passwort-Sonderzeichen bleiben unverändert erhalten
 - Kategorien bleiben in der URL erhalten und unterstützen Neuladen, Zurück/Vorwärts und Tastaturbedienung; Einladungslinks bleiben beim Kategorienwechsel erhalten
 - direkte Aufgaben- und Chatlinks haben Vorrang vor der gewählten Startansicht
@@ -316,3 +316,7 @@ Unter **Aufgaben-Erinnerungen** lassen sich zusätzlich Frist-Pushs am Vortag un
 ### Dateien an Aufgaben und Kommentaren
 
 Unter **Projekte → Aufgaben → Details & Zusammenarbeit** können Mitglieder Bilder und Dokumente bis 25 MB direkt an Aufgaben oder eigene Kommentare anhängen. Bildvorschau und Download funktionieren auch mobil. Gäste können lesen und herunterladen; Entfernen folgt den Teamrechten. [Dateitypen, Rechte und Bereinigung](docs/task-attachments.md).
+
+### Native iOS-App
+
+Das Capacitor-8-Projekt unter `ios/` verpackt denselben geprüften Nexus-Client als native iOS-App. App-Icon, Splashscreen, Mikrofonhinweis, relative Asset-Pfade und ein eigener `build:ios`-Ablauf sind vorbereitet. Die KI-Auswertung verlangt vor jeder neuen Übertragung eine ausdrückliche Einwilligung. [Build- und App-Store-Schritte](docs/ios-release.md).

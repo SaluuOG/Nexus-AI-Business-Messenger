@@ -1,0 +1,24 @@
+.account-danger-zone {
+  border-color: #563039;
+  background: linear-gradient(145deg, rgba(92, 36, 46, .12), rgba(13, 18, 25, .9));
+}
+.account-danger-zone > svg { color: #e07f8e; }
+.danger-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #7b3f49;
+  background: #351b20;
+  color: #ffabb7;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.danger-action:hover:not(:disabled) { background: #472129; border-color: #a85866; }
+.danger-action:disabled { opacity: .5; cursor: not-allowed; }
+.account-delete-confirmation { max-width: 520px; }
+.account-delete-confirmation label b { color: #f2a4b0; }
+.account-delete-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.account-delete-actions button { width: max-content; }

@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 
-export default defineConfig({
-  base: '/Nexus-AI-Business-Messenger/',
+export default defineConfig(({ mode }) => ({
+  base: mode === 'capacitor' ? './' : '/Nexus-AI-Business-Messenger/',
   build: {
     rolldownOptions: {
       output: {
@@ -17,4 +17,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

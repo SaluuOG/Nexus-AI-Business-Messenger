@@ -95,7 +95,7 @@ const state = {
   failure: null, revoked: false, delayWorkspace: null, writes: 0, channels: [], revision: 0,
   sources: JSON.parse(sessionStorage.getItem('nexusTest.sources') || '[]'), sourceDenied: false,
   hideRecentSource: false, loseCreateResponse: false, createDelay: 0, directMessageDelay: 0,
-  resetRequests: [], passwordUpdates: [], authFailure: null, signOutCount: 0,
+  resetRequests: [], passwordUpdates: [], authFailure: null, signOutCount: 0, accountDeletionCalls: [],
   notifications: JSON.parse(sessionStorage.getItem('nexusTest.notifications') || '[]'),
   notificationPreferences: JSON.parse(sessionStorage.getItem('nexusTest.notificationPreferences') || '{}'),
   notificationDelay: 0, notificationReadDelay: 0, notificationCalls: [],
@@ -362,6 +362,13 @@ const currentMembership = workspaceId => memberships.find(member => member.works
 export const supabase = {
   functions: {
     async invoke(name, { body, signal } = {}) {
+      if (name === 'delete-account') {
+        state.accountDeletionCalls.push(structuredClone(body));
+        return {
+          data: null,
+          error: { context: new Response(JSON.stringify({ error: 'Übertrage oder lösche zuerst: 1 Workspace.' }), { status: 409, headers: { 'content-type': 'application/json' } }) },
+        };
+      }
       if (name !== 'chat-scan') throw new Error('Unexpected test function: ' + name);
       const call = { name, body: structuredClone(body), userId: user.id };
       state.chatScanCalls.push(call);
@@ -370,6 +377,7 @@ export const supabase = {
         available: state.chatScanAvailable, providerLabel: 'Test KI',
         workflow: state.chatScanState(body.kind, body.chatId, call.userId),
       }, error: null };
+      if (body.consentVersion !== '2026-09-23') return scanFailure('consent_required', 400);
       const initial = state.chatScanState(body.kind, body.chatId, call.userId);
       if (body.expectedRevision && body.expectedRevision !== initial.revision) return scanFailure('status_changed');
       if (initial.status === 'done') return scanFailure('chat_done');

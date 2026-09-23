@@ -64,6 +64,18 @@ try {
       for (const link of await categories.getByRole('link').all()) assert.equal(await link.isVisible(), true);
       await page.screenshot({ path: `browser-results/${name}-settings-security-mobile.png`, fullPage: true });
 
+      const deletePanel = page.locator('.account-danger-zone');
+      await deletePanel.getByRole('button', { name: 'Konto löschen', exact: true }).click();
+      const finalDelete = deletePanel.getByRole('button', { name: 'Endgültig löschen', exact: true });
+      assert.equal(await finalDelete.isDisabled(), true);
+      await deletePanel.getByLabel(/Zur Bestätigung/).fill('KONTO LÖSCHEN');
+      assert.equal(await finalDelete.isEnabled(), true);
+      await finalDelete.click();
+      await deletePanel.getByRole('alert').filter({ hasText: 'Übertrage oder lösche zuerst: 1 Workspace.' }).waitFor();
+      assert.deepEqual(await page.evaluate(() => window.nexusTest.accountDeletionCalls), [{ confirmation: 'KONTO LÖSCHEN' }]);
+      assert.equal(await page.getByRole('heading', { name: 'Datenschutz & Sicherheit', exact: true }).count(), 1);
+      await deletePanel.getByRole('button', { name: 'Abbrechen', exact: true }).click();
+
       // Synthetic credentials stay in the fixture. No real user is changed and no
       // email is sent: all external network access is blocked for this context.
       await page.getByLabel('Neues Passwort', { exact: true }).fill('Nexus_Test!42');

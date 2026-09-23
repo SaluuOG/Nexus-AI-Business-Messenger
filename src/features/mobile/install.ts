@@ -1,11 +1,14 @@
+import { Capacitor } from '@capacitor/core';
+
 type InstallPrompt = Event & {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 };
 
 const display = window.matchMedia('(display-mode: standalone)');
+const native = Capacitor.isNativePlatform();
 let snapshot = {
-  installed: display.matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone),
+  installed: native || display.matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone),
   prompt: null as InstallPrompt | null,
 };
 const listeners = new Set<() => void>();
@@ -41,7 +44,7 @@ export async function requestInstall() {
 }
 
 export function registerMobileApp() {
-  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  if (native || !import.meta.env.PROD || !('serviceWorker' in navigator)) return;
   const register = () => {
     void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
       scope: import.meta.env.BASE_URL, updateViaCache: 'none',

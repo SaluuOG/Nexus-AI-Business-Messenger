@@ -15,6 +15,7 @@ const errorMessages = {
   history_changed: 'Der Chat wurde während der Analyse geändert. Bitte den Scan erneut starten.',
   chat_done: 'Dieser Chat ist als fertig markiert. Öffne ihn wieder, um ihn erneut auszuwerten.',
   already_processed: 'Dieser Chat wurde bereits ausgewertet. Öffne das gespeicherte Ergebnis.',
+  consent_required: 'Bestätige vor der Auswertung die Übertragung an den KI-Anbieter.',
   status_changed: 'Der Bearbeitungsstand hat sich geändert. Bitte den Chat erneut öffnen.',
   scan_expired: 'Die Auswertung hat zu lange gedauert. Bitte erneut versuchen.',
 };
@@ -197,7 +198,7 @@ async function analyzeHistory(history, config, fetcher, signal) {
 
 export function createChatScanHandler({ createClient, env, fetcher = fetch }) {
   return async function handle(request) {
-    const allowed = (env('NEXUS_AI_ALLOWED_ORIGINS') || 'https://saluuog.github.io,http://localhost:5173,http://127.0.0.1:5173').split(',').map(value => value.trim());
+    const allowed = (env('NEXUS_AI_ALLOWED_ORIGINS') || 'https://saluuog.github.io,capacitor://localhost,http://localhost,http://localhost:5173,http://127.0.0.1:5173').split(',').map(value => value.trim());
     const origin = request.headers.get('origin');
     const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Vary': 'Origin',
       'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -230,6 +231,7 @@ export function createChatScanHandler({ createClient, env, fetcher = fetch }) {
       const workflowArgs = { p_kind: input.kind, p_chat_id: input.chatId };
       const workflow = checkWorkflow(checkRpc(await client.rpc('get_my_chat_scan_state', workflowArgs)), input.chatId);
       if (input.action === 'status') return respond({ available, providerLabel: available ? 'OpenAI' : null, workflow });
+      if (input.consentVersion !== '2026-09-23') failure('consent_required', 400);
       if (workflow.status === 'done') failure('chat_done', 409);
       // Current successful results remain available even when the provider is
       // disabled. Reading a result never reserves quota or starts paid work.

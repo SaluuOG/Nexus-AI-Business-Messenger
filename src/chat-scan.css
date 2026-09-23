@@ -39,6 +39,7 @@
 .chat-scan-disclosure{padding:13px 15px;border:1px solid #494167;border-radius:12px;background:#201c30}
 .chat-scan-disclosure p{margin:0;color:#cec7e8;font-size:12px}
 .chat-scan-disclosure p+p{margin-top:9px;color:#b1a9c8}
+.chat-scan-consent{display:flex;align-items:flex-start;gap:9px;margin-top:14px;padding-top:12px;border-top:1px solid #494167;color:#ded8f4;font-size:11px;line-height:1.5;cursor:pointer}.chat-scan-consent input{width:18px;height:18px;flex:0 0 auto;margin:0;accent-color:#776cf5}.chat-scan-footer .primary:disabled{opacity:.45;cursor:not-allowed}
 .chat-scan-footer{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;margin-top:22px}
 .chat-scan-dialog .chat-scan-footer button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;margin-top:0;font-size:12px;white-space:normal;text-align:center}
 .chat-scan-notice{padding:11px 13px;border:1px solid #665637;border-radius:10px;background:#2b2419;color:#e0ceaa}

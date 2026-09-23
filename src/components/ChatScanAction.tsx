@@ -140,6 +140,7 @@ function ChatScanDialog({ kind, chatId, chatName, historyVersion, workflow, onRe
   currentState.current = state;
   const [provider, setProvider] = useState<ChatScanStatus | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [consented, setConsented] = useState(false);
 
   const abort = useCallback(() => {
     requestVersion.current += 1;
@@ -220,7 +221,7 @@ function ChatScanDialog({ kind, chatId, chatName, historyVersion, workflow, onRe
   const close = () => { abort(); dialog.current?.close(); onClose(); };
   const start = async () => {
     const before = currentWorkflow.current;
-    if (!provider?.available || !before?.canScan || running.current) return;
+    if (!provider?.available || !before?.canScan || !consented || running.current) return;
     abort();
     const ownVersion = requestVersion.current;
     const ownHistory = latestHistory.current;
@@ -259,8 +260,8 @@ function ChatScanDialog({ kind, chatId, chatName, historyVersion, workflow, onRe
       {canStart ? <>
         <div className="chat-scan-intro"><FileSearch size={30} aria-hidden="true" /><h3>Das Wichtigste aus eurem Gespräch</h3><p>Zusammenfassung, wichtige Informationen, Entscheidungen, Aufgaben und offene Fragen – mit passenden Textstellen zum Nachlesen.</p></div>
         {workflow.status === 'updated' ? <p className="chat-scan-notice">Seit deiner letzten Auswertung wurde der Verlauf ergänzt oder geändert. Für den Zusammenhang wird erneut der gesamte zugängliche Textverlauf berücksichtigt.</p> : null}
-        <div className="chat-scan-disclosure"><p>Mit „Gesamten Chat auswerten“ wird der gesamte für dich zugängliche Textverlauf dieses Chats an <strong>{provider.providerLabel}</strong> zur KI-Auswertung übertragen.</p><p>Datei-, Bild- und Audioinhalte werden nicht ausgewertet. Die KI kann Fehler machen; prüfe wichtige Angaben anhand der Quellen.</p></div>
-        <div className="chat-scan-footer"><button type="button" className="primary" onClick={() => void start()}><Sparkles size={16} aria-hidden="true" />Gesamten Chat auswerten</button></div>
+        <div className="chat-scan-disclosure"><p>Der gesamte für dich zugängliche Textverlauf dieses Chats wird an <strong>{provider.providerLabel}</strong> zur KI-Auswertung übertragen.</p><p>Datei-, Bild- und Audioinhalte werden nicht ausgewertet. Die KI kann Fehler machen; prüfe wichtige Angaben anhand der Quellen.</p><label className="chat-scan-consent"><input type="checkbox" checked={consented} onChange={event => setConsented(event.target.checked)} /><span>Ich bin mit dieser Übertragung für die aktuelle Auswertung einverstanden.</span></label></div>
+        <div className="chat-scan-footer"><button type="button" className="primary" disabled={!consented} onClick={() => void start()}><Sparkles size={16} aria-hidden="true" />Gesamten Chat auswerten</button></div>
       </> : null}
       {state.phase === 'scanning' ? <div className="chat-scan-state" role="status"><LoaderCircle className="chat-scan-spinner" size={30} aria-hidden="true" /><h3>Der gesamte Chat wird ausgewertet…</h3><p>Bei langen Gesprächen kann das einen Moment dauern.</p><button type="button" className="secondary" onClick={() => { privacyPaused.current = true; abort(); setState({ phase: 'paused' }); setNotice('Auswertung abgebrochen.'); void onRefresh(); }}>Abbrechen</button></div> : null}
       {state.phase === 'error' ? <div className="chat-scan-state chat-scan-error" role="alert"><h3>{state.error.code === 'empty_chat' ? 'Noch nichts auszuwerten' : state.error.code === 'no_access' ? 'Chat nicht mehr verfügbar' : 'Auswertung nicht verfügbar'}</h3><p>{state.error.message}</p>{state.error.code !== 'no_access' ? <button type="button" className="secondary" onClick={() => void (state.action === 'scan' && workflow?.canScan ? start() : checkStatus())}>Erneut versuchen</button> : null}</div> : null}

@@ -1,4 +1,5 @@
 import { MobileInstall } from '../components/MobileInstall';
+import '../account-deletion.css';
 import {
   Bell,
   Building2,
@@ -9,6 +10,7 @@ import {
   Plus,
   Settings2,
   ShieldCheck,
+  Trash2,
   UserRound,
   UserPlus,
   Users,
@@ -24,6 +26,7 @@ import { WorkspaceTeamPanel } from '../components/WorkspaceTeamPanel';
 import { NotificationPreferences } from '../components/NotificationPreferences';
 import { PushPreferences } from '../components/PushPreferences';
 import type { NotificationsModel } from '../features/notifications/useNotifications';
+import { ACCOUNT_DELETION_CONFIRMATION } from '../features/auth/accountDeletion';
 import { PASSWORD_MIN_LENGTH, RESET_REQUEST_CONFIRMATION, validateNewPassword } from '../features/auth/passwordPolicy';
 import { startViews, type StartView } from '../features/settings/preferences';
 import type {
@@ -89,6 +92,7 @@ type SettingsPageProps = {
   onUpdatePassword?: (password: string) => Promise<{ error: string | null }>;
   onRequestPasswordReset?: (email: string) => Promise<{ error: string | null }>;
   onSignOut?: () => Promise<{ error: string | null }>;
+  onDeleteAccount?: (confirmation: string) => Promise<{ error: string | null }>;
 };
 
 const categories = [
@@ -146,6 +150,7 @@ export function SettingsPage({
   onUpdatePassword,
   onRequestPasswordReset,
   onSignOut,
+  onDeleteAccount,
 }: SettingsPageProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -176,6 +181,10 @@ export function SettingsPage({
   const [resetRemaining, setResetRemaining] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [deleteExpanded, setDeleteExpanded] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const search = new URLSearchParams(location.search);
   const inviteToken = search.get('invite');
@@ -318,6 +327,22 @@ export function SettingsPage({
     try { const result = await onSignOut(); if (result.error) setSignOutError(result.error); }
     catch { setSignOutError('Die Abmeldung ist gerade nicht möglich. Bitte erneut versuchen.'); }
     finally { securityBusy.current = false; setSigningOut(false); }
+  };
+
+  const deleteAccount = async () => {
+    if (!onDeleteAccount || securityBusy.current || deleteConfirmation !== ACCOUNT_DELETION_CONFIRMATION) return;
+    securityBusy.current = true;
+    setDeletingAccount(true);
+    setDeleteError(null);
+    try {
+      const result = await onDeleteAccount(deleteConfirmation);
+      if (result.error) setDeleteError(result.error);
+    } catch {
+      setDeleteError('Das Konto konnte gerade nicht gelöscht werden. Bitte versuche es erneut.');
+    } finally {
+      securityBusy.current = false;
+      setDeletingAccount(false);
+    }
   };
 
   return (
@@ -475,6 +500,26 @@ export function SettingsPage({
               {onSignOut && <button type="button" className="secondary signout" disabled={signingOut || passwordSaving || resetSending} onClick={() => void signOut()}><LogOut size={15} />{signingOut ? 'Wird abgemeldet…' : 'Abmelden'}</button>}
               {signOutError && <p className="form-feedback error" role="alert">{signOutError}</p>}
             </div>
+            {onDeleteAccount && <div className="panel settings-full-width account-danger-zone">
+              <Trash2 /><h3>Konto dauerhaft löschen</h3>
+              <p>Dein Nexus-Konto und deine persönlichen Daten werden dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.</p>
+              <p>Eigene Workspaces und Gruppen musst du vorher löschen oder die Ownership übertragen. So gehen keine Team-Daten versehentlich verloren.</p>
+              {!deleteExpanded ? (
+                <button type="button" className="secondary danger-action" disabled={passwordSaving || resetSending || signingOut} onClick={() => setDeleteExpanded(true)}><Trash2 size={15} />Konto löschen</button>
+              ) : (
+                <div className="settings-form account-delete-confirmation">
+                  <label>Zur Bestätigung <b>{ACCOUNT_DELETION_CONFIRMATION}</b> eingeben
+                    <input value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value)} autoComplete="off" spellCheck={false} aria-describedby="account-delete-warning" />
+                  </label>
+                  <small id="account-delete-warning" className="settings-hint">Nach dem Löschen wirst du auf allen Geräten abgemeldet.</small>
+                  {deleteError && <small className="form-feedback error" role="alert">{deleteError}</small>}
+                  <div className="account-delete-actions">
+                    <button type="button" className="secondary" disabled={deletingAccount} onClick={() => { setDeleteExpanded(false); setDeleteConfirmation(''); setDeleteError(null); }}>Abbrechen</button>
+                    <button type="button" className="danger-action" disabled={deletingAccount || deleteConfirmation !== ACCOUNT_DELETION_CONFIRMATION} onClick={() => void deleteAccount()}><Trash2 size={15} />{deletingAccount ? 'Wird gelöscht…' : 'Endgültig löschen'}</button>
+                  </div>
+                </div>
+              )}
+            </div>}
           </div>}
         </section>
       </div>

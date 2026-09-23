@@ -28,7 +28,7 @@ test('Whole-chat client rejects incomplete, cross-chat and untrusted responses',
       const result = await api.scanChat(scope, signal);
       assert.equal(result.coverage.messageCount, 251);
       assert.equal(result.sources[0].id, 'old-source');
-      assert.deepEqual(stub.requests[0].body, { action: 'scan', ...scope });
+      assert.deepEqual(stub.requests[0].body, { action: 'scan', ...scope, consentVersion: '2026-09-23' });
       assert.equal(stub.requests[0].signal, signal);
       assert.equal('messages' in stub.requests[0].body, false, 'Client cannot supply a partial or forged conversation');
     });

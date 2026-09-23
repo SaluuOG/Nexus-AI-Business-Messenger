@@ -10,6 +10,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { routes } from '../../app/routes';
 import { backendConfigured } from '../../lib/env';
 import { initialAuthCallback, supabase } from '../../lib/supabase';
+import { deleteCurrentAccount } from './accountDeletion';
 import { syncPushAccount } from '../notifications/push';
 
 type AuthResult = {
@@ -33,6 +34,7 @@ type AuthContextValue = {
   updatePassword: (password: string) => Promise<AuthResult>;
   clearRecoveryMode: () => void;
   signOut: () => Promise<AuthResult>;
+  deleteAccount: (confirmation: string) => Promise<AuthResult>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -276,6 +278,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error } = await supabase.auth.signOut();
         if (error) void syncPushAccount(session?.user.id ?? null);
         return { error: publicAuthError(error?.message, 'Die Abmeldung ist gerade nicht möglich.') };
+      },
+      async deleteAccount(confirmation) {
+        const result = await deleteCurrentAccount(confirmation);
+        if (!result.error) {
+          await syncPushAccount(null);
+          rememberRecoverySession(false);
+        }
+        return result;
       },
     }),
     [loading, recoveryError, recoveryMode, session],

@@ -30,6 +30,7 @@ try {
     const statusFilter = page.getByRole('combobox', { name: 'Chats nach deinem Status filtern', exact: true });
     const dialog = page.getByRole('dialog', { name: 'Chat auswerten', exact: true });
     const start = dialog.getByRole('button', { name: 'Gesamten Chat auswerten', exact: true });
+    const consent = () => dialog.getByRole('checkbox', { name: /Übertragung für die aktuelle Auswertung/ }).check();
     const close = async () => { await dialog.getByRole('button', { name: 'Chat-Auswertung schließen', exact: true }).click(); await dialog.waitFor({ state: 'hidden' }); };
     const scanCount = () => page.evaluate(() => window.nexusTest.chatScanCalls.filter(call => call.body.action === 'scan').length);
     const waitReady = () => start.waitFor();
@@ -80,6 +81,8 @@ try {
       await trigger.click();
       await waitReady();
       await page.evaluate(() => { window.nexusTest.chatScanDeferred = true; });
+      assert.equal(await start.isDisabled(), true, 'AI transfer requires explicit consent');
+      await consent();
       await start.click();
       await page.waitForFunction(() => window.nexusTest.chatScanPending.length === 1);
       assert.equal(await scanCount(), 1);
@@ -169,6 +172,7 @@ try {
       await waitReady();
       assert.equal(await scanCount(), 0);
       await page.evaluate(() => { window.nexusTest.chatScanFailure = 'provider_error'; });
+      await consent();
       await start.click();
       await dialog.getByRole('alert').filter({ hasText: 'Die KI konnte den Chat gerade nicht auswerten. Bitte versuche es erneut.' }).waitFor();
       assert.equal(await dialog.getByRole('heading', { name: 'Zusammenfassung', exact: true }).count(), 0);
@@ -187,6 +191,7 @@ try {
       await trigger.click();
       await waitReady();
       await page.evaluate(() => { window.nexusTest.chatScanDeferred = true; });
+      await consent();
       await start.click();
       await page.waitForFunction(() => window.nexusTest.chatScanPending.length === 1);
       await page.evaluate(() => { window.nexusTest.setChatDone('direct', 'c1', true); window.dispatchEvent(new Event('focus')); });
@@ -203,6 +208,7 @@ try {
       await trigger.click();
       await waitReady();
       await page.evaluate(() => { window.nexusTest.chatScanDeferred = true; });
+      await consent();
       await start.click();
       await page.waitForFunction(() => window.nexusTest.chatScanPending.length === 1);
       await page.evaluate(() => {
@@ -225,6 +231,7 @@ try {
       await trigger.click();
       await waitReady();
       await page.evaluate(() => { window.nexusTest.chatScanDeferred = true; });
+      await consent();
       await start.click();
       await page.waitForFunction(() => window.nexusTest.chatScanPending.length === 1);
       await page.keyboard.press('Escape');
@@ -265,6 +272,7 @@ try {
       await trigger.click();
       await waitReady();
       await page.evaluate(() => { window.nexusTest.chatScanFailure = 'provider_error'; });
+      await consent();
       await start.click();
       await dialog.getByRole('alert').waitFor();
       await waitState('Offen');
@@ -306,6 +314,7 @@ try {
       });
       await trigger.click();
       await waitReady();
+      await consent();
       await start.click();
       await waitResult();
       await dialog.getByText('Quellen anzeigen (1)', { exact: true }).click();

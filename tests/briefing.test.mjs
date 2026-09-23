@@ -64,8 +64,8 @@ test('Summaries leave input data unchanged and update on the next calendar day',
 
 test('Business links preserve workspace and exact record while tabs clear old targets', () => {
   const search = businessSearch('workspace & two', { view: 'tasks', projectId: 'p/1', taskId: 't?1' });
-  assert.deepEqual(readBusinessSearch(search, 'workspace & two'), { view: 'tasks', projectId: 'p/1', taskId: 't?1' });
-  assert.deepEqual(readBusinessSearch(search, 'other'), { view: 'projects', projectId: null, taskId: null });
-  assert.deepEqual(readBusinessSearch(businessSearch('w1', { view: 'projects' }), 'w1'), { view: 'projects', projectId: null, taskId: null });
+  assert.deepEqual(readBusinessSearch(search, 'workspace & two'), { view: 'tasks', projectId: 'p/1', taskId: 't?1', commentId: null });
+  assert.deepEqual(readBusinessSearch(search, 'other'), { view: 'projects', projectId: null, taskId: null, commentId: null });
+  assert.deepEqual(readBusinessSearch(businessSearch('w1', { view: 'projects' }), 'w1'), { view: 'projects', projectId: null, taskId: null, commentId: null });
   assert.equal(readBusinessSearch('view=invalid&task=one', 'w1').view, 'tasks');
 });
