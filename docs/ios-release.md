@@ -16,9 +16,39 @@ npm run open:ios
 in das Xcode-Projekt. Der normale `npm run build` behält dagegen den Pfad für
 GitHub Pages.
 
+## Automatischer nativer Build
+
+Der Workflow **Validate Nexus iOS** kompiliert die Release-Konfiguration auf
+einem Standard-GitHub-Runner mit macOS 26 und Xcode 26 oder neuer. Er wird bei
+relevanten Pull Requests, Änderungen auf `main` oder manuell gestartet.
+Er benötigt ausschließlich die bereits vorhandenen öffentlichen Repository-
+Variablen `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY`.
+
+Die Prüfungen kontrollieren die tatsächlich verpackten relativen Web-Assets,
+die öffentliche Backend-Konfiguration und die SDK-Privacy-Manifeste. Sie
+blockieren Live-Reload-URLs, offene Navigation, aktiviertes WebView-Debugging
+und bekannte private Schlüssel-Formate einschließlich Service-Role-JWTs.
+Der Schlüssel-Scanner ist eine zusätzliche Schutzschicht, keine vollständige
+Sicherheits- oder Datenschutz-Zertifizierung.
+
+Der Xcode-Build bleibt ausdrücklich **unsigniert**. Er erstellt keine auf einem
+iPhone installierbare IPA und lädt nichts zu Apple hoch. Build-Protokoll und
+Xcode-Ergebnis werden sieben Tage als CI-Diagnose aufbewahrt. Ein erfolgreicher
+Build ersetzt weder den Test auf einem echten iPhone noch Apples App Review.
+
+Gezielte lokale Prüfung nach einem nativen Build:
+
+```bash
+node --test tests/ios-package.test.mjs
+node .github/scripts/verify-ios-package.mjs ios/App/App
+```
+
+Dafür müssen die beiden oben genannten öffentlichen Build-Variablen im
+Terminal gesetzt sein; niemals private AI- oder Service-Role-Schlüssel verwenden.
+
 ## Vor dem App-Store-Upload
 
-- Xcode auf einem Mac verwenden und das Projekt `ios/App/App.xcodeproj` öffnen.
+- Xcode 26 oder neuer auf einem Mac verwenden und `ios/App/App.xcodeproj` öffnen.
 - Im Target `App` das eigene Apple-Developer-Team auswählen.
 - Die Bundle-ID `com.saluuog.nexus` im Apple Developer Portal registrieren oder
   in `capacitor.config.ts` und Xcode gemeinsam auf eine eigene eindeutige ID ändern.
@@ -28,6 +58,17 @@ GitHub Pages.
 - App-Datenschutzangaben und eine öffentliche Datenschutz-URL in App Store
   Connect hinterlegen. Der rechtliche Text benötigt die vollständigen Angaben
   des verantwortlichen Unternehmens bzw. Betreibers.
+
+Noch nicht enthalten: native APNs-Push-Benachrichtigungen und eine native
+Rückkehr aus E-Mail-Anmelde-/Passwortlinks. Die aktuelle E-Mail-Wiederherstellung
+verwendet den Web-Redirect; dieser Ablauf muss auf dem Test-iPhone überprüft
+werden. Die SDK-Manifeste ersetzen nicht die app-eigenen Datenschutzangaben
+in App Store Connect oder eine öffentliche Datenschutzerklärung.
+
+Technische Referenzen:
+- [Capacitor: iOS und Xcode-Voraussetzungen](https://capacitorjs.com/docs/ios)
+- [Capacitor: Privacy-Manifeste](https://capacitorjs.com/docs/ios/privacy-manifest)
+- [GitHub: macOS-26-Runner](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md)
 
 Die iOS-Hülle verwendet `capacitor://localhost`. Die Kontolöschungsfunktion und
 KI-Funktion akzeptieren diese Origin ausdrücklich; das ist keine Freigabe für
