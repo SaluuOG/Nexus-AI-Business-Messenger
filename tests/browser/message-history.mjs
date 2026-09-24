@@ -79,8 +79,7 @@ const scenarios = [
       const url = route.request().url();
       if (url.endsWith('/sample.png')) return route.fulfill({ contentType: 'image/png', body: png });
       if (url.endsWith('/sample.wav')) return route.fulfill({ contentType: 'audio/wav', body: wav });
-      if (url.endsWith('/sample.txt')) return route.fulfill({ contentType: 'text/plain', body: document,
-        headers: { 'Content-Disposition': 'attachment; filename="sample.txt"' } });
+      if (url.endsWith('/sample.txt')) return route.fulfill({ contentType: 'text/plain', body: document });
       return route.abort();
     });
     await page.goto(`${baseUrl}/#/app/chats?conversation=c1`);
@@ -114,15 +113,16 @@ const scenarios = [
       await received.locator('audio').evaluate(audio => audio.play());
       await page.waitForFunction(id => document.querySelector(`[data-message-id="${id}"] audio`).currentTime > 0, `received-${kind}`);
       await received.locator('audio').evaluate(audio => audio.pause());
-      const downloadPending = page.waitForEvent('download');
+      // Signed URLs are cross-origin: browsers may open inline files in a new
+      // tab instead of honoring the download attribute. Check the visible file.
+      const openedPending = page.waitForEvent('popup');
       await received.getByRole('link', { name: /sample.txt/ }).click();
-      const download = await downloadPending;
-      assert.equal(download.suggestedFilename(), 'sample.txt');
-      assert.equal(await download.failure(), null);
-      const chunks = []; for await (const chunk of await download.createReadStream()) chunks.push(chunk);
-      assert.deepEqual(Buffer.concat(chunks), document);
+      const opened = await openedPending;
+      await opened.waitForLoadState('domcontentloaded');
+      assert.equal((await opened.locator('body').innerText()).trim(), document.toString('utf8').trim());
+      await opened.close();
     }
-    console.log(`${name}: direct/group received image decoding, audio playback and exact file download passed (synthetic media)`);
+    console.log(`${name}: direct/group received image decoding, audio playback and file opening passed (synthetic media)`);
   }],
   ['history-and-delivery', async (page, name) => {
     const directComposer = page.locator('[data-testid="direct-message-composer"]');

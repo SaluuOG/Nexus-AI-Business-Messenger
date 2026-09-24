@@ -15,8 +15,8 @@ Durchlauf mit zwei echten angemeldeten Konten und einem physischen iPhone.
 - `tests/browser/message-history.mjs`: Browserabläufe mit einem simulierten
   Backend; Verlauf, Suchtreffer, Änderungen/Löschungen, manuelle Sendewiederholung
   und fehlgeschlagene Uploads. Empfangene Testbilder werden tatsächlich im
-  Browser dekodiert, eine synthetische WAV-Datei abgespielt und heruntergeladene
-  Testdateien bytegenau verglichen. Das prüft keine echte Storage-Übertragung.
+  Browser dekodiert, eine synthetische WAV-Datei abgespielt und geöffnete
+  Testdateien auf ihren Inhalt geprüft. Das prüft keine echte Storage-Übertragung.
 - `tests/browser/mobile-workflows.mjs`: Direkt- und Gruppenansichten bei
   320/390 Pixeln, Nachrichtenentwürfe, Senden und Aufräumen einer simulierten
   Mikrofonaufnahme beim Verlassen eines Chats. Keine echte Mikrofonaufnahme.
@@ -35,6 +35,10 @@ Ein Direktchat-Suchtreffer konnte vor der Chatliste eintreffen. Dann war die
 Gesprächsansicht beim ersten Scrollversuch noch nicht vorhanden und die
 Markierung fehlte. Die Positionierung wird jetzt beim Eintreffen der Liste
 erneut ausgewertet; der Test verzögert diese Liste gezielt.
+
+Beim schnellen Chatwechsel folgt die Gesprächsauswahl außerdem erst der
+bestätigten Navigation. Dadurch zeigt der Kopfbereich nicht vorzeitig ein
+anderes Gespräch, während noch die vorherige Route aktiv ist.
 
 Der Briefingtest erwartete außerdem zwei alte Fehlermeldungen. Er prüft nun
 die verständliche Sammelmeldung und weiterhin, dass nach Ladefehlern oder
