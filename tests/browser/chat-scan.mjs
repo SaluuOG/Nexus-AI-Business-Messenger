@@ -292,6 +292,9 @@ try {
 
       // State transport failure disables actions rather than assuming open.
       await page.evaluate(() => { window.nexusTest.failure = 'get_my_chat_scan_state'; window.dispatchEvent(new Event('offline')); window.dispatchEvent(new Event('focus')); });
+      await toolbar.waitFor({ state: 'hidden' });
+      assert.equal(await trigger.count(), 0, 'Offline saved chats must expose no scan actions');
+      await page.evaluate(() => { window.dispatchEvent(new Event('online')); window.dispatchEvent(new Event('focus')); });
       await toolbar.getByRole('button', { name: 'Chatstatus erneut laden', exact: true }).waitFor();
       assert.equal(await trigger.isEnabled(), false);
       await page.evaluate(() => { window.nexusTest.failure = null; });
