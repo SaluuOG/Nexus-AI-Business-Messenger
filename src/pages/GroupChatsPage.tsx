@@ -1,3 +1,4 @@
+import { useChatConnection } from '../features/connection/useChatConnection';
 import { Camera, CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -244,6 +245,8 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     () => pendingFile && pendingIsAudio ? URL.createObjectURL(pendingFile) : null,
     [pendingFile, pendingIsAudio],
   );
+
+  const connection = useChatConnection(selectedId);
 
   useEffect(() => () => {
     if (pendingAudioUrl) URL.revokeObjectURL(pendingAudioUrl);
@@ -657,6 +660,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       && realtimeGenerationRef.current === realtimeGeneration
     );
     const channel = subscribeToGroupRealtime(selectedId, {
+      onStatus: status => { if (isCurrentRealtime()) connection.onStatus(status); },
       onMessagesChanged: (change) => {
         if (!isCurrentRealtime()) return;
         const loadedMessage = Boolean(change.messageId
@@ -1359,6 +1363,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
         )}
 
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Gruppen durchsuchen" /></div>
+        {mobileListOnly && connection.message && <div className="chat-error" role="status">{connection.message}</div>}
         <ChatStatusFilter value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
         {mobileListOnly && error && <div className="chat-error" role="alert">{error}</div>}
         {!loading && groups.length > 0 && filteredGroups.length === 0 && <div className="chat-list-empty">Keine Gruppen für diese Auswahl.</div>}
@@ -1374,6 +1379,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       </section>
 
       <section className="conversation">
+        {connection.message && <div className="chat-error" role="status" aria-live="polite">{connection.message}</div>}
         <div className="mobile-chat-backbar"><button type="button" onClick={() => { setSelectedId(null); setError(null); setContextWarning(null); setChatSearch({}); }}><ArrowLeft size={20} /> Alle Gruppen</button></div>
         <TaskMessageContext kind="group" onChatResolved={id => { setSelectedId(id); void refreshGroups(id); }} />
         {(error || contextWarning) && <div className="chat-error">{error || contextWarning}</div>}
@@ -1630,7 +1636,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
               <button className="attach-button" onClick={() => fileRef.current?.click()} disabled={saving || recording || Boolean(editing) || awaitingManualRetry} title="Datei oder Bild anhängen"><Paperclip size={18} /></button>
               <button className={`attach-button mic-button${recording ? ' recording' : ''}`} onClick={() => void startRecording()} disabled={saving || recording || Boolean(editing) || awaitingManualRetry} title="Sprachnachricht aufnehmen"><Mic size={18} /></button>
               <input aria-label="Gruppennachricht" value={draft} disabled={saving || recording || awaitingManualRetry} onChange={(event) => draftChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder={editing ? 'Bearbeitete Nachricht…' : pendingIsAudio ? 'Text zur Sprachnachricht (optional)…' : pendingFile ? 'Nachricht zum Anhang (optional)…' : 'Nachricht an die Gruppe…'} maxLength={5000} />
-              <button onClick={() => void submit()} disabled={!canSend}><Send size={18} /></button>
+              <button aria-label="Nachricht senden" onClick={() => void submit()} disabled={!canSend}><Send size={18} /></button>
             </div>
           </>
         )}

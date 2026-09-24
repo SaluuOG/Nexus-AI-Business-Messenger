@@ -1,3 +1,4 @@
+import { useChatConnection } from '../features/connection/useChatConnection';
 import {
   ArrowLeft,
   CheckCheck,
@@ -602,6 +603,8 @@ export function ChatsPage({
     setOldestCursor(result.data.next_cursor);
   };
 
+  const connection = useChatConnection(selectedId);
+
   useEffect(() => {
     if (previousUserRef.current && previousUserRef.current !== currentUserId) {
       retryStoreRef.current.clearUser(previousUserRef.current);
@@ -722,6 +725,7 @@ export function ChatsPage({
     });
 
     const channel = subscribeToConversationRealtime(selectedId, {
+      onStatus: status => { if (isCurrentRealtime()) connection.onStatus(status); },
       onMessagesChanged: (change) => {
         if (!isCurrentRealtime()) return;
         const loadedMessage = Boolean(change.messageId
@@ -1100,6 +1104,7 @@ export function ChatsPage({
           <button className="chat-refresh" onClick={() => void refreshConversations(selectedId)} title="Chats aktualisieren"><RefreshCw size={15} /></button>
         </div>
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Chats durchsuchen" /></div>
+        {mobileListOnly && connection.message && <div className="chat-error" role="status">{connection.message}</div>}
         <ChatStatusFilter value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
         {mobileListOnly && error && <div className="chat-error" role="alert">{error}</div>}
         {!loading && conversations.length > 0 && filtered.length === 0 && <div className="chat-list-empty">Keine Chats für diese Auswahl.</div>}
@@ -1120,6 +1125,7 @@ export function ChatsPage({
       </section>
 
       <section className="conversation">
+        {connection.message && <div className="chat-error" role="status" aria-live="polite">{connection.message}</div>}
         <div className="mobile-chat-backbar"><button type="button" onClick={() => { setSelectedId(null); setError(null); setContextWarning(null); setContextRetryMessageId(null); setChatSearch({}); }}><ArrowLeft size={20} /> Alle Chats</button></div>
         <TaskMessageContext kind="direct" onChatResolved={(id) => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setSelectedId(id); void refreshConversations(id); }} />
         {contextWarning && <div className="chat-error chat-context-warning" role="status">{contextWarning}</div>}
