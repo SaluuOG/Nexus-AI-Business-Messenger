@@ -35,7 +35,7 @@ for(const file of changed) {
     add(['tests/mobile-push.test.mjs','tests/notifications.test.mjs'],['tests/browser/mobile-push.mjs','tests/browser/notifications.mjs']);continue;
   }
   if (/^(src\/features\/auth\/AuthProvider\.tsx|src\/pages\/SettingsPage\.tsx)$/.test(file)) {
-    add(['tests/auth-recovery.test.mjs','tests/settings-preferences.test.mjs','tests/mobile-push.test.mjs'],['tests/browser/mobile-push.mjs','tests/browser/settings.mjs']);continue;
+    add(['tests/auth-recovery.test.mjs','tests/settings-preferences.test.mjs','tests/mobile-push.test.mjs'],['tests/browser/auth-recovery.mjs','tests/browser/mobile-push.mjs','tests/browser/settings.mjs']);continue;
   }
   if(file==='public/sw.js') {add(['tests/mobile-push.test.mjs'],['tests/browser/mobile-push.mjs','tests/browser/mobile-install.mjs']);continue;}
   // Shared service is used by all feature tests: changes retain their coverage.
@@ -44,7 +44,7 @@ for(const file of changed) {
 }
 if(full) {
   for(const name of readdirSync('tests').filter(name=>name.endsWith('.test.mjs')))unit.add('tests/'+name);
-  for(const name of ['project-templates','mobile-push','task-attachments','task-collaboration','task-mentions','mobile-workflows','chat-scan','briefing','mobile-install','workspace-lifecycle','message-history','message-tasks','settings','notifications'])browser.add(`tests/browser/${name}.mjs`);
+  for(const name of ['auth-recovery','project-templates','mobile-push','task-attachments','task-collaboration','task-mentions','mobile-workflows','chat-scan','briefing','mobile-install','workspace-lifecycle','message-history','message-tasks','settings','notifications'])browser.add(`tests/browser/${name}.mjs`);
 }
 const selection={unit:[...unit].sort(),browser:[...browser].sort()};
 console.log(JSON.stringify({scope:full?'full':'changed',...selection}));

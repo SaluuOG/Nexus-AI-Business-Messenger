@@ -65,15 +65,16 @@ export function App() {
   if (auth.configured && auth.loading) return <AppLoading />;
   return (
     <Suspense fallback={<AppLoading />}>
-      {auth.recoveryMode ? (
-        <ResetPasswordPage />
-      ) : (
-        <Routes>
-          <Route path={routes.auth} element={<AuthPage />} />
-          <Route path={routes.resetPassword} element={<ResetPasswordPage />} />
-          <Route path="*" element={<AppShell key={auth.user?.id ?? 'anonymous'} />} />
-        </Routes>
-      )}
+      <Routes>
+        {/* Keep the recovery page mounted when success clears recoveryMode. */}
+        <Route path={routes.resetPassword} element={<ResetPasswordPage />} />
+        <Route path={routes.auth} element={auth.recoveryMode ? (
+          <Navigate to={routes.resetPassword} replace />
+        ) : <AuthPage />} />
+        <Route path="*" element={auth.recoveryMode ? (
+          <Navigate to={routes.resetPassword} replace />
+        ) : <AppShell key={auth.user?.id ?? 'anonymous'} />} />
+      </Routes>
     </Suspense>
   );
 }
