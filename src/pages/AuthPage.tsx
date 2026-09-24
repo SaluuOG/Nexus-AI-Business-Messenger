@@ -245,7 +245,7 @@ export function AuthPage() {
             </button>
           )}
 
-          {error && <div className="auth-alert error" role="alert">{error}</div>}
+          {(error || auth.authLinkError) && <div className="auth-alert error" role="alert">{error || auth.authLinkError}</div>}
           {message && <div className="auth-alert success" role="status">{message}</div>}
 
           <button className="auth-primary" disabled={busy} type="submit">

@@ -60,7 +60,8 @@ export function PushPreferences({ userId }: { userId: string }) {
   return <section className="panel push-preferences" aria-labelledby="push-title">
     <h3 id="push-title"><Smartphone size={20} aria-hidden="true" /> Auf diesem Gerät</h3>
     <p>Erhalte Hinweise auch dann, wenn Nexus geschlossen ist. Push wird für jedes Gerät einzeln aktiviert.</p>
-    {support === 'install' ? <p>Öffne Nexus in Safari → Teilen → Zum Home-Bildschirm. Starte Nexus anschließend über das App-Symbol und aktiviere hier die Benachrichtigungen. Dafür brauchst du mindestens iOS / iPadOS 16.4.</p>
+    {support === 'native-pending' ? <p>Push für die native iPhone-App wird eingerichtet. Deine Hinweise innerhalb von Nexus bleiben verfügbar.</p>
+      : support === 'install' ? <p>Öffne Nexus in Safari → Teilen → Zum Home-Bildschirm. Starte Nexus anschließend über das App-Symbol und aktiviere hier die Benachrichtigungen. Dafür brauchst du mindestens iOS / iPadOS 16.4.</p>
       : support === 'unavailable' ? <p>Dieser Browser unterstützt Push hier nicht. Öffne Nexus in einem aktuellen Browser. Deine Hinweise innerhalb von Nexus bleiben verfügbar.</p>
       : <>
         <p className="push-state"><BellRing size={17} aria-hidden="true" />{busy ? 'Wird geprüft …' : status.enabled ? 'Push ist auf diesem Gerät aktiv.' : 'Push ist auf diesem Gerät ausgeschaltet.'}</p>

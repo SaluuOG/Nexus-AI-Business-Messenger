@@ -59,10 +59,20 @@ Terminal gesetzt sein; niemals private AI- oder Service-Role-Schlüssel verwende
   Connect hinterlegen. Der rechtliche Text benötigt die vollständigen Angaben
   des verantwortlichen Unternehmens bzw. Betreibers.
 
-Noch nicht enthalten: native APNs-Push-Benachrichtigungen und eine native
-Rückkehr aus E-Mail-Anmelde-/Passwortlinks. Die aktuelle E-Mail-Wiederherstellung
-verwendet den Web-Redirect; dieser Ablauf muss auf dem Test-iPhone überprüft
-werden. Die SDK-Manifeste ersetzen nicht die app-eigenen Datenschutzangaben
+Native E-Mail-Bestätigungs- und Passwortlinks verwenden
+`com.saluuog.nexus://auth/callback?auth=callback` bzw. `auth=recovery`. Vor
+einem Test muss in Supabase Auth → URL Configuration die Redirect-URL
+`com.saluuog.nexus://auth/callback?auth=callback` und
+`com.saluuog.nexus://auth/callback?auth=recovery` freigegeben werden; die öffentliche Site URL
+bleibt auf der Web-App. Bestehende, zuvor verschickte Links bleiben Web-Links.
+Im nativen Build verarbeitet `@capacitor/app` den Link auch beim Kaltstart und
+übernimmt die Supabase-Sitzung ohne Token in Web-History oder Logs. Erfolg,
+abgelaufene Links und einen Kontowechsel auf dem Test-iPhone prüfen. Die
+Web-/PWA-Version behält ihren bisherigen Redirect.
+
+Noch nicht enthalten: native APNs-Push-Benachrichtigungen. Im nativen Build
+zeigt die Push-Einstellung deshalb keinen irreführenden PWA-Installationsweg
+mehr an. Die SDK-Manifeste ersetzen nicht die app-eigenen Datenschutzangaben
 in App Store Connect oder eine öffentliche Datenschutzerklärung.
 
 Technische Referenzen:

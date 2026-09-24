@@ -7,11 +7,14 @@ import {
   useState,
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { routes } from '../../app/routes';
 import { backendConfigured } from '../../lib/env';
 import { initialAuthCallback, supabase } from '../../lib/supabase';
 import { deleteCurrentAccount } from './accountDeletion';
 import { syncPushAccount } from '../notifications/push';
+import { NATIVE_AUTH_REDIRECT, parseNativeAuthLink } from './nativeAuthLink';
 
 type AuthResult = {
   error: string | null;
@@ -28,6 +31,7 @@ type AuthContextValue = {
   user: User | null;
   recoveryMode: boolean;
   recoveryError: string | null;
+  authLinkError: string | null;
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signUp: (email: string, password: string, fullName: string) => Promise<SignUpResult>;
   requestPasswordReset: (email: string) => Promise<AuthResult>;
@@ -117,6 +121,7 @@ function clearAuthCallbackUrl(recoveryRequested: boolean) {
 }
 
 function buildAuthRedirect(marker: 'callback' | 'recovery') {
+  if (Capacitor.isNativePlatform()) return `${NATIVE_AUTH_REDIRECT}?auth=${marker}`;
   const url = new URL(window.location.pathname, window.location.origin);
   url.searchParams.set('auth', marker);
   return url.toString();
@@ -156,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => hasRecoveryMarker() || hasRememberedRecoverySession(),
   );
   const [recoveryError, setRecoveryError] = useState<string | null>(readRecoveryError);
+  const [authLinkError, setAuthLinkError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supabase) {
@@ -210,6 +216,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    const client = supabase;
+    if (!client || !Capacitor.isNativePlatform()) return;
+    let active = true;
+    let lastUrl: string | null = null;
+    const handle = async (value: string) => {
+      const link = parseNativeAuthLink(value);
+      if (!active || !link || value === lastUrl) return;
+      lastUrl = value;
+      if (link.failed || !link.accessToken || !link.refreshToken) {
+        if (link.recovery) {
+          rememberRecoverySession(false);
+          setRecoveryMode(false);
+          setRecoveryError('Der Wiederherstellungslink ist ungültig oder abgelaufen.');
+          window.location.hash = routes.resetPassword;
+        } else setAuthLinkError('Der Bestätigungslink ist ungültig oder abgelaufen. Bitte fordere einen neuen Link an.');
+        return;
+      }
+      let error: Error | null = null;
+      try {
+        ({ error } = await client.auth.setSession({ access_token: link.accessToken, refresh_token: link.refreshToken }));
+      } catch {
+        error = new Error('Native auth callback failed');
+      }
+      if (!active) return;
+      if (error) {
+        if (link.recovery) {
+          rememberRecoverySession(false);
+          setRecoveryMode(false);
+          setRecoveryError('Der Wiederherstellungslink ist ungültig oder abgelaufen.');
+          window.location.hash = routes.resetPassword;
+        } else setAuthLinkError('Der Bestätigungslink konnte nicht eingelöst werden. Bitte versuche es erneut.');
+        return;
+      }
+      setAuthLinkError(null);
+      if (link.recovery) {
+        rememberRecoverySession(true);
+        setRecoveryMode(true);
+        setRecoveryError(null);
+        window.location.hash = routes.resetPassword;
+      }
+    };
+    let listener: Awaited<ReturnType<typeof CapacitorApp.addListener>> | undefined;
+    void (async () => {
+      listener = await CapacitorApp.addListener('appUrlOpen', event => { void handle(event.url); });
+      if (!active) { await listener.remove(); return; }
+      const launch = await CapacitorApp.getLaunchUrl();
+      if (launch?.url) await handle(launch.url);
+    })().catch(() => { /* The regular email/password login still works if native URL handling is unavailable. */ });
+    return () => { active = false; void listener?.remove(); };
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       configured: backendConfigured,
@@ -218,8 +276,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       recoveryMode,
       recoveryError,
+      authLinkError,
       async signIn(email, password) {
         if (!supabase) return { error: 'Supabase ist noch nicht konfiguriert.' };
+        setAuthLinkError(null);
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         return {
           error: publicAuthError(error?.message, 'Die Anmeldung ist gerade nicht möglich.'),
@@ -288,7 +348,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return result;
       },
     }),
-    [loading, recoveryError, recoveryMode, session],
+    [authLinkError, loading, recoveryError, recoveryMode, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
