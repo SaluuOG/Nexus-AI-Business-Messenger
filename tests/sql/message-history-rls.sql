@@ -2,6 +2,8 @@
 -- cross-chat search and idempotent text retries. All identities/messages are
 -- synthetic and every change is rolled back.
 BEGIN;
+SET LOCAL statement_timeout = '30s';
+SET LOCAL lock_timeout = '3s';
 
 SELECT set_config('nexus.history.owner', gen_random_uuid()::text, true);
 SELECT set_config('nexus.history.member', gen_random_uuid()::text, true);
@@ -757,6 +759,105 @@ BEGIN
 END;
 $test$;
 
+-- Two synthetic participants exercise the actual RPCs under authenticated RLS.
+-- This checks database behavior, not two signed-in devices or Storage delivery.
+DO $test$
+DECLARE message_id uuid; kind text;
+BEGIN
+  FOREACH kind IN ARRAY ARRAY['direct', 'group'] LOOP
+    EXECUTE format('SELECT id FROM public.%I WHERE sender_id = auth.uid() AND client_request_id = $1', kind || '_messages')
+      INTO STRICT message_id USING current_setting('nexus.history.' || kind || '_request')::uuid;
+    PERFORM set_config('nexus.history.' || kind || '_sent', message_id::text, true);
+    EXECUTE format('SELECT public.%I($1, $2)', 'edit_' || kind || '_message')
+      USING message_id, 'Edited by the sender';
+  END LOOP;
+END;
+$test$;
+
+RESET ROLE;
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'sub', current_setting('nexus.history.owner'), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+
+DO $test$
+DECLARE kind text; message_id uuid; chat_id uuid; result jsonb; reply_id uuid;
+BEGIN
+  FOREACH kind IN ARRAY ARRAY['direct', 'group'] LOOP
+    message_id := current_setting('nexus.history.' || kind || '_sent')::uuid;
+    chat_id := current_setting('nexus.history.' || kind)::uuid;
+    EXECUTE format('SELECT public.%I($1, $2, 1)', 'get_' || kind || '_message_context')
+      INTO result USING chat_id, message_id;
+    IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(result->'messages') item
+      WHERE item->>'message_id' = message_id::text AND item->>'body' = 'Edited by the sender'
+        AND item->>'edited_at' IS NOT NULL) THEN
+      RAISE EXCEPTION '% recipient did not receive the edit', kind;
+    END IF;
+    BEGIN
+      EXECUTE format('SELECT public.%I($1, $2)', 'edit_' || kind || '_message')
+        USING message_id, 'Recipient must not overwrite the sender';
+      RAISE EXCEPTION 'Recipient edited another sender message';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM NOT IN ('Nachricht nicht gefunden oder kann nicht bearbeitet werden.',
+        'Nachricht nicht gefunden, kein Gruppenzugriff oder kann nicht bearbeitet werden.') THEN RAISE; END IF;
+    END;
+    BEGIN
+      EXECUTE format('SELECT public.%I($1)', 'delete_' || kind || '_message') USING message_id;
+      RAISE EXCEPTION 'Recipient deleted another sender message';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM NOT IN ('Nachricht nicht gefunden oder kann nicht gelöscht werden.',
+        'Nachricht nicht gefunden, kein Gruppenzugriff oder kann nicht gelöscht werden.') THEN RAISE; END IF;
+    END;
+    IF kind = 'direct' THEN
+      PERFORM public.mark_direct_conversation_read(chat_id);
+      IF NOT EXISTS (SELECT 1 FROM public.direct_conversation_reads
+        WHERE conversation_id = chat_id AND user_id = auth.uid() AND last_read_at IS NOT NULL) THEN
+        RAISE EXCEPTION 'Recipient direct read receipt missing';
+      END IF;
+      reply_id := public.send_direct_message_v3(chat_id, 'Recipient reply', gen_random_uuid(), message_id);
+      IF NOT EXISTS (SELECT 1 FROM public.direct_messages WHERE id = reply_id
+        AND sender_id = auth.uid() AND reply_to_message_id = message_id) THEN
+        RAISE EXCEPTION 'Recipient direct reply missing';
+      END IF;
+    ELSE
+      PERFORM public.mark_group_read(chat_id);
+      IF NOT EXISTS (SELECT 1 FROM public.group_reads
+        WHERE group_id = chat_id AND user_id = auth.uid() AND last_read_at IS NOT NULL) THEN
+        RAISE EXCEPTION 'Recipient group read receipt missing';
+      END IF;
+      reply_id := public.send_group_message_v2(chat_id, 'Recipient reply', gen_random_uuid(), message_id);
+      IF NOT EXISTS (SELECT 1 FROM public.group_messages WHERE id = reply_id
+        AND sender_id = auth.uid() AND reply_to_message_id = message_id) THEN
+        RAISE EXCEPTION 'Recipient group reply missing';
+      END IF;
+    END IF;
+  END LOOP;
+END;
+$test$;
+
+RESET ROLE;
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'sub', current_setting('nexus.history.member'), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+DO $test$
+DECLARE kind text; message_id uuid; result jsonb;
+BEGIN
+  FOREACH kind IN ARRAY ARRAY['direct', 'group'] LOOP
+    message_id := current_setting('nexus.history.' || kind || '_sent')::uuid;
+    EXECUTE format('SELECT public.%I($1)', 'delete_' || kind || '_message') USING message_id;
+    EXECUTE format('SELECT public.%I($1, $2, 1)', 'get_' || kind || '_message_context')
+      INTO result USING current_setting('nexus.history.' || kind)::uuid, message_id;
+    IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(result->'messages') item
+      WHERE item->>'message_id' = message_id::text AND item->>'body' = ''
+        AND item->>'deleted_at' IS NOT NULL) THEN
+      RAISE EXCEPTION '% sender deletion failed', kind;
+    END IF;
+    IF result::text LIKE '%Edited by the sender%' THEN
+      RAISE EXCEPTION '% deleted text leaked through a reply preview', kind;
+    END IF;
+  END LOOP;
+END;
+$test$;
+
 -- Outsider can see only their own alternate/private scopes, never the member's
 -- main conversation/group. The same request UUID is valid for another sender.
 RESET ROLE;
@@ -869,5 +970,5 @@ END;
 $test$;
 
 RESET ROLE;
-SELECT 'Phase 3.7 history, context, search isolation, filters, cursors, grants and idempotent retries passed' AS result;
+SELECT 'History, search isolation, idempotent retries, two-participant replies, edits, deletion and read receipts passed' AS result;
 ROLLBACK;

@@ -313,6 +313,8 @@ export function ChatsPage({
     scrollTimersRef.current = [80, 240, 700].map((delay) => setTimeout(restoreScrollLock, delay));
   };
 
+  // The chat list can arrive after a deep-linked message context, especially
+  // while its offline snapshot is being saved. Retry once the pane mounts.
   useLayoutEffect(() => {
     const instruction = pendingScrollRef.current;
     const container = messagesElementRef.current;
@@ -348,7 +350,7 @@ export function ChatsPage({
     };
     restoreScrollLock();
     scheduleScrollLockChecks();
-  }, [messages]);
+  }, [messages, conversations]);
 
   const markReadIfAllowed = async (conversationId: string, forceForLatestOpen = false) => {
     if (navigator.onLine === false || cachedViewRef.current || document.visibilityState !== 'visible') return;

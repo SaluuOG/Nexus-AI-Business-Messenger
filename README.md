@@ -277,7 +277,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 
 Browserprüfungen laufen in GitHub Actions mit Playwright 1.55.1 in einem separaten Laufzeitverzeichnis. Lokal: Playwright installieren, Chromium/WebKit mit `playwright install --with-deps chromium webkit` bereitstellen und `NEXUS_PLAYWRIGHT_MODULE` auf den absoluten Pfad zu `playwright/index.mjs` setzen. Danach die Skripte in `tests/browser/` ausführen; Phase 3.7 wird mit `node tests/browser/message-history.mjs` geprüft. Screenshots landen unter `browser-results/`. `node tests/browser/preview.mjs` startet eine separate Vorschau mit synthetischen Testdaten; diese werden nicht mit der App veröffentlicht.
 
-Offene Nutzerabnahme: abschließender manueller Durchlauf mit zwei echten Konten. Browserprüfungen mit Testdaten ersetzen diese Abnahme nicht.
+Offene Nutzerabnahme: abschließender manueller Durchlauf mit zwei echten Konten. Browserprüfungen mit Testdaten ersetzen diese Abnahme nicht. [Aktuelle technische Nachweise und verbleibende Geräteprüfung](docs/two-account-check.md).
 
 ## Routen
 - `#/auth`

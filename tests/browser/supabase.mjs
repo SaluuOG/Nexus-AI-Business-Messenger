@@ -111,7 +111,7 @@ const state = {
   groupChats: messageHistoryFixture ? historyGroupChats : [{ group_id: 'g1', name: 'Projektgruppe', role: 'member', member_count: 2, unread_count: 0, last_message: 'Startseite vorbereiten' }],
   groupMessages: messageHistoryFixture ? historyGroupMessages : [{ message_id: 'gm1', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', body: 'Startseite für den Kunden vorbereiten!', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
   searchCalls: [], textSendCalls: [], textSendWrites: 0, loseTextSendResponse: false,
-  groupChatListLoads: 0, groupChatListDelay: 0,
+  groupChatListLoads: 0, groupChatListDelay: 0, directChatListDelay: 0,
   uploadCalls: [], failAttachmentUpload: false,
   lifecycleCalls: [], lifecycleDelay: 0,
 };
@@ -564,7 +564,10 @@ export const supabase = {
       state.persistNotifications(); state.emit('notification_preferences');
       return { data: null, error: null };
     }
-    if (name === 'get_direct_conversations') return { data: structuredClone(state.conversations), error: null };
+    if (name === 'get_direct_conversations') {
+      if (state.directChatListDelay) await new Promise(resolve => setTimeout(resolve, state.directChatListDelay));
+      return { data: structuredClone(state.conversations), error: null };
+    }
     if (name === 'get_direct_messages') return { data: state.hideRecentSource ? [] : structuredClone(state.directMessages.filter(message => directChatId(message) === args.p_conversation_id).map(normalizedDirectMessage)), error: null };
     if (name === 'get_direct_message_page') {
       if (state.directMessageDelay) await new Promise(r => setTimeout(r, state.directMessageDelay));
