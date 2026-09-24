@@ -1,3 +1,4 @@
+import { briefingLoadError } from '../features/data/readRetry';
 import { ArrowRight, CalendarClock, CheckCircle2, CircleAlert, FolderKanban, RefreshCw, Sparkles, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Header } from '../components/Header';
@@ -10,6 +11,7 @@ import { taskPriorityLabels, taskStatusLabels } from '../features/data/projectTa
 type Props = {
   openBusiness: (target?: BusinessTarget) => void;
   displayName?: string; workspaceId: string | null; workspaceName?: string;
+  onRetryWorkspace?: () => void;
   currentUserId?: string; workspaceLoading?: boolean; workspaceError?: string | null;
 };
 
@@ -23,7 +25,7 @@ function More({ count, limit, onMore }: { count: number; limit: number; onMore: 
   return count > limit ? <button className="briefing-link briefing-more" onClick={onMore}>Weitere anzeigen ({count - limit}) <ArrowRight size={14} /></button> : null;
 }
 
-export function BriefingPage({ openBusiness, displayName, workspaceId, workspaceName, currentUserId, workspaceLoading, workspaceError }: Props) {
+export function BriefingPage({ openBusiness, displayName, workspaceId, workspaceName, currentUserId, workspaceLoading, workspaceError, onRetryWorkspace }: Props) {
   const [now, setNow] = useState(() => new Date());
   const [taskLimit, setTaskLimit] = useState(5);
   const [attentionLimit, setAttentionLimit] = useState(5);
@@ -73,11 +75,11 @@ export function BriefingPage({ openBusiness, displayName, workspaceId, workspace
     <div className="title-row briefing-title-row">
       <Header kicker={greeting + ', ' + firstName} title="Dein Tagesbriefing"
         sub={workspaceName ? 'Deine Prioritäten im Workspace ' + workspaceName + '.' : 'Aufgaben, Deadlines und Handlungsbedarf auf einen Blick.'} />
-      {workspaceId && <button className="secondary briefing-refresh" onClick={() => void data.refresh()} disabled={loading}><RefreshCw size={15} />{loading ? 'Lädt…' : 'Aktualisieren'}</button>}
+      {(workspaceId || workspaceError) && <button className="secondary briefing-refresh" onClick={() => workspaceError && onRetryWorkspace ? onRetryWorkspace() : void data.refresh()} disabled={loading}><RefreshCw size={15} />{loading ? 'Lädt…' : error ? 'Erneut laden' : 'Aktualisieren'}</button>}
     </div>
-    {error && <div className="data-alert" role="alert">{error} Die Übersicht ist derzeit nicht vollständig verfügbar.</div>}
+    {error && <div className="data-alert" role="alert">{briefingLoadError(error)}</div>}
     {!workspaceId ? <div className="panel briefing-empty">
-      <FolderKanban size={34} /><b>{workspaceLoading ? 'Workspaces werden geladen…' : workspaceError ? 'Workspace nicht verfügbar' : 'Noch kein Workspace ausgewählt'}</b>
+      <FolderKanban size={34} /><b>{workspaceLoading ? 'Workspaces werden geladen…' : workspaceError ? 'Workspaces konnten nicht geladen werden' : 'Noch kein Workspace ausgewählt'}</b>
       {!workspaceLoading && !workspaceError && <span>Lege in den Einstellungen einen Workspace an oder wähle einen bestehenden aus.</span>}
     </div> : <>
       <div className="briefing-live-note" role="status">

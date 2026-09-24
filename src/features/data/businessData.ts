@@ -1,3 +1,4 @@
+import { isFutureTokenError } from './readRetry';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { loadWorkspaceMembers, type NexusWorkspaceMember } from './nexusData';
@@ -191,10 +192,10 @@ export async function loadBriefingWorkspace(workspaceId: string, currentUserId: 
   const empty = { projects: [] as NexusProject[], tasks: [] as NexusProjectTask[] };
   if (!supabase) return { ...empty, error: 'Supabase ist nicht konfiguriert.' };
   const [projectResult, taskResult, memberResult] = await Promise.all([
-    loadWorkspaceProjects(workspaceId), loadProjectTasks(workspaceId), loadWorkspaceMembers(workspaceId),
+    loadWorkspaceProjects(workspaceId), loadProjectTasks(workspaceId, true), loadWorkspaceMembers(workspaceId),
   ]);
-  const error = publicBusinessError(projectResult.error?.message, 'Projekte konnten nicht geladen werden.') ||
-    taskResult.error || (memberResult.error ? 'Dein Workspace-Zugriff konnte nicht geprüft werden.' : null);
+  const error = (isFutureTokenError(projectResult.error) ? 'JWT issued at future' : publicBusinessError(projectResult.error?.message, 'Projekte konnten nicht geladen werden.')) ||
+    taskResult.error || (isFutureTokenError(memberResult.error) ? 'JWT issued at future' : memberResult.error ? 'Dein Workspace-Zugriff konnte nicht geprüft werden.' : null);
   if (error) return { ...empty, error };
   if (!memberResult.data.some(member => member.user_id === currentUserId)) {
     return { ...empty, error: 'Du hast keinen Zugriff mehr auf diesen Workspace.' };
@@ -202,14 +203,14 @@ export async function loadBriefingWorkspace(workspaceId: string, currentUserId: 
   return { projects: projectResult.data.map(normalizeProject), tasks: taskResult.data, error: null };
 }
 
-async function loadProjectTasks(workspaceId: string) {
+async function loadProjectTasks(workspaceId: string, preserveClockError = false) {
   const tasks: NexusProjectTask[] = [];
   if (!supabase) return { data: tasks, error: 'Supabase ist nicht konfiguriert.' };
   // Read every page so counters and filters never silently omit tasks at the API row limit.
   for (let offset = 0; ; offset += 500) {
     const { data, error } = await supabase.from('project_tasks').select(taskColumns)
       .eq('workspace_id', workspaceId).order('id').range(offset, offset + 499);
-    if (error) return { data: [] as NexusProjectTask[], error: publicBusinessError(error.message, 'Aufgaben konnten nicht geladen werden.') };
+    if (error) return { data: [] as NexusProjectTask[], error: preserveClockError && isFutureTokenError(error) ? 'JWT issued at future' : publicBusinessError(error.message, 'Aufgaben konnten nicht geladen werden.') };
     tasks.push(...(data ?? []) as NexusProjectTask[]);
     if (!data || data.length < 500) return { data: tasks, error: null };
   }

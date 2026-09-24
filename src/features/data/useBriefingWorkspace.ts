@@ -1,3 +1,4 @@
+import { retryRead } from './readRetry';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   loadBriefingWorkspace, subscribeToBusinessWorkspace, unsubscribeBusinessWorkspace,
@@ -25,7 +26,7 @@ export function useBriefingWorkspace(workspaceId: string | null, currentUserId?:
     }
     setSnapshot(current => ({ ...(current.scope === scope ? current : emptySnapshot(scope, true)), loading: true }));
     try {
-      const result = await loadBriefingWorkspace(workspaceId, currentUserId);
+      const result = await retryRead(() => loadBriefingWorkspace(workspaceId, currentUserId), () => request === version.current);
       if (request !== version.current) return;
       setSnapshot({
         scope, projects: result.projects, tasks: result.tasks,

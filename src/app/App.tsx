@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
+import { retryRead } from '../features/data/readRetry';
 import { useAuth } from '../features/auth/AuthProvider';
 import { openDirectConversation, touchUserPresence } from '../features/data/chatData';
 import {
@@ -96,6 +97,7 @@ function AppShell() {
   const [workspaceMembers, setWorkspaceMembers] = useState<NexusWorkspaceMember[]>([]);
   const [workspaceInvitations, setWorkspaceInvitations] = useState<NexusWorkspaceInvitation[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
+  const [dataReload, setDataReload] = useState(0);
   const [dataError, setDataError] = useState<string | null>(null);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamWorkspaceId, setTeamWorkspaceId] = useState<string | null>(null);
@@ -126,7 +128,10 @@ function AppShell() {
     void (async () => {
       try {
         const [profileResult, businessResult, workspaceResult, membershipResult] = await Promise.all([
-          loadOwnProfile(userId), loadBusinessProfiles(), loadWorkspaces(), loadWorkspaceMemberships(userId),
+          retryRead(() => loadOwnProfile(userId), () => active),
+          retryRead(loadBusinessProfiles, () => active),
+          retryRead(loadWorkspaces, () => active),
+          retryRead(() => loadWorkspaceMemberships(userId), () => active),
         ]);
         if (!active) return;
         setProfile(profileResult.data); setBusinessProfiles(businessResult.data); setWorkspaces(workspaceResult.data); setMemberships(membershipResult.data);
@@ -137,7 +142,7 @@ function AppShell() {
       } finally { if (active) setDataLoading(false); }
     })();
     return () => { active = false; };
-  }, [auth.configured, auth.user?.id]);
+  }, [auth.configured, auth.user?.id, dataReload]);
 
   useEffect(() => {
     if (!auth.user?.id) return;
@@ -404,6 +409,7 @@ function AppShell() {
             currentUserId={auth.user?.id}
             workspaceLoading={dataLoading}
             workspaceError={dataError}
+            onRetryWorkspace={() => setDataReload(value => value + 1)}
           />
         }
       />

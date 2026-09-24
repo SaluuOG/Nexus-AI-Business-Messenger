@@ -92,6 +92,7 @@ const state = {
     ...Array.from({ length: 8 }, (_, i) => task('unassigned-' + i, 'Teamaufgabe ' + (i + 1), { assigned_to: null, status: i === 0 ? 'blocked' : 'todo' })),
     task('second', 'Aufgabe im zweiten Team', { workspace_id: 'w2', project_id: 'p4', assigned_to: null }),
   ],
+  clockFailures: JSON.parse(sessionStorage.getItem('nexusTest.clockFailures') || '{}'), clockReads: {},
   failure: null, revoked: false, delayWorkspace: null, writes: 0, channels: [], revision: 0,
   sources: JSON.parse(sessionStorage.getItem('nexusTest.sources') || '[]'), sourceDenied: false,
   hideRecentSource: false, loseCreateResponse: false, createDelay: 0, directMessageDelay: 0,
@@ -442,6 +443,13 @@ export const supabase = {
       delete() { request.operation = 'delete'; return this; },
       async then(resolve, reject) {
         try {
+          if (request.operation === 'select') {
+            state.clockReads[table] = (state.clockReads[table] || 0) + 1;
+            if (state.clockFailures[table] > 0) {
+              state.clockFailures[table]--;
+              return resolve({ data: null, error: { code: 'PGRST303', message: 'JWT issued at future' } });
+            }
+          }
           if (state.failure === table) return resolve({ data: null, error: { message: 'connection failed' } });
           let rows = table === 'customers' ? state.customers : table === 'projects' ? state.projects : table === 'project_tasks' ? state.tasks
             : table === 'workspace_members' ? memberships
