@@ -15,6 +15,9 @@ try {
 } catch { full = true; }
 const add = (units,browsers) => { for(const name of units)unit.add(name);for(const name of browsers)browser.add(name); };
 for(const file of changed) {
+  if (/^(src\/features\/notifications\/nativePush|src\/components\/NativePushPreparation|tests\/browser\/native-push|tests\/native-push)/.test(file)) {
+    add(['tests/native-push.test.mjs'], ['tests/browser/native-push.mjs']); continue;
+  }
   if (/^(src\/features\/data\/(taskMentions|taskCollaboration|useTaskCollaboration)\.ts|src\/components\/(TaskCollaboration|ProjectTasksPanel)\.tsx|src\/pages\/(BusinessPage|NotificationsPage)\.tsx|src\/app\/businessNavigation\.ts|src\/features\/notifications\/notifications\.ts|src\/task-collaboration\.css|public\/sw\.js|supabase\/functions\/mobile-push\/core\.mjs|supabase\/migrations\/\d+_task_comment_mentions\.sql|tests\/(task-mentions|task-collaboration|notifications|mobile-push)\.test\.mjs|tests\/sql\/task-mentions-rls\.sql|tests\/browser\/(task-mentions|task-collaboration|collaboration-service|supabase)\.mjs)$/.test(file)) {
     add(['tests/task-mentions.test.mjs','tests/task-collaboration.test.mjs','tests/notifications.test.mjs','tests/mobile-push.test.mjs'],['tests/browser/task-mentions.mjs','tests/browser/task-collaboration.mjs','tests/browser/notifications.mjs','tests/browser/mobile-push.mjs','tests/browser/mobile-install.mjs']);continue;
   }
@@ -44,7 +47,7 @@ for(const file of changed) {
 }
 if(full) {
   for(const name of readdirSync('tests').filter(name=>name.endsWith('.test.mjs')))unit.add('tests/'+name);
-  for(const name of ['read-recovery','auth-recovery','project-templates','mobile-push','task-attachments','task-collaboration','task-mentions','mobile-workflows','chat-scan','briefing','mobile-install','workspace-lifecycle','message-history','message-tasks','settings','notifications'])browser.add(`tests/browser/${name}.mjs`);
+  for(const name of ['native-push','read-recovery','auth-recovery','project-templates','mobile-push','task-attachments','task-collaboration','task-mentions','mobile-workflows','chat-scan','briefing','mobile-install','workspace-lifecycle','message-history','message-tasks','settings','notifications'])browser.add(`tests/browser/${name}.mjs`);
 }
 const selection={unit:[...unit].sort(),browser:[...browser].sort()};
 console.log(JSON.stringify({scope:full?'full':'changed',...selection}));

@@ -1,3 +1,4 @@
+import { NativePushPreparation } from './NativePushPreparation';
 import { useEffect, useRef, useState } from 'react';
 import { BellRing, Smartphone } from 'lucide-react';
 import { changePushOptions, defaultPushStatus, disablePush, enablePush, loadPushStatus, pushSupport, testPush, type ReminderOptions, type PushStatus } from '../features/notifications/push';
@@ -60,7 +61,7 @@ export function PushPreferences({ userId }: { userId: string }) {
   return <section className="panel push-preferences" aria-labelledby="push-title">
     <h3 id="push-title"><Smartphone size={20} aria-hidden="true" /> Auf diesem Gerät</h3>
     <p>Erhalte Hinweise auch dann, wenn Nexus geschlossen ist. Push wird für jedes Gerät einzeln aktiviert.</p>
-    {support === 'native-pending' ? <p>Push für die native iPhone-App wird eingerichtet. Deine Hinweise innerhalb von Nexus bleiben verfügbar.</p>
+    {support === 'native-pending' ? <NativePushPreparation key={userId} userId={userId} />
       : support === 'install' ? <p>Öffne Nexus in Safari → Teilen → Zum Home-Bildschirm. Starte Nexus anschließend über das App-Symbol und aktiviere hier die Benachrichtigungen. Dafür brauchst du mindestens iOS / iPadOS 16.4.</p>
       : support === 'unavailable' ? <p>Dieser Browser unterstützt Push hier nicht. Öffne Nexus in einem aktuellen Browser. Deine Hinweise innerhalb von Nexus bleiben verfügbar.</p>
       : <>
