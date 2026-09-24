@@ -14,7 +14,7 @@ import { backendConfigured } from '../../lib/env';
 import { initialAuthCallback, supabase } from '../../lib/supabase';
 import { deleteCurrentAccount } from './accountDeletion';
 import { syncPushAccount } from '../notifications/push';
-import { NATIVE_AUTH_REDIRECT, parseNativeAuthLink } from './nativeAuthLink';
+import { createNativeAuthHandler, NATIVE_AUTH_REDIRECT } from './nativeAuthLink';
 
 type AuthResult = {
   error: string | null;
@@ -220,52 +220,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const client = supabase;
     if (!client || !Capacitor.isNativePlatform()) return;
     let active = true;
-    let lastUrl: string | null = null;
-    const handle = async (value: string) => {
-      const link = parseNativeAuthLink(value);
-      if (!active || !link || value === lastUrl) return;
-      lastUrl = value;
-      if (link.failed || !link.accessToken || !link.refreshToken) {
-        if (link.recovery) {
-          rememberRecoverySession(false);
-          setRecoveryMode(false);
-          setRecoveryError('Der Wiederherstellungslink ist ungültig oder abgelaufen.');
-          window.location.hash = routes.resetPassword;
-        } else setAuthLinkError('Der Bestätigungslink ist ungültig oder abgelaufen. Bitte fordere einen neuen Link an.');
-        return;
-      }
-      let error: Error | null = null;
-      try {
-        ({ error } = await client.auth.setSession({ access_token: link.accessToken, refresh_token: link.refreshToken }));
-      } catch {
-        error = new Error('Native auth callback failed');
-      }
-      if (!active) return;
-      if (error) {
-        if (link.recovery) {
-          rememberRecoverySession(false);
-          setRecoveryMode(false);
-          setRecoveryError('Der Wiederherstellungslink ist ungültig oder abgelaufen.');
-          window.location.hash = routes.resetPassword;
-        } else setAuthLinkError('Der Bestätigungslink konnte nicht eingelöst werden. Bitte versuche es erneut.');
-        return;
-      }
-      setAuthLinkError(null);
-      if (link.recovery) {
-        rememberRecoverySession(true);
-        setRecoveryMode(true);
+    const handler = createNativeAuthHandler({
+      setSession: tokens => client.auth.setSession(tokens),
+      onStart() {
+        rememberRecoverySession(false);
+        setRecoveryMode(false);
         setRecoveryError(null);
-        window.location.hash = routes.resetPassword;
-      }
-    };
+        setAuthLinkError(null);
+      },
+      onResult({ recovery, success }) {
+        rememberRecoverySession(recovery && success);
+        setRecoveryMode(recovery && success);
+        if (!success) {
+          if (recovery) setRecoveryError('Der Wiederherstellungslink konnte nicht eingelöst werden. Prüfe deine Verbindung und öffne ihn erneut. Falls er abgelaufen ist, fordere einen neuen Link an.');
+          else setAuthLinkError('Der Bestätigungslink konnte nicht eingelöst werden. Prüfe deine Verbindung und öffne ihn erneut. Falls er abgelaufen ist, fordere einen neuen Link an.');
+        }
+        window.location.hash = recovery ? routes.resetPassword : routes.auth;
+      },
+    });
     let listener: Awaited<ReturnType<typeof CapacitorApp.addListener>> | undefined;
     void (async () => {
-      listener = await CapacitorApp.addListener('appUrlOpen', event => { void handle(event.url); });
+      listener = await CapacitorApp.addListener('appUrlOpen', event => { void handler.handle(event.url); });
       if (!active) { await listener.remove(); return; }
       const launch = await CapacitorApp.getLaunchUrl();
-      if (launch?.url) await handle(launch.url);
+      if (launch?.url) await handler.handle(launch.url);
     })().catch(() => { /* The regular email/password login still works if native URL handling is unavailable. */ });
-    return () => { active = false; void listener?.remove(); };
+    return () => { active = false; handler.dispose(); void listener?.remove(); };
   }, []);
 
   const value = useMemo<AuthContextValue>(
