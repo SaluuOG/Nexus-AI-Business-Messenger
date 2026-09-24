@@ -49,7 +49,7 @@ try {
             await chat.waitFor();
             await setOnline(page, false);
             await page.locator('.chat-list-title button.chat-refresh').first().click();
-            await page.locator('.chat-list [role=status]').filter({ hasText: 'Keine Internetverbindung' }).waitFor();
+            await page.locator('.chat-list [role=status]').filter({ hasText: 'Offline – zuletzt gespeichert:' }).waitFor();
             assert.equal(await chat.isVisible(), true, 'Loaded chats survive an offline refresh');
           }
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);

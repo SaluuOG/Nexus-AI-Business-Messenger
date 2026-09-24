@@ -1,3 +1,4 @@
+import { useNetworkStatus } from '../features/connection/useNetworkStatus';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
@@ -45,6 +46,8 @@ type WorkspaceLifecycleFeedback = {
   error: boolean;
 };
 
+const OfflineChatsPage = lazy(() => import('../pages/OfflineChatsPage').then(module => ({ default: module.OfflineChatsPage })));
+
 const AIPage = lazy(() => import('../pages/AIPage').then((module) => ({ default: module.AIPage })));
 const AuthPage = lazy(() => import('../pages/AuthPage').then((module) => ({ default: module.AuthPage })));
 const BriefingPage = lazy(() => import('../pages/BriefingPage').then((module) => ({ default: module.BriefingPage })));
@@ -63,6 +66,10 @@ function AppLoading() {
 
 export function App() {
   const auth = useAuth();
+  const online = useNetworkStatus();
+  if (!online && !auth.session && auth.offlineAccountId && !auth.recoveryMode) {
+    return <Suspense fallback={<AppLoading />}><OfflineChatsPage key={auth.offlineAccountId} account={auth.offlineAccountId} onClear={auth.clearOfflineChats} /></Suspense>;
+  }
   if (auth.configured && auth.loading) return <AppLoading />;
   return (
     <Suspense fallback={<AppLoading />}>

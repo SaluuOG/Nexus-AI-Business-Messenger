@@ -12,7 +12,7 @@ const server = await createServer({ root, configFile: false, base: '/', server: 
 await server.listen();
 await mkdir('browser-results', { recursive: true });
 try {
-  for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
+  for (const [name, engine] of (process.env.NEXUS_BROWSER === 'chromium' ? [['chromium', chromium]] : [['chromium', chromium], ['webkit', webkit]])) {
     const browser = await engine.launch();
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
     await context.route('**/*', route => route.request().url().startsWith('http://127.0.0.1:4177') ? route.continue() : route.abort());

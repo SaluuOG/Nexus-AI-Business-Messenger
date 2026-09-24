@@ -1,4 +1,6 @@
-import { readChatList, readableLoadError } from '../features/connection/readAvailability';
+import { patchSavedMessage } from '../features/offline/chatCache';
+import { offlineChatList, offlineMessagePage, offlineStamp } from '../features/offline/chatReads';
+import { readableLoadError } from '../features/connection/readAvailability';
 import { useChatConnection } from '../features/connection/useChatConnection';
 import {
   ArrowLeft,
@@ -349,7 +351,7 @@ export function ChatsPage({
   }, [messages]);
 
   const markReadIfAllowed = async (conversationId: string, forceForLatestOpen = false) => {
-    if (document.visibilityState !== 'visible') return;
+    if (navigator.onLine === false || cachedViewRef.current || document.visibilityState !== 'visible') return;
     if (selectedRef.current !== conversationId || hasNewerRef.current || contextMessageRef.current) return;
     if (!forceForLatestOpen && !nearBottom()) return;
     const now = Date.now();
@@ -393,11 +395,12 @@ export function ChatsPage({
 
   const reloadConversationList = async () => {
     const request = ++conversationListRequestRef.current;
-    const result = await readChatList(loadDirectConversations);
+    const result = await offlineChatList('direct', currentUserId, loadDirectConversations);
     if (request !== conversationListRequestRef.current) return;
     setLoading(false);
     if (result.error) { setListError(result.error); return; }
     setListError(null);
+    setListCachedAt(result.cachedAt);
     setConversations(result.data);
     setSelectedId((current) => {
       if (mobileListOnlyRef.current) return null;
@@ -418,7 +421,7 @@ export function ChatsPage({
   const refreshConversations = async (preferred?: string | null) => {
     const request = ++conversationListRequestRef.current;
     setLoading(true);
-    const result = await readChatList(loadDirectConversations);
+    const result = await offlineChatList('direct', currentUserId, loadDirectConversations);
     if (request !== conversationListRequestRef.current) return;
     setLoading(false);
     if (result.error) {
@@ -426,6 +429,7 @@ export function ChatsPage({
       return;
     }
     setListError(null);
+    setListCachedAt(result.cachedAt);
     setConversations(result.data);
     if (linkedConversationId && !result.data.some((conversation) => conversation.conversation_id === linkedConversationId)) {
       setError('Der verlinkte Chat ist nicht mehr verfügbar.');
@@ -445,7 +449,7 @@ export function ChatsPage({
   ) => {
     const request = ++messageRequestRef.current;
     setMessagesLoading(true);
-    const result = await loadDirectMessagePage(conversationId);
+    const result = await offlineMessagePage('direct', conversationId, currentUserId, () => loadDirectMessagePage(conversationId));
     if (selectedRef.current !== conversationId || request !== messageRequestRef.current) return false;
     setMessagesLoading(false);
     if (result.error) {
@@ -453,6 +457,9 @@ export function ChatsPage({
       if (options.replace !== false) setMessages([]);
       return false;
     }
+    const wasCached = cachedViewRef.current === conversationId;
+    cachedViewRef.current = result.cachedAt ? conversationId : null;
+    setMessagesCached(result.cachedAt ? { id: conversationId, at: result.cachedAt } : null);
     setError(null);
     setContextRetryMessageId(null);
     if (options.stickToBottom) pendingScrollRef.current = { kind: 'bottom' };
@@ -461,19 +468,20 @@ export function ChatsPage({
     setHasNewer(false);
     setContextMessageId(null);
     setHighlightedMessageId(null);
-    if (options.replace !== false || messageCountRef.current === 0) {
+    if (wasCached || options.replace !== false || messageCountRef.current === 0) {
       setHasOlder(result.data.has_more);
       setOldestCursor(result.data.next_cursor);
     }
     if (options.stickToBottom || options.replace !== false) setHasUnseenLatest(false);
-    setMessages((current) => options.replace === false
+    setMessages((current) => !wasCached && !result.cachedAt && options.replace === false
       ? mergeMessages(current, result.data.messages)
       : result.data.messages);
-    if (options.markRead) void markReadIfAllowed(conversationId, true);
+    if (options.markRead && !result.cachedAt && navigator.onLine !== false) void markReadIfAllowed(conversationId, true);
     return true;
   };
 
   const refreshMessageContext = async (conversationId: string, messageId: string) => {
+    if (navigator.onLine === false) { await refreshLatestMessages(conversationId, { replace: true }); return false; }
     const request = ++messageRequestRef.current;
     contextMessageRef.current = messageId;
     setMessagesLoading(true);
@@ -496,6 +504,8 @@ export function ChatsPage({
       }
       return false;
     }
+    cachedViewRef.current = null;
+    setMessagesCached(null);
     setError(null);
     setContextWarning(null);
     setContextRetryMessageId(null);
@@ -536,6 +546,7 @@ export function ChatsPage({
   };
 
   const removeRealtimeMessage = (conversationId: string, messageId: string) => {
+    if (conversationId) void patchSavedMessage(currentUserId, 'direct', conversationId, messageId, null);
     realtimeMessageRequestRef.current.set(messageId, (realtimeMessageRequestRef.current.get(messageId) ?? 0) + 1);
     setMessages((current) => {
       if (!current.some((message) => message.message_id === messageId)) return current;
@@ -561,6 +572,7 @@ export function ChatsPage({
     }
     const refreshed = result.data.messages.find((message) => message.message_id === messageId);
     if (!refreshed) return;
+    void patchSavedMessage(currentUserId, 'direct', conversationId, messageId, refreshed);
     setMessages((current) => {
       if (!current.some((message) => message.message_id === messageId)) return current;
       const next = mergeMessages(current, [refreshed]);
@@ -607,6 +619,12 @@ export function ChatsPage({
   };
 
   const connection = useChatConnection(selectedId);
+  const [listCachedAt, setListCachedAt] = useState<number | null>(null);
+  const [messagesCached, setMessagesCached] = useState<{ id: string; at: number } | null>(null);
+  const cachedAt = messagesCached?.id === selectedId ? messagesCached.at : null;
+  const readOnly = Boolean(cachedAt) || !connection.online;
+  const cachedViewRef = useRef<string | null>(null);
+  cachedViewRef.current = cachedAt ? selectedId : null;
   const [listError, setListError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -832,6 +850,7 @@ export function ChatsPage({
       if (scope) saveChatDraft(scope, value);
     }
     if (typingStopRef.current) clearTimeout(typingStopRef.current);
+    if (readOnly) return;
     if (!value.trim()) {
       void setConversationTyping(selectedId, false);
       lastTypingRef.current = 0;
@@ -954,7 +973,7 @@ export function ChatsPage({
 
   const submit = async () => {
     const body = draft.trim();
-    if (!selectedId || sending || recording || textRetry || (!editing && !body && !pendingFile) || (editing && !body)) return;
+    if (cachedAt || !selectedId || sending || recording || textRetry || (!editing && !body && !pendingFile) || (editing && !body)) return;
     const conversationId = selectedId;
     const scope = draftScope(conversationId);
     const replyToMessageId = replyingTo?.message_id ?? null;
@@ -1015,7 +1034,7 @@ export function ChatsPage({
   };
 
   const retryFailedText = async () => {
-    if (!selectedId || !textRetry || sending) return;
+    if (cachedAt || !selectedId || !textRetry || sending) return;
     const scope = draftScope(selectedId);
     if (!scope) return;
     const retry = retryStoreRef.current.beginRetry(scope, textRetry.payload.id);
@@ -1097,10 +1116,16 @@ export function ChatsPage({
     }
   };
 
+  useEffect(() => {
+    const restored = () => { if (selectedId) { void refreshLatestMessages(selectedId, { replace: true, stickToBottom: false }); } };
+    window.addEventListener('online', restored);
+    return () => window.removeEventListener('online', restored);
+  }, [selectedId, currentUserId]);
+
   const canSend = Boolean(editing ? draft.trim() : draft.trim() || pendingFile)
     && !sending
     && !recording
-    && !textRetry;
+    && !textRetry && !cachedAt;
 
   return (
     <div className="chat-layout real-chat-layout" data-mobile-pane={mobileConversationOpen ? 'conversation' : 'list'}>
@@ -1110,7 +1135,7 @@ export function ChatsPage({
           <button className="chat-refresh" onClick={() => void refreshConversations(selectedId)} title="Chats aktualisieren"><RefreshCw size={15} /></button>
         </div>
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Chats durchsuchen" /></div>
-        {mobileListOnly && connection.message && <div className="chat-error" role="status">{connection.message}</div>}
+        {mobileListOnly && (listCachedAt || connection.message) && <div className="chat-error" role="status">{listCachedAt ? offlineStamp(listCachedAt) : connection.message}</div>}
         <ChatStatusFilter offline={!connection.online} value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
         {listError && connection.online && <div className="chat-error" role="alert">{listError}</div>}
         {mobileListOnly && error && connection.online && <div className="chat-error" role="alert">{readableLoadError(error)}</div>}
@@ -1133,7 +1158,7 @@ export function ChatsPage({
       </section>
 
       <section className="conversation">
-        {connection.message && <div className="chat-error" role="status" aria-live="polite">{connection.message}</div>}
+        {(cachedAt || connection.message) && <div className="chat-error" role="status" aria-live="polite">{cachedAt ? offlineStamp(cachedAt) + ". Gespeichert sind bis zu 100 Nachrichten je Chat. Neue Nachrichten werden online geladen." : connection.message}</div>}
         <div className="mobile-chat-backbar"><button type="button" onClick={() => { setSelectedId(null); setError(null); setContextWarning(null); setContextRetryMessageId(null); setChatSearch({}); }}><ArrowLeft size={20} /> Alle Chats</button></div>
         <TaskMessageContext kind="direct" onChatResolved={(id) => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setSelectedId(id); void refreshConversations(id); }} />
         {contextWarning && <div className="chat-error chat-context-warning" role="status">{contextWarning}</div>}
@@ -1162,21 +1187,21 @@ export function ChatsPage({
                 <div className="avatar">{initials(currentChat.full_name, currentChat.username)}</div>
                 <div>
                   <b>{nameOf(currentChat)}</b>
-                  <small className={contactTyping ? 'typing-status' : presence?.online ? 'online-status' : ''}>{contactTyping ? 'schreibt gerade…' : formatPresence(presence)}</small>
+                  <small className={!readOnly && contactTyping ? 'typing-status' : !readOnly && presence?.online ? 'online-status' : ''}>{readOnly ? 'Offline – gespeicherter Verlauf' : contactTyping ? 'schreibt gerade…' : formatPresence(presence)}</small>
                 </div>
               </div>
               <div className="project-pill">Privater 1:1-Chat</div>
             </div>
 
             <div className="messages" ref={messagesElementRef} onScroll={handleMessageScroll}>
-              {hasOlder && (
+              {hasOlder && !readOnly && (
                 <button className="secondary messages-history-button" onClick={() => void loadOlderMessages()} disabled={loadingOlder} data-action="load-older-messages">
                   <RefreshCw size={14} className={loadingOlder ? 'spinning' : ''} />
                   {loadingOlder ? 'Ältere Nachrichten werden geladen…' : 'Ältere Nachrichten laden'}
                 </button>
               )}
               {messagesLoading && messages.length === 0 && <div className="messages-status">Nachrichten werden geladen…</div>}
-              {!messagesLoading && messages.length === 0 && <div className="messages-status">Noch keine Nachrichten.</div>}
+              {!messagesLoading && messages.length === 0 && <div className="messages-status">{readOnly ? 'Für diesen Chat sind keine Textnachrichten offline gespeichert. Öffne ihn einmal mit Internet.' : error ? 'Nachrichten konnten nicht geladen werden.' : 'Noch keine Nachrichten.'}</div>}
               {messages.map((message) => {
                 const mine = message.sender_id === currentUserId;
                 const highlighted = highlightedMessageId === message.message_id;
@@ -1193,7 +1218,7 @@ export function ChatsPage({
                     style={highlighted ? { outline: '2px solid #8f87ff', outlineOffset: 6, borderRadius: 12 } : undefined}
                   >
                     <div className={mine ? 'bubble me' : 'bubble'}>
-                      {message.reply_to_message_id && <div className="reply-preview"><b>{message.reply_sender_id === currentUserId ? 'Du' : nameOf(currentChat)}</b><span>{message.reply_body || 'Anhang'}</span></div>}
+                      {message.reply_to_message_id && <div className="reply-preview"><b>{message.reply_sender_id === currentUserId ? 'Du' : nameOf(currentChat)}</b><span>{message.reply_body || (cachedAt ? 'Antwort auf eine Nachricht' : 'Anhang')}</span></div>}
                       {!message.deleted_at && message.attachments.length > 0 && (
                         <div className="message-attachments">
                           {message.attachments.map((attachment) => <AttachmentView key={attachment.attachment_id} attachment={attachment} onContentSettled={restoreScrollLock} />)}
@@ -1203,10 +1228,10 @@ export function ChatsPage({
                       <div className="message-meta">
                         {message.edited_at && !message.deleted_at && <small>bearbeitet</small>}
                         <time>{formatTime(message.created_at)}</time>
-                        {mine && !message.deleted_at && <span className={`message-receipt${message.read_at ? ' read' : ''}`}>{message.read_at ? <CheckCheck size={13} /> : '✓'}</span>}
+                        {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${message.read_at ? ' read' : ''}`}>{message.read_at ? <CheckCheck size={13} /> : '✓'}</span>}
                       </div>
                     </div>
-                    {!message.deleted_at && (
+                    {!readOnly && !message.deleted_at && (
                       <div className="message-actions">
                         <MessageTaskAction currentUserId={currentUserId} workspaceId={workspaceId} source={{ kind: 'direct', messageId: message.message_id, body: message.body, chatName: nameOf(currentChat), attachmentName: message.attachments[0]?.file_name }} />
                         <button onClick={() => { setEditing(null); restoreSavedDraft(currentChat.conversation_id); setReplyingTo(message); }} disabled={Boolean(textRetry)} title="Antworten"><Reply size={13} /></button>
@@ -1241,11 +1266,11 @@ export function ChatsPage({
                 <button className="primary" data-action="retry-text-send" onClick={() => void retryFailedText()} disabled={textRetry.status === 'retrying' || sending}><RefreshCw size={14} />{textRetry.status === 'retrying' ? 'Wird erneut gesendet…' : 'Erneut senden'}</button>
               </div>
             )}
-            <ChatScanAction key={`${currentUserId}:direct:${currentChat.conversation_id}`} currentUserId={currentUserId} kind="direct" chatId={currentChat.conversation_id} chatName={nameOf(currentChat)} historyVersion={scanHistoryVersion} />
+            {!readOnly && <ChatScanAction key={`${currentUserId}:direct:${currentChat.conversation_id}`} currentUserId={currentUserId} kind="direct" chatId={currentChat.conversation_id} chatName={nameOf(currentChat)} historyVersion={scanHistoryVersion} />}
             <div className="composer attachment-composer">
               <input ref={fileRef} className="attachment-file-input" type="file" accept={SUPPORTED_CHAT_ATTACHMENT_TYPES.filter((type) => !type.startsWith('audio/')).join(',')} onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} disabled={Boolean(textRetry)} />
-              <button className="attach-button" onClick={() => fileRef.current?.click()} disabled={sending || Boolean(editing) || recording || Boolean(textRetry)} title="Datei anhängen"><Paperclip size={18} /></button>
-              <button className={`attach-button mic-button${recording ? ' recording' : ''}`} onClick={() => void startRecording()} disabled={sending || Boolean(editing) || recording || Boolean(textRetry)} title="Sprachnachricht aufnehmen"><Mic size={18} /></button>
+              <button className="attach-button" onClick={() => fileRef.current?.click()} disabled={readOnly || sending || Boolean(editing) || recording || Boolean(textRetry)} title="Datei anhängen"><Paperclip size={18} /></button>
+              <button className={`attach-button mic-button${recording ? ' recording' : ''}`} onClick={() => void startRecording()} disabled={readOnly || sending || Boolean(editing) || recording || Boolean(textRetry)} title="Sprachnachricht aufnehmen"><Mic size={18} /></button>
               <input
                 data-testid="direct-message-composer"
                 value={draft}

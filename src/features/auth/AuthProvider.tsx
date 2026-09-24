@@ -1,3 +1,5 @@
+import { savedOfflineAccount, rememberOfflineAccount } from '../offline/offlineAccount';
+import { syncOfflineChatAccount } from '../offline/chatCache';
 import {
   createContext,
   type ReactNode,
@@ -27,6 +29,8 @@ type SignUpResult = AuthResult & {
 type AuthContextValue = {
   configured: boolean;
   loading: boolean;
+  offlineAccountId: string | null;
+  clearOfflineChats: () => Promise<void>;
   session: Session | null;
   user: User | null;
   recoveryMode: boolean;
@@ -155,6 +159,7 @@ function publicAuthError(message: string | undefined, fallback: string) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [offlineAccountId, setOfflineAccountId] = useState(savedOfflineAccount);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(backendConfigured);
   const [recoveryMode, setRecoveryMode] = useState(
@@ -170,33 +175,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let mounted = true;
+    let revision = 0;
+    let hasSession = false;
+    const remembered = savedOfflineAccount();
+    if (remembered && navigator.onLine === false) void syncOfflineChatAccount(remembered);
+    const applyOfflineAccount = (id: string | null, signedOut = false) => {
+      if (id || signedOut || !savedOfflineAccount()) {
+        rememberOfflineAccount(id);
+        setOfflineAccountId(id);
+        void syncOfflineChatAccount(id);
+      }
+    };
 
     const recoveryRequested = hasRecoveryMarker();
+    let firstLoad = true;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      void syncPushAccount(data.session?.user.id ?? null);
-      setSession(data.session);
-      if (recoveryRequested && data.session) {
-        rememberRecoverySession(true);
-        setRecoveryMode(true);
-        setRecoveryError(null);
-      } else if (recoveryRequested && !data.session) {
-        rememberRecoverySession(false);
-        setRecoveryError((current) =>
-          current ??
-          (initialAuthCallback.hasPkceCode
-            ? 'Dieser Link wurde noch mit dem alten Browser-Verfahren erstellt. Bitte fordere nach dem aktuellen Nexus-Update einen neuen Link an.'
-            : 'Der Wiederherstellungslink ist ungültig oder abgelaufen.'),
-        );
-      }
-      setLoading(false);
-      clearAuthCallbackUrl(recoveryRequested);
-    });
+    const loadSession = () => {
+      const request = ++revision;
+      const useRecoveryMarker = firstLoad && recoveryRequested;
+      firstLoad = false;
+      if (!hasSession) setLoading(true);
+      void supabase!.auth.getSession().then(({ data }) => {
+        if (!mounted || request !== revision) return;
+        hasSession = Boolean(data.session);
+        applyOfflineAccount(data.session?.user.id ?? null);
+        void syncPushAccount(data.session?.user.id ?? null);
+        setSession(data.session);
+        if (useRecoveryMarker && data.session) {
+          rememberRecoverySession(true);
+          setRecoveryMode(true);
+          setRecoveryError(null);
+        } else if (useRecoveryMarker && !data.session) {
+          rememberRecoverySession(false);
+          setRecoveryError((current) =>
+            current ??
+            (initialAuthCallback.hasPkceCode
+              ? 'Dieser Link wurde noch mit dem alten Browser-Verfahren erstellt. Bitte fordere nach dem aktuellen Nexus-Update einen neuen Link an.'
+              : 'Der Wiederherstellungslink ist ungültig oder abgelaufen.'),
+          );
+        }
+        setLoading(false);
+        clearAuthCallbackUrl(useRecoveryMarker);
+      }).catch(() => { if (mounted && request === revision) setLoading(false); });
+    };
+    loadSession();
+    window.addEventListener('online', loadSession);
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!mounted) return;
+      revision++;
+      hasSession = Boolean(nextSession);
+      applyOfflineAccount(nextSession?.user.id ?? null, event === 'SIGNED_OUT');
       void syncPushAccount(nextSession?.user.id ?? null);
       setSession(nextSession);
       if (event === 'PASSWORD_RECOVERY') {
@@ -213,6 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      window.removeEventListener('online', loadSession);
     };
   }, []);
 
@@ -252,6 +284,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       configured: backendConfigured,
       loading,
+      offlineAccountId,
+      async clearOfflineChats() {
+        rememberOfflineAccount(null);
+        setOfflineAccountId(null);
+        await syncOfflineChatAccount(null);
+      },
       session,
       user: session?.user ?? null,
       recoveryMode,
@@ -313,22 +351,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signOut() {
         if (!supabase) return { error: null };
+        rememberOfflineAccount(null);
+        setOfflineAccountId(null);
+        await syncOfflineChatAccount(null);
         await syncPushAccount(null);
         rememberRecoverySession(false);
         const { error } = await supabase.auth.signOut();
-        if (error) void syncPushAccount(session?.user.id ?? null);
+        if (error) { void syncOfflineChatAccount(session?.user.id ?? null); void syncPushAccount(session?.user.id ?? null); }
         return { error: publicAuthError(error?.message, 'Die Abmeldung ist gerade nicht möglich.') };
       },
       async deleteAccount(confirmation) {
         const result = await deleteCurrentAccount(confirmation);
         if (!result.error) {
+          rememberOfflineAccount(null);
+          setOfflineAccountId(null);
+          await syncOfflineChatAccount(null);
           await syncPushAccount(null);
           rememberRecoverySession(false);
         }
         return result;
       },
     }),
-    [authLinkError, loading, recoveryError, recoveryMode, session],
+    [authLinkError, loading, offlineAccountId, recoveryError, recoveryMode, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
