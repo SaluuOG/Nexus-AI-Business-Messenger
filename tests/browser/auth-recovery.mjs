@@ -34,7 +34,8 @@ try {
       assert.equal(await page.evaluate(() => sessionStorage.getItem('nexus_password_recovery')), null);
       await page.getByRole('button', { name: 'Nexus öffnen', exact: true }).click();
       await page.waitForURL(url => url.hash === '#/app/briefing');
-      await page.goto('http://127.0.0.1:4177/#/auth/reset-password');
+      await page.getByRole('heading', { name: 'Dein Zugang ist wieder sicher' }).waitFor({ state: 'hidden' });
+      await page.evaluate(() => { window.location.hash = '/auth/reset-password'; });
       await page.getByRole('heading', { name: 'Link nicht mehr gültig' }).waitFor();
       console.log(name + ': recovery retry, persistent success, cleared recovery and exit passed');
     } finally { await context.close(); await browser.close(); }
