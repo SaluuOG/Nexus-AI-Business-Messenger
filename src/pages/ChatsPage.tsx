@@ -1,3 +1,4 @@
+import { readChatList, readableLoadError } from '../features/connection/readAvailability';
 import { useChatConnection } from '../features/connection/useChatConnection';
 import {
   ArrowLeft,
@@ -392,10 +393,11 @@ export function ChatsPage({
 
   const reloadConversationList = async () => {
     const request = ++conversationListRequestRef.current;
-    const result = await loadDirectConversations();
+    const result = await readChatList(loadDirectConversations);
     if (request !== conversationListRequestRef.current) return;
     setLoading(false);
-    if (result.error) return;
+    if (result.error) { setListError(result.error); return; }
+    setListError(null);
     setConversations(result.data);
     setSelectedId((current) => {
       if (mobileListOnlyRef.current) return null;
@@ -416,13 +418,14 @@ export function ChatsPage({
   const refreshConversations = async (preferred?: string | null) => {
     const request = ++conversationListRequestRef.current;
     setLoading(true);
-    const result = await loadDirectConversations();
+    const result = await readChatList(loadDirectConversations);
     if (request !== conversationListRequestRef.current) return;
     setLoading(false);
     if (result.error) {
-      setError(result.error);
+      setListError(result.error);
       return;
     }
+    setListError(null);
     setConversations(result.data);
     if (linkedConversationId && !result.data.some((conversation) => conversation.conversation_id === linkedConversationId)) {
       setError('Der verlinkte Chat ist nicht mehr verfügbar.');
@@ -604,6 +607,7 @@ export function ChatsPage({
   };
 
   const connection = useChatConnection(selectedId);
+  const [listError, setListError] = useState<string | null>(null);
 
   useEffect(() => {
     if (previousUserRef.current && previousUserRef.current !== currentUserId) {
@@ -644,6 +648,7 @@ export function ChatsPage({
     };
     const interval = setInterval(() => { if (document.visibilityState === 'visible') scheduleConversationListRefresh(); }, 30000);
     window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       clearInterval(interval);
@@ -652,6 +657,7 @@ export function ChatsPage({
         conversationRefreshTimerRef.current = null;
       }
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
       void unsubscribeConversationRealtime(channel);
     };
@@ -1105,11 +1111,13 @@ export function ChatsPage({
         </div>
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Chats durchsuchen" /></div>
         {mobileListOnly && connection.message && <div className="chat-error" role="status">{connection.message}</div>}
-        <ChatStatusFilter value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
-        {mobileListOnly && error && <div className="chat-error" role="alert">{error}</div>}
-        {!loading && conversations.length > 0 && filtered.length === 0 && <div className="chat-list-empty">Keine Chats für diese Auswahl.</div>}
+        <ChatStatusFilter offline={!connection.online} value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
+        {listError && connection.online && <div className="chat-error" role="alert">{listError}</div>}
+        {mobileListOnly && error && connection.online && <div className="chat-error" role="alert">{readableLoadError(error)}</div>}
+        {!loading && connection.online && !listError && conversations.length > 0 && filtered.length === 0 && <div className="chat-list-empty">Keine Chats für diese Auswahl.</div>}
+        {!loading && conversations.length === 0 && (!connection.online || listError) && <div className="chat-list-empty"><b>Chats derzeit nicht verfügbar</b><span>{!connection.online ? 'Verbinde dich mit dem Internet. Die Liste wird anschließend erneut geladen.' : 'Bitte lade die Liste erneut.'}</span></div>}
         {loading && conversations.length === 0 && <div className="chat-list-empty">Chats werden geladen…</div>}
-        {!loading && conversations.length === 0 && <div className="chat-list-empty"><MessageCircle size={24} /><b>Noch keine Chats</b></div>}
+        {!loading && connection.online && !listError && conversations.length === 0 && <div className="chat-list-empty"><MessageCircle size={24} /><b>Noch keine Chats</b></div>}
         {filtered.map((conversation) => (
           <button className={`chat${selectedId === conversation.conversation_id ? ' active' : ''}`} onClick={() => { setError(null); setContextWarning(null); setContextRetryMessageId(null); if (!isMobile) setSelectedId(conversation.conversation_id); setChatSearch({ conversation: conversation.conversation_id }); }} key={conversation.conversation_id}>
             <div className="avatar">{initials(conversation.full_name, conversation.username)}</div>
@@ -1129,9 +1137,9 @@ export function ChatsPage({
         <div className="mobile-chat-backbar"><button type="button" onClick={() => { setSelectedId(null); setError(null); setContextWarning(null); setContextRetryMessageId(null); setChatSearch({}); }}><ArrowLeft size={20} /> Alle Chats</button></div>
         <TaskMessageContext kind="direct" onChatResolved={(id) => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setSelectedId(id); void refreshConversations(id); }} />
         {contextWarning && <div className="chat-error chat-context-warning" role="status">{contextWarning}</div>}
-        {error && (
+        {error && connection.online && (
           <div className={`chat-error${contextRetryMessageId ? ' chat-context-retry' : ''}`} role="alert">
-            <span>{error}</span>
+            <span>{readableLoadError(error)}</span>
             {contextRetryMessageId && selectedId && (
               <button
                 className="secondary"

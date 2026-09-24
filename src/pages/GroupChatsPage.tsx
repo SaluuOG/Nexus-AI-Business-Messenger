@@ -1,3 +1,4 @@
+import { readChatList, readableLoadError } from '../features/connection/readAvailability';
 import { useChatConnection } from '../features/connection/useChatConnection';
 import { Camera, CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -247,6 +248,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   );
 
   const connection = useChatConnection(selectedId);
+  const [listError, setListError] = useState<string | null>(null);
 
   useEffect(() => () => {
     if (pendingAudioUrl) URL.revokeObjectURL(pendingAudioUrl);
@@ -265,13 +267,14 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       visibleGroupListRequest.current = request;
       setLoading(true);
     }
-    const result = await loadGroupChats();
+    const result = await readChatList(loadGroupChats);
     if (!silent && visibleGroupListRequest.current === request && (!shouldApply || shouldApply())) setLoading(false);
     if (request !== groupListRequest.current || (shouldApply && !shouldApply())) return null;
     if (result.error) {
-      if (!silent) setError(result.error);
+      setListError(result.error);
       return null;
     }
+    setListError(null);
     if (!silent) setError(null);
     setGroups(result.data);
     if (!silent && linkedGroupId && !result.data.some(group => group.group_id === linkedGroupId)) setError('Die verlinkte Gruppe ist nicht mehr verfügbar.');
@@ -799,6 +802,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       if (document.visibilityState === 'visible') scheduleRefresh();
     }, 30000);
     window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       active = false;
@@ -807,6 +811,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       groupListRefreshQueuedRef.current = false;
       groupListHistoryChangedRef.current = false;
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
       void unsubscribeGroupRealtime(channel);
     };
@@ -1364,11 +1369,13 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
 
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Gruppen durchsuchen" /></div>
         {mobileListOnly && connection.message && <div className="chat-error" role="status">{connection.message}</div>}
-        <ChatStatusFilter value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
-        {mobileListOnly && error && <div className="chat-error" role="alert">{error}</div>}
-        {!loading && groups.length > 0 && filteredGroups.length === 0 && <div className="chat-list-empty">Keine Gruppen für diese Auswahl.</div>}
+        <ChatStatusFilter offline={!connection.online} value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
+        {listError && connection.online && <div className="chat-error" role="alert">{listError}</div>}
+        {mobileListOnly && error && connection.online && <div className="chat-error" role="alert">{readableLoadError(error)}</div>}
+        {!loading && connection.online && !listError && groups.length > 0 && filteredGroups.length === 0 && <div className="chat-list-empty">Keine Gruppen für diese Auswahl.</div>}
+        {!loading && groups.length === 0 && (!connection.online || listError) && <div className="chat-list-empty"><b>Gruppen derzeit nicht verfügbar</b><span>{!connection.online ? 'Verbinde dich mit dem Internet. Die Liste wird anschließend erneut geladen.' : 'Bitte lade die Liste erneut.'}</span></div>}
         {loading && groups.length === 0 && <div className="chat-list-empty">Gruppen werden geladen…</div>}
-        {!loading && groups.length === 0 && <div className="chat-list-empty"><UsersRound size={24} /><b>Noch keine Gruppen</b><span>Erstelle deine erste Gruppe mit einem Nexus-Kontakt.</span></div>}
+        {!loading && connection.online && !listError && groups.length === 0 && <div className="chat-list-empty"><UsersRound size={24} /><b>Noch keine Gruppen</b><span>Erstelle deine erste Gruppe mit einem Nexus-Kontakt.</span></div>}
         {filteredGroups.map((group) => (
           <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setContextWarning(null); if (!isMobile) setSelectedId(group.group_id); setChatSearch({ group: group.group_id }); }} key={group.group_id}>
             <div className="avatar group-avatar"><GroupAvatar group={group} size={16} /></div>
@@ -1382,7 +1389,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
         {connection.message && <div className="chat-error" role="status" aria-live="polite">{connection.message}</div>}
         <div className="mobile-chat-backbar"><button type="button" onClick={() => { setSelectedId(null); setError(null); setContextWarning(null); setChatSearch({}); }}><ArrowLeft size={20} /> Alle Gruppen</button></div>
         <TaskMessageContext kind="group" onChatResolved={id => { setSelectedId(id); void refreshGroups(id); }} />
-        {(error || contextWarning) && <div className="chat-error">{error || contextWarning}</div>}
+        {(error || contextWarning) && connection.online && <div className="chat-error">{readableLoadError(error || contextWarning || "")}</div>}
         {!currentGroup ? (
           <div className="conversation-empty"><UsersRound size={42} /><h2>Team-Messenger</h2><p>Wähle eine Gruppe aus oder erstelle eine neue.</p></div>
         ) : (

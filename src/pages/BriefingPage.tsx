@@ -1,3 +1,4 @@
+import { useNetworkStatus } from '../features/connection/useNetworkStatus';
 import { briefingLoadError } from '../features/data/readRetry';
 import { ArrowRight, CalendarClock, CheckCircle2, CircleAlert, FolderKanban, RefreshCw, Sparkles, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -30,6 +31,12 @@ export function BriefingPage({ openBusiness, displayName, workspaceId, workspace
   const [taskLimit, setTaskLimit] = useState(5);
   const [attentionLimit, setAttentionLimit] = useState(5);
   const [projectLimit, setProjectLimit] = useState(4);
+  const online = useNetworkStatus();
+  useEffect(() => {
+    const restored = () => { if (workspaceError) onRetryWorkspace?.(); };
+    window.addEventListener('online', restored);
+    return () => window.removeEventListener('online', restored);
+  }, [workspaceError, onRetryWorkspace]);
   const data = useBriefingWorkspace(workspaceId, currentUserId);
   useEffect(() => {
     const tick = () => setNow(new Date());
@@ -75,19 +82,20 @@ export function BriefingPage({ openBusiness, displayName, workspaceId, workspace
     <div className="title-row briefing-title-row">
       <Header kicker={greeting + ', ' + firstName} title="Dein Tagesbriefing"
         sub={workspaceName ? 'Deine Prioritäten im Workspace ' + workspaceName + '.' : 'Aufgaben, Deadlines und Handlungsbedarf auf einen Blick.'} />
-      {(workspaceId || workspaceError) && <button className="secondary briefing-refresh" onClick={() => workspaceError && onRetryWorkspace ? onRetryWorkspace() : void data.refresh()} disabled={loading}><RefreshCw size={15} />{loading ? 'Lädt…' : error ? 'Erneut laden' : 'Aktualisieren'}</button>}
+      {(workspaceId || workspaceError) && <button className="secondary briefing-refresh" onClick={() => workspaceError && onRetryWorkspace ? onRetryWorkspace() : void data.refresh()} disabled={loading || !online}><RefreshCw size={15} />{!online ? 'Offline' : loading ? 'Lädt…' : error ? 'Erneut laden' : 'Aktualisieren'}</button>}
     </div>
-    {error && <div className="data-alert" role="alert">{briefingLoadError(error)}</div>}
+    {!online && <div className="data-alert" role="status">Keine Internetverbindung. Das Briefing kann gerade nicht aktualisiert werden. Sobald du wieder verbunden bist, wird es erneut geladen.</div>}
+    {online && error && <div className="data-alert" role="alert">{briefingLoadError(error)}</div>}
     {!workspaceId ? <div className="panel briefing-empty">
-      <FolderKanban size={34} /><b>{workspaceLoading ? 'Workspaces werden geladen…' : workspaceError ? 'Workspaces konnten nicht geladen werden' : 'Noch kein Workspace ausgewählt'}</b>
-      {!workspaceLoading && !workspaceError && <span>Lege in den Einstellungen einen Workspace an oder wähle einen bestehenden aus.</span>}
+      <FolderKanban size={34} /><b>{!online ? 'Workspace offline nicht verfügbar' : workspaceLoading ? 'Workspaces werden geladen…' : workspaceError ? 'Workspaces konnten nicht geladen werden' : 'Noch kein Workspace ausgewählt'}</b>
+      {online && !workspaceLoading && !workspaceError && <span>Lege in den Einstellungen einen Workspace an oder wähle einen bestehenden aus.</span>}
     </div> : <>
-      <div className="briefing-live-note" role="status">
+      {online && <div className="briefing-live-note" role="status">
         <span className={'briefing-live-pill ' + (data.connection === 'connected' && available ? 'is-connected' : '')}><i />
           {error ? 'Aktualisierung fehlgeschlagen' : data.connection === 'disconnected' ? 'Live-Verbindung unterbrochen' : data.connection === 'connected' ? 'Automatische Aktualisierung' : 'Verbindung wird hergestellt…'}
         </span>
         <span>{data.updatedAt && !error ? 'Stand ' + new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' }).format(data.updatedAt) : loading ? 'Daten werden geladen…' : 'Bitte erneut aktualisieren.'}</span>
-      </div>
+      </div>}
       <div className="stats">
         {[
           [model.openCount, 'Offen im Team'],
@@ -96,7 +104,7 @@ export function BriefingPage({ openBusiness, displayName, workspaceId, workspace
           [model.attentionTasks.length, 'Handlungsbedarf'],
         ].map(([value, label]) => <div className="stat briefing-stat" key={label}><b>{available ? value : '—'}</b><span>{label}</span></div>)}
       </div>
-      {!available ? <div className="panel briefing-empty"><FolderKanban size={28} /><b>{loading ? 'Dein Briefing wird geladen…' : 'Briefing derzeit nicht verfügbar'}</b><span>{loading ? 'Aufgaben und Projekte werden synchronisiert.' : 'Aktualisiere die Übersicht, um den aktuellen Stand zu laden.'}</span></div> : <>
+      {!available ? <div className="panel briefing-empty"><FolderKanban size={28} /><b>{!online ? 'Briefing offline nicht verfügbar' : loading ? 'Dein Briefing wird geladen…' : 'Briefing derzeit nicht verfügbar'}</b><span>{!online ? 'Für das Laden ist eine Internetverbindung erforderlich.' : loading ? 'Aufgaben und Projekte werden synchronisiert.' : 'Aktualisiere die Übersicht, um den aktuellen Stand zu laden.'}</span></div> : <>
         <div className="grid briefing-grid">
           <section className="panel briefing-section" aria-labelledby="briefing-today">
             <div className="briefing-panel-head"><div><h2 id="briefing-today">Heute erledigen <span>{model.dueTasks.length}</span></h2><p>Deine heute fälligen und überfälligen Aufgaben.{model.overdueCount > 0 ? ' Davon ' + model.overdueCount + ' überfällig.' : ''}</p></div>

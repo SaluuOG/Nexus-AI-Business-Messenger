@@ -15,8 +15,8 @@ try {
 } catch { full = true; }
 const add = (units,browsers) => { for(const name of units)unit.add(name);for(const name of browsers)browser.add(name); };
 for(const file of changed) {
-  if (/^(src\/features\/(connection\/|drafts\/safeTextSend)|tests\/(safe-text-send.test.mjs|browser\/chat-connection.mjs))/.test(file)) {
-    add(['tests/safe-text-send.test.mjs','tests/chat-drafts.test.mjs'], ['tests/browser/chat-connection.mjs']); continue;
+  if (/^(src\/features\/(connection\/|drafts\/safeTextSend)|tests\/(safe-text-send.test.mjs|read-availability.test.mjs|browser\/(chat-connection|offline-availability).mjs))/.test(file)) {
+    add(['tests/safe-text-send.test.mjs','tests/chat-drafts.test.mjs','tests/read-availability.test.mjs'], ['tests/browser/chat-connection.mjs','tests/browser/offline-availability.mjs']); continue;
   }
   if (/^(src\/features\/notifications\/nativePush|src\/components\/NativePushPreparation|tests\/browser\/native-push|tests\/native-push)/.test(file)) {
     add(['tests/native-push.test.mjs'], ['tests/browser/native-push.mjs']); continue;
@@ -50,7 +50,7 @@ for(const file of changed) {
 }
 if(full) {
   for(const name of readdirSync('tests').filter(name=>name.endsWith('.test.mjs')))unit.add('tests/'+name);
-  for(const name of ['chat-connection','native-push','read-recovery','auth-recovery','project-templates','mobile-push','task-attachments','task-collaboration','task-mentions','mobile-workflows','chat-scan','briefing','mobile-install','workspace-lifecycle','message-history','message-tasks','settings','notifications'])browser.add(`tests/browser/${name}.mjs`);
+  for(const name of ['offline-availability','chat-connection','native-push','read-recovery','auth-recovery','project-templates','mobile-push','task-attachments','task-collaboration','task-mentions','mobile-workflows','chat-scan','briefing','mobile-install','workspace-lifecycle','message-history','message-tasks','settings','notifications'])browser.add(`tests/browser/${name}.mjs`);
 }
 const selection={unit:[...unit].sort(),browser:[...browser].sort()};
 console.log(JSON.stringify({scope:full?'full':'changed',...selection}));

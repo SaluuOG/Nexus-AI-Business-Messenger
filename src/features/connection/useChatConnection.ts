@@ -20,11 +20,11 @@ export function useChatConnection(scope: string | null) {
   }, [channel, scope]);
   const status = channel.scope === scope ? channel.status : 'CONNECTING';
   const message = !online
-    ? 'Keine Internetverbindung. Dein Nachrichtentext bleibt erhalten. Fehlgeschlagene Nachrichten kannst du später mit „Erneut senden“ abschicken.'
+    ? !scope ? 'Keine Internetverbindung. Chats können gerade nicht aktualisiert werden.' : 'Keine Internetverbindung. Dein Nachrichtentext bleibt erhalten. Fehlgeschlagene Nachrichten kannst du später mit „Erneut senden“ abschicken.'
     : !scope ? null : status === 'SUBSCRIBED'
       ? channel.interrupted ? 'Live-Verbindung wiederhergestellt. Fehlgeschlagene Nachrichten bitte mit „Erneut senden“ abschicken.' : null
       : status === 'CONNECTING'
         ? 'Live-Verbindung wird hergestellt …'
         : 'Live-Verbindung unterbrochen. Die Verbindung wird erneut aufgebaut. Dein Nachrichtentext bleibt erhalten.';
-  return { message, onStatus };
+  return { message, onStatus, online };
 }
