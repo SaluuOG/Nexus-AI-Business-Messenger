@@ -1,4 +1,13 @@
-.reaction-bubble { touch-action: manipulation; }
+.reaction-bubble { touch-action: pan-y pinch-zoom; position: relative; transition: transform .16s ease-out; -webkit-touch-callout: none; }
+.reaction-bubble.is-swiping { transition: none; }
+.swipe-reply-hint { position: absolute; left: -30px; top: 50%; transform: translateY(-50%); color: #bcb4ff; font-size: 25px; }
+.message-context-menu, .reaction-picker { width: 296px; }
+.message-options-menu .reaction-choices { display: flex; gap: 2px; padding: 4px 0; }
+.message-options-menu .reaction-choices button { flex: 1 1 0; width: 0; min-width: 0; min-height: 44px; padding: 0; justify-content: center; border-radius: 50%; }
+.reaction-choices button > span { font-size: 24px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.reaction-choices button[aria-checked="true"] { background: #403567; outline: 1px solid #bcb4ff; }
+.message-context-menu .reaction-choices { border-bottom: 1px solid #364051; margin-bottom: 4px; padding-bottom: 10px; }
+@media (prefers-reduced-motion: reduce) { .reaction-bubble { transition: none; } }
 .message-reaction-trigger {
   display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
   width: 36px; height: 32px; margin: -3px 0 -4px 3px; padding: 0;

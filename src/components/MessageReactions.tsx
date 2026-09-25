@@ -1,12 +1,12 @@
 import { Heart } from 'lucide-react';
-import { useRef, type ReactNode } from 'react';
+import { createContext, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { reactionChoices, reactionLabel, type MessageReaction, type ReactionEmoji } from '../features/data/messageReactions';
 import { useAnchoredMenu } from './useAnchoredMenu';
 import '../message-options.css';
 import '../message-reactions.css';
 
-type ReactionProps = { rows: MessageReaction[]; disabled: boolean; pending: boolean; onChoose: (emoji: ReactionEmoji) => void };
+export type ReactionProps = { rows: MessageReaction[]; disabled: boolean; pending: boolean; onChoose: (emoji: ReactionEmoji) => void };
 
 export function ReactionPicker({ rows, disabled, pending, onChoose }: ReactionProps) {
   const { id, trigger, menu, initialFocus, open, setOpen, closeMenu, onMenuKeyDown } = useAnchoredMenu();
@@ -19,13 +19,23 @@ export function ReactionPicker({ rows, disabled, pending, onChoose }: ReactionPr
     </button>
     {open && createPortal(<div ref={menu} id={id} className="message-options-menu reaction-picker" role="menu" aria-label="Reaktion auswählen" onKeyDown={onMenuKeyDown}>
       <p>Reaktion auswählen</p>
-      {reactionChoices.map(choice => <button key={choice.emoji} type="button" role="menuitemradio" tabIndex={-1} aria-checked={own === choice.emoji} disabled={disabled || pending} onClick={() => { closeMenu(); onChoose(choice.emoji); }}>
-        <span aria-hidden="true">{choice.emoji}</span>{choice.label}{own === choice.emoji && <small aria-hidden="true">✓</small>}
-      </button>)}
+      <ReactionChoices rows={rows} disabled={disabled} pending={pending} onChoose={emoji => { closeMenu(); onChoose(emoji); }} />
       <small>Nochmal auswählen zum Entfernen</small>
     </div>, document.body)}
   </>;
 }
+
+export function ReactionChoices({ rows, disabled, pending, onChoose }: ReactionProps) {
+  const own = rows.find(row => row.mine)?.emoji;
+  return <div className="reaction-choices" role="group" aria-label="Schnellreaktionen">
+    {reactionChoices.map(choice => <button key={choice.emoji} type="button" role="menuitemradio" tabIndex={-1} aria-label={choice.label} title={choice.label} aria-checked={own === choice.emoji} disabled={disabled || pending} onClick={() => onChoose(choice.emoji)}>
+      <span aria-hidden="true">{choice.emoji}</span>
+    </button>)}
+  </div>;
+}
+
+type GestureActions = { options: () => void; reply: (() => void) | undefined };
+export const MessageGestureContext = createContext<RefObject<GestureActions | null> | null>(null);
 
 export function MessageReactions({ rows, disabled, pending, onChoose }: ReactionProps) {
   if (!rows.length) return null;
@@ -42,7 +52,12 @@ export function MessageReactions({ rows, disabled, pending, onChoose }: Reaction
 const interactive = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest('button,a,input,textarea,select,audio,video,[role="menu"],[contenteditable="true"]'));
 
 export function ReactionBubble({ className, disabled, onLike, children }: { className: string; disabled: boolean; onLike: () => void; children: ReactNode }) {
-  const start = useRef<{ x: number; y: number; time: number; moved: boolean } | null>(null);
+  const actions = useRef<GestureActions | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [offset, setOffset] = useState(0);
+  const start = useRef<{ x: number; y: number; time: number; moved: boolean; held: boolean; swipe: boolean; cancelled: boolean } | null>(null);
+  const clearTimer = () => { clearTimeout(timer.current); timer.current = undefined; };
+  useEffect(() => { if (disabled) { clearTimer(); start.current = null; setOffset(0); } return clearTimer; }, [disabled]);
   const lastTap = useRef<{ x: number; y: number; time: number } | null>(null);
   const lastLike = useRef(-Infinity);
   const lastTouch = useRef(-Infinity);
@@ -52,26 +67,59 @@ export function ReactionBubble({ className, disabled, onLike, children }: { clas
     lastLike.current = now;
     onLike();
   };
-  return <div className={`${className} reaction-bubble`}
+  return <MessageGestureContext.Provider value={actions}><div className={`${className} reaction-bubble${offset ? ' is-swiping' : ''}`} style={offset ? { transform: `translateX(${offset}px)` } : undefined}
+    onContextMenu={event => {
+      if (disabled || interactive(event.target) || !actions.current) return;
+      event.preventDefault();
+      // Touch selection can emit contextmenu even after a short tap. The hold
+      // timer owns touch menus; only mouse/keyboard context menus open here.
+      if (performance.now() - lastTouch.current < 1000) return;
+      clearTimer(); lastTap.current = null; actions.current.options();
+    }}
     onDoubleClick={event => { if (!disabled && performance.now() - lastTouch.current > 1000 && !interactive(event.target)) { event.preventDefault(); like(); } }}
     onPointerDown={event => {
       if (event.pointerType === 'touch') lastTouch.current = performance.now();
       if (disabled || event.pointerType !== 'touch' || !event.isPrimary || interactive(event.target)) { start.current = null; lastTap.current = null; return; }
-      start.current = { x: event.clientX, y: event.clientY, time: performance.now(), moved: false };
+      clearTimer();
+      start.current = { x: event.clientX, y: event.clientY, time: performance.now(), moved: false, held: false, swipe: false, cancelled: false };
+      timer.current = setTimeout(() => {
+        if (!start.current || start.current.moved) return;
+        start.current.held = true;
+        lastTap.current = null;
+        actions.current?.options();
+      }, 500);
     }}
-    onPointerMove={event => { if (start.current && Math.hypot(event.clientX - start.current.x, event.clientY - start.current.y) > 12) start.current.moved = true; }}
-    onPointerCancel={() => { start.current = null; lastTap.current = null; }}
+    onPointerMove={event => {
+      const down = start.current;
+      if (!down || down.held || down.cancelled) return;
+      const dx = event.clientX - down.x, dy = event.clientY - down.y;
+      if (Math.hypot(dx, dy) > 12) {
+        clearTimer(); down.moved = true; lastTap.current = null;
+        if (!down.swipe && (Math.abs(dy) >= Math.abs(dx) || dx < 0)) { down.cancelled = true; return; }
+        if (actions.current?.reply && dx > Math.abs(dy) * 1.5) {
+          down.swipe = true;
+          setOffset(Math.max(0, Math.min(72, dx * .65)));
+        }
+      }
+    }}
+    onPointerCancel={() => { clearTimer(); start.current = null; lastTap.current = null; setOffset(0); }}
     onPointerUp={event => {
+      clearTimer();
       const down = start.current;
       start.current = null;
+      setOffset(0);
       if (!down) return;
       const now = performance.now();
-      if (disabled || down.moved || now - down.time > 350 || interactive(event.target)) { lastTap.current = null; return; }
+      if (!disabled && down.swipe && !down.cancelled && event.clientX - down.x >= 64 && Math.abs(event.clientY - down.y) < 40) {
+        event.preventDefault(); lastTap.current = null; actions.current?.reply?.(); return;
+      }
+      if (disabled || down.held || down.moved || now - down.time > 350 || interactive(event.target)) { lastTap.current = null; return; }
       const previous = lastTap.current;
       if (previous && now - previous.time < 350 && Math.hypot(event.clientX - previous.x, event.clientY - previous.y) < 24) {
         event.preventDefault(); lastTap.current = null; like();
       } else lastTap.current = { x: event.clientX, y: event.clientY, time: now };
     }}>
+    {offset > 0 && <span className="swipe-reply-hint" aria-hidden="true">↩</span>}
     {children}
-  </div>;
+  </div></MessageGestureContext.Provider>;
 }

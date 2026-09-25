@@ -4,7 +4,15 @@ Einzel- und Gruppenchats bieten neben „Optionen“ ein Herzsymbol mit der Ausw
 ❤️ Herz, 👍 Gefällt mir, 😂 Lachen, 😮 Überrascht, 😢 Traurig und 🙏 Danke.
 Doppelklick bzw. zweimaliges kurzes Antippen einer Nachrichtenblase setzt ein
 Herz. Wiederholtes Doppeltippen lässt ein vorhandenes Herz stehen. Scrollen,
-langes Drücken und Bedienelemente wie Anhanglinks lösen keine Reaktion aus.
+langes Drücken und Bedienelemente wie Anhanglinks vergeben kein versehentliches Herz.
+
+Eine halbe Sekunde gedrückt halten öffnet das Optionen-Menü mit einer kompakten
+Emoji-Leiste. Dasselbe Menü ist über ⋯ und am Desktop per Rechtsklick erreichbar.
+Nach rechts wischen (mindestens 64 Pixel) bereitet eine Antwort vor. Senkrechtes
+Scrollen, abgebrochene Gesten und kurze Wischbewegungen lösen keine Antwort aus.
+Herzsymbol und ⋯ bleiben als Alternativen ohne Gesten verfügbar. Die Emoji-Leiste
+lässt sich auch mit Pfeiltasten bedienen; Escape schließt sie und gibt den Fokus
+zurück. Menüs werden innerhalb des sichtbaren Bildschirmbereichs positioniert.
 
 Pro Person und Nachricht bleibt eine Reaktion aktiv. Eine andere Auswahl ersetzt
 sie; erneute Auswahl oder Antippen der eigenen Reaktion entfernt sie. Die Blase

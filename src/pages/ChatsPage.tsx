@@ -1235,6 +1235,7 @@ export function ChatsPage({
                         {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${message.read_at ? ' read' : ''}`}>{message.read_at ? <CheckCheck size={13} /> : '✓'}</span>}
                         {!readOnly && !message.deleted_at && <ReactionPicker rows={reactions.forMessage(message.message_id)} disabled={!reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
                         {!readOnly && !message.deleted_at && <MessageOptions
+                          reactions={{ rows: reactions.forMessage(message.message_id), disabled: !reactions.ready, pending: reactions.pending(message.message_id), onChoose: emoji => reactions.choose(message.message_id, emoji) }}
                           currentUserId={currentUserId} workspaceId={workspaceId}
                           source={{ kind: 'direct', messageId: message.message_id, body: message.body, chatName: nameOf(currentChat), attachmentName: message.attachments[0]?.file_name }}
                           onReply={() => { setEditing(null); restoreSavedDraft(currentChat.conversation_id); setReplyingTo(message); }}

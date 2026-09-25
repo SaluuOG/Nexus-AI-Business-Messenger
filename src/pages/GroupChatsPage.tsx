@@ -1568,6 +1568,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                         {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${fullyRead ? ' read' : ''}`} title={readTitle}>{message.read_count > 0 ? <CheckCheck size={13} /> : '✓'}</span>}
                         {!readOnly && !message.deleted_at && <ReactionPicker rows={reactions.forMessage(message.message_id)} disabled={!reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
                         {!readOnly && !message.deleted_at && <MessageOptions
+                          reactions={{ rows: reactions.forMessage(message.message_id), disabled: !reactions.ready, pending: reactions.pending(message.message_id), onChoose: emoji => reactions.choose(message.message_id, emoji) }}
                           currentUserId={currentUserId} workspaceId={workspaceId}
                           source={{ kind: 'group', messageId: message.message_id, body: message.body, chatName: currentGroup.name, attachmentName: message.attachments?.[0]?.file_name }}
                           onReply={() => {

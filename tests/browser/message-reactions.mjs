@@ -61,6 +61,23 @@ try {
           await page.keyboard.press('Escape');
           assert.equal(await page.evaluate(()=>window.nexusTest.reactionCalls.length),calls,'Scrolling, long press and interactive controls must not react');
 
+          // Long press exposes the same actions and quick reactions without liking.
+          await body.dispatchEvent('pointerdown',{pointerType:'touch',isPrimary:true,clientX:100,clientY:200});
+          await page.waitForTimeout(550);
+          const options=page.getByRole('menu',{name:'Nachrichtenoptionen',exact:true});
+          await options.waitFor();
+          await body.dispatchEvent('pointerup',{pointerType:'touch',isPrimary:true,clientX:100,clientY:200});
+          assert.equal(await options.getByRole('menuitemradio').count(),6);
+          assert.equal(await page.evaluate(()=>window.nexusTest.reactionCalls.length),calls);
+          await options.getByRole('menuitemradio',{name:'Herz',exact:true}).click();
+          await heart().waitFor(); await heart().click();
+          await message.locator('.message-reactions').waitFor({state:'hidden'});
+          // A right swipe selects a reply; vertical scrolling does not.
+          await body.dispatchEvent('pointerdown',{pointerType:'touch',isPrimary:true,clientX:70,clientY:200});
+          await body.dispatchEvent('pointermove',{pointerType:'touch',isPrimary:true,clientX:145,clientY:205});
+          await body.dispatchEvent('pointerup',{pointerType:'touch',isPrimary:true,clientX:145,clientY:205});
+          await page.locator('.composer-context').waitFor();
+
           for(const width of [320,390,1440]) {
             await page.setViewportSize({width,height:844});
             await picker.click();
