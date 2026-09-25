@@ -1,3 +1,5 @@
+import { MessageReactions, ReactionBubble, ReactionPicker } from '../components/MessageReactions';
+import { useMessageReactions } from '../features/data/useMessageReactions';
 import { patchSavedMessage } from '../features/offline/chatCache';
 import { offlineChatList, offlineMessagePage, offlineStamp } from '../features/offline/chatReads';
 import { readableLoadError } from '../features/connection/readAvailability';
@@ -895,6 +897,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   }, [groups, query, workflows.states, statusFilter]);
 
   const currentGroup = groups.find((group) => group.group_id === selectedId) || null;
+  const reactions = useMessageReactions('group', currentGroup?.group_id, currentUserId, messages.filter(message => !message.deleted_at).map(message => message.message_id), !readOnly);
   const scanHistoryVersion = useMemo(
     () => JSON.stringify([scanRevision, currentGroup?.last_message_at ?? null, currentGroup?.last_message ?? null]),
     [scanRevision, currentGroup?.last_message_at, currentGroup?.last_message],
@@ -1409,6 +1412,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       </section>
 
       <section className="conversation">
+        {reactions.error && <div className="chat-error reactions-error" role="alert">{reactions.error}<button type="button" onClick={reactions.refresh}>Erneut laden</button></div>}
         {(cachedAt || connection.message) && <div className="chat-error" role="status" aria-live="polite">{cachedAt ? offlineStamp(cachedAt) + ". Gespeichert sind bis zu 100 Nachrichten je Chat. Neue Nachrichten werden online geladen." : connection.message}</div>}
         <div className="mobile-chat-backbar"><button type="button" onClick={() => { setSelectedId(null); setError(null); setContextWarning(null); setChatSearch({}); }}><ArrowLeft size={20} /> Alle Gruppen</button></div>
         <TaskMessageContext kind="group" onChatResolved={id => { setSelectedId(id); void refreshGroups(id); }} />
@@ -1552,7 +1556,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                     style={highlightedMessageId === message.message_id ? { outline: '2px solid #8f87ff', outlineOffset: 5, borderRadius: 12 } : undefined}
                   >
                     {!mine && !message.deleted_at && <small className="group-message-sender">{sender}</small>}
-                    <div className={mine ? 'bubble me' : 'bubble'}>
+                    <ReactionBubble className={mine ? 'bubble me' : 'bubble'} disabled={readOnly || !reactions.ready || reactions.pending(message.message_id) || Boolean(message.deleted_at)} onLike={() => reactions.like(message.message_id)}>
                       {message.reply_to_message_id && (
                         <div className="reply-preview"><b>{message.reply_sender_id === currentUserId ? 'Du' : message.reply_sender_name || 'Nexus Nutzer'}</b><span>{message.reply_body || 'Anhang'}</span></div>
                       )}
@@ -1562,6 +1566,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                         {message.edited_at && !message.deleted_at && <small>bearbeitet</small>}
                         <time>{formatTime(message.created_at)}</time>
                         {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${fullyRead ? ' read' : ''}`} title={readTitle}>{message.read_count > 0 ? <CheckCheck size={13} /> : '✓'}</span>}
+                        {!readOnly && !message.deleted_at && <ReactionPicker rows={reactions.forMessage(message.message_id)} disabled={!reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
                         {!readOnly && !message.deleted_at && <MessageOptions
                           currentUserId={currentUserId} workspaceId={workspaceId}
                           source={{ kind: 'group', messageId: message.message_id, body: message.body, chatName: currentGroup.name, attachmentName: message.attachments?.[0]?.file_name }}
@@ -1579,7 +1584,8 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                           replyDisabled={awaitingManualRetry} editDisabled={awaitingManualRetry} deleteDisabled={saving}
                         />}
                       </div>
-                    </div>
+                      {!message.deleted_at && <MessageReactions rows={reactions.forMessage(message.message_id)} disabled={readOnly || !reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
+                    </ReactionBubble>
                   </div>
                 );
               })}

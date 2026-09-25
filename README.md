@@ -46,6 +46,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Realtime-Synchronisierung für neue, bearbeitete und gelöschte Nachrichten
 - Realtime-Lesestatus mit Doppelhaken für gelesene eigene Nachrichten
 - Antworten auf einzelne Nachrichten mit Reply-Vorschau
+- Herz per Doppeltippen/Doppelklick und sechs Emoji-Reaktionen mit Zähler in Einzel- und Gruppenchats ([Details und Prüfung](docs/message-reactions.md))
 - eigene Nachrichten bearbeiten
 - eigene Nachrichten per Soft-Delete löschen
 - gelöschte Nachrichten verlieren serverseitig ihren Nachrichtentext

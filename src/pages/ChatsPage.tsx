@@ -1,3 +1,5 @@
+import { MessageReactions, ReactionBubble, ReactionPicker } from '../components/MessageReactions';
+import { useMessageReactions } from '../features/data/useMessageReactions';
 import { patchSavedMessage } from '../features/offline/chatCache';
 import { offlineChatList, offlineMessagePage, offlineStamp } from '../features/offline/chatReads';
 import { readableLoadError } from '../features/connection/readAvailability';
@@ -835,6 +837,7 @@ export function ChatsPage({
     ) && matchesChatStatus(workflows.states.get(conversation.conversation_id), statusFilter));
   }, [conversations, query, workflows.states, statusFilter]);
   const currentChat = conversations.find((conversation) => conversation.conversation_id === selectedId) || null;
+  const reactions = useMessageReactions('direct', currentChat?.conversation_id, currentUserId, messages.filter(message => !message.deleted_at).map(message => message.message_id), !readOnly);
   const scanHistoryVersion = JSON.stringify([
     currentHistoryRevision,
     currentChat?.conversation_id,
@@ -1158,6 +1161,7 @@ export function ChatsPage({
       </section>
 
       <section className="conversation">
+        {reactions.error && <div className="chat-error reactions-error" role="alert">{reactions.error}<button type="button" onClick={reactions.refresh}>Erneut laden</button></div>}
         {(cachedAt || connection.message) && <div className="chat-error" role="status" aria-live="polite">{cachedAt ? offlineStamp(cachedAt) + ". Gespeichert sind bis zu 100 Nachrichten je Chat. Neue Nachrichten werden online geladen." : connection.message}</div>}
         <div className="mobile-chat-backbar"><button type="button" onClick={() => { setSelectedId(null); setError(null); setContextWarning(null); setContextRetryMessageId(null); setChatSearch({}); }}><ArrowLeft size={20} /> Alle Chats</button></div>
         <TaskMessageContext kind="direct" onChatResolved={(id) => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setSelectedId(id); void refreshConversations(id); }} />
@@ -1217,7 +1221,7 @@ export function ChatsPage({
                     className={`message-wrap${mine ? ' mine' : ''}${highlighted ? ' message-anchor-highlight' : ''}`}
                     style={highlighted ? { outline: '2px solid #8f87ff', outlineOffset: 6, borderRadius: 12 } : undefined}
                   >
-                    <div className={mine ? 'bubble me' : 'bubble'}>
+                    <ReactionBubble className={mine ? 'bubble me' : 'bubble'} disabled={readOnly || !reactions.ready || reactions.pending(message.message_id) || Boolean(message.deleted_at)} onLike={() => reactions.like(message.message_id)}>
                       {message.reply_to_message_id && <div className="reply-preview"><b>{message.reply_sender_id === currentUserId ? 'Du' : nameOf(currentChat)}</b><span>{message.reply_body || (cachedAt ? 'Antwort auf eine Nachricht' : 'Anhang')}</span></div>}
                       {!message.deleted_at && message.attachments.length > 0 && (
                         <div className="message-attachments">
@@ -1229,6 +1233,7 @@ export function ChatsPage({
                         {message.edited_at && !message.deleted_at && <small>bearbeitet</small>}
                         <time>{formatTime(message.created_at)}</time>
                         {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${message.read_at ? ' read' : ''}`}>{message.read_at ? <CheckCheck size={13} /> : '✓'}</span>}
+                        {!readOnly && !message.deleted_at && <ReactionPicker rows={reactions.forMessage(message.message_id)} disabled={!reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
                         {!readOnly && !message.deleted_at && <MessageOptions
                           currentUserId={currentUserId} workspaceId={workspaceId}
                           source={{ kind: 'direct', messageId: message.message_id, body: message.body, chatName: nameOf(currentChat), attachmentName: message.attachments[0]?.file_name }}
@@ -1238,7 +1243,8 @@ export function ChatsPage({
                           replyDisabled={Boolean(textRetry)} editDisabled={Boolean(textRetry)} deleteDisabled={actionId === message.message_id}
                         />}
                       </div>
-                    </div>
+                      {!message.deleted_at && <MessageReactions rows={reactions.forMessage(message.message_id)} disabled={readOnly || !reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
+                    </ReactionBubble>
                   </div>
                 );
               })}
