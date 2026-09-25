@@ -9,9 +9,7 @@ import {
   MessageCircle,
   Mic,
   Paperclip,
-  Pencil,
   RefreshCw,
-  Reply,
   Search,
   Send,
   Square,
@@ -29,7 +27,7 @@ import {
   type ChatStatusFilterValue,
 } from '../components/ChatStatusFilter';
 import { Header } from '../components/Header';
-import { MessageTaskAction } from '../components/MessageTaskAction';
+import { MessageOptions } from '../components/MessageOptions';
 import { TaskMessageContext } from '../components/TaskMessageContext';
 import { useChatScanWorkflows } from '../features/ai/useChatScanWorkflows';
 import {
@@ -1231,16 +1229,16 @@ export function ChatsPage({
                         {message.edited_at && !message.deleted_at && <small>bearbeitet</small>}
                         <time>{formatTime(message.created_at)}</time>
                         {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${message.read_at ? ' read' : ''}`}>{message.read_at ? <CheckCheck size={13} /> : '✓'}</span>}
+                        {!readOnly && !message.deleted_at && <MessageOptions
+                          currentUserId={currentUserId} workspaceId={workspaceId}
+                          source={{ kind: 'direct', messageId: message.message_id, body: message.body, chatName: nameOf(currentChat), attachmentName: message.attachments[0]?.file_name }}
+                          onReply={() => { setEditing(null); restoreSavedDraft(currentChat.conversation_id); setReplyingTo(message); }}
+                          onEdit={mine && message.body.trim() ? () => { setReplyingTo(null); clearPending(); setEditing(message); setDraft(message.body); } : undefined}
+                          onDelete={mine ? () => void remove(message) : undefined}
+                          replyDisabled={Boolean(textRetry)} editDisabled={Boolean(textRetry)} deleteDisabled={actionId === message.message_id}
+                        />}
                       </div>
                     </div>
-                    {!readOnly && !message.deleted_at && (
-                      <div className="message-actions">
-                        <MessageTaskAction currentUserId={currentUserId} workspaceId={workspaceId} source={{ kind: 'direct', messageId: message.message_id, body: message.body, chatName: nameOf(currentChat), attachmentName: message.attachments[0]?.file_name }} />
-                        <button onClick={() => { setEditing(null); restoreSavedDraft(currentChat.conversation_id); setReplyingTo(message); }} disabled={Boolean(textRetry)} title="Antworten"><Reply size={13} /></button>
-                        {mine && message.body.trim() && <button onClick={() => { setReplyingTo(null); clearPending(); setEditing(message); setDraft(message.body); }} disabled={Boolean(textRetry)} title="Bearbeiten"><Pencil size={13} /></button>}
-                        {mine && <button onClick={() => void remove(message)} disabled={actionId === message.message_id} title="Löschen"><Trash2 size={13} /></button>}
-                      </div>
-                    )}
                   </div>
                 );
               })}

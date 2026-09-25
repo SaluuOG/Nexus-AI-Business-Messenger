@@ -14,8 +14,85 @@ const server = await createServer({
 });
 await server.listen();
 await mkdir('browser-results', { recursive: true });
+
+// Exercise the real message bubbles with isolated fixture messages. Task creation
+// below also verifies that selecting a menu item does not unmount its dialog.
+async function checkMessageOptions(page, browserName, kind) {
+  const groups = kind === 'group';
+  const ownId = `${kind}-options-own`;
+  const other = page.locator('.message-wrap').first();
+  const trigger = other.getByRole('button', { name: 'Optionen', exact: true });
+  const menu = page.getByRole('menu', { name: 'Nachrichtenoptionen' });
+  await trigger.waitFor();
+  assert.equal(await page.locator('.message-actions').count(), 0, 'No action row below messages');
+  assert.equal(await menu.count(), 0, 'Actions stay hidden until requested');
+  assert.equal(await other.locator('.bubble').getByRole('button', { name: 'Optionen', exact: true }).count(), 1);
+  await trigger.focus();
+  await trigger.press('ArrowDown');
+  assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Als Aufgabe übernehmen', 'Antworten']);
+  await page.keyboard.press('End');
+  assert.equal(await menu.getByRole('menuitem', { name: 'Antworten', exact: true }).evaluate(el => el === document.activeElement), true);
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'hidden' });
+  assert.equal(await trigger.evaluate(el => el === document.activeElement), true);
+  await trigger.click();
+  await menu.getByRole('menuitem', { name: 'Antworten', exact: true }).click();
+  await page.locator('.composer-context').getByText('Antworten', { exact: true }).waitFor();
+  await page.locator('.composer-context button').click();
+  await page.evaluate(({ groups, ownId }) => {
+    const rows = groups ? window.nexusTest.groupMessages : window.nexusTest.directMessages;
+    rows.push({ ...structuredClone(rows[0]), message_id: ownId, sender_id: 'me', body: 'Eigene Nachricht mit Optionen', created_at: '2026-09-14T09:00:00Z' });
+    window.nexusTest.emit(groups ? 'group_messages' : 'direct_messages', 'INSERT');
+  }, { groups, ownId });
+  const own = page.locator(`[data-message-id="${ownId}"]`);
+  const ownTrigger = own.getByRole('button', { name: 'Optionen', exact: true });
+  await ownTrigger.click();
+  assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Als Aufgabe übernehmen', 'Antworten', 'Bearbeiten', 'Löschen']);
+  await menu.getByRole('menuitem', { name: 'Bearbeiten', exact: true }).click();
+  assert.equal(await page.locator('.composer input:not([type=file])').inputValue(), 'Eigene Nachricht mit Optionen');
+  await page.locator('.composer-context button').click();
+  await ownTrigger.click();
+  const confirmation = page.waitForEvent('dialog').then(async dialog => {
+    assert.equal(dialog.type(), 'confirm');
+    assert.match(dialog.message(), /löschen/);
+    await dialog.dismiss();
+  });
+  await menu.getByRole('menuitem', { name: 'Löschen', exact: true }).click();
+  await confirmation;
+  assert.equal(await own.count(), 1, 'Cancel keeps the message');
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await ownTrigger.click();
+    const box = await menu.boundingBox();
+    assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= width && box.y + box.height <= 844, 'Menu fits the mobile viewport');
+    const target = await ownTrigger.boundingBox();
+    const bubble = await own.locator('.bubble').boundingBox();
+    assert.ok(target.width >= 44 && target.height >= 44, 'Touch target is large enough');
+    assert.ok(target.x >= bubble.x && target.y >= bubble.y && target.x + target.width <= bubble.x + bubble.width && target.y + target.height <= bubble.y + bubble.height, 'Options are inside the bubble');
+    await page.screenshot({ path: `browser-results/${browserName}-${kind}-message-options-${width}.png`, fullPage: true });
+    await own.locator('.message-body').click();
+    await menu.waitFor({ state: 'hidden' });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await ownTrigger.click();
+  await trigger.click();
+  assert.equal(await menu.count(), 1, 'Only the selected message menu stays open');
+  assert.equal(await ownTrigger.getAttribute('aria-expanded'), 'false');
+  await page.keyboard.press('Tab');
+  await menu.waitFor({ state: 'hidden' });
+  await ownTrigger.click();
+  await page.evaluate(({ groups, ownId }) => {
+    const rows = groups ? window.nexusTest.groupMessages : window.nexusTest.directMessages;
+    rows.find(row => row.message_id === ownId).deleted_at = new Date().toISOString();
+    window.nexusTest.emit(groups ? 'group_messages' : 'direct_messages');
+  }, { groups, ownId });
+  await own.getByText('Nachricht gelöscht', { exact: true }).waitFor();
+  assert.equal(await ownTrigger.count(), 0, 'Deleted messages have no options');
+  await menu.waitFor({ state: 'hidden' });
+}
+
 try {
-  for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
+  for (const [name, engine] of (process.env.NEXUS_BROWSER === 'chromium' ? [['chromium', chromium]] : [['chromium', chromium], ['webkit', webkit]])) {
     const browser = await engine.launch();
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: 'Europe/Berlin' });
     await context.route('**/*', route => route.request().url().startsWith('http://127.0.0.1:4176') ? route.continue() : route.abort());
@@ -28,7 +105,9 @@ try {
     try {
       await page.clock.setFixedTime(new Date('2026-09-14T10:00:00Z'));
       await page.goto('http://127.0.0.1:4176/#/app/chats');
-      await page.getByRole('button', { name: 'Als Aufgabe übernehmen', exact: true }).click();
+      await checkMessageOptions(page, name, 'direct');
+      await page.getByRole('button', { name: 'Optionen', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Als Aufgabe übernehmen', exact: true }).click();
       await dialog.getByRole('option', { name: 'Überfälliges Projekt', exact: true }).waitFor({ state: 'attached' });
       assert.equal(await dialog.getByLabel('Aufgabentitel *', { exact: true }).inputValue(), 'Bitte das Angebot prüfen!');
       assert.equal(await dialog.getByLabel('Beschreibung', { exact: true }).inputValue(), 'Bitte das Angebot prüfen!\nDetails für das Team.');
@@ -90,16 +169,19 @@ try {
 
       // Group conversion, long-text correction, workspace isolation and cancel.
       await page.getByRole('button', { name: 'Gruppen', exact: true }).click();
-      await page.getByRole('button', { name: 'Als Aufgabe übernehmen', exact: true }).waitFor();
+      await checkMessageOptions(page, name, 'group');
+      await page.getByRole('button', { name: 'Optionen', exact: true }).waitFor();
       await page.evaluate(() => { window.nexusTest.groupMessages[0].body = 'L'.repeat(4500); window.nexusTest.emit('group_messages'); });
       await page.locator('.message-body').filter({ hasText: 'L'.repeat(100) }).waitFor();
-      await page.getByRole('button', { name: 'Als Aufgabe übernehmen', exact: true }).click();
+      await page.getByRole('button', { name: 'Optionen', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Als Aufgabe übernehmen', exact: true }).click();
       await dialog.getByRole('alert').filter({ hasText: 'länger als 4.000 Zeichen' }).waitFor();
       assert.equal((await dialog.getByLabel('Beschreibung', { exact: true }).inputValue()).length, 4500);
       assert.equal(await dialog.getByRole('button', { name: 'Aufgabe erstellen', exact: true }).isEnabled(), false);
       await dialog.getByRole('button', { name: 'Abbrechen', exact: true }).click();
       await dialog.waitFor({ state: 'hidden' });
-      await page.getByRole('button', { name: 'Als Aufgabe übernehmen', exact: true }).click();
+      await page.getByRole('button', { name: 'Optionen', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Als Aufgabe übernehmen', exact: true }).click();
       await dialog.getByLabel('Beschreibung', { exact: true }).fill('Kurze freigegebene Beschreibung <script>window.unsafe = true</script>');
       await dialog.getByLabel('Aufgabentitel *', { exact: true }).fill('Startseite vorbereiten!');
       await dialog.getByLabel('Workspace *', { exact: true }).selectOption('w3');

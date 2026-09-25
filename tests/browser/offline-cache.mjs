@@ -61,7 +61,7 @@ try {
           await page.goto(routeURL);
           await page.locator('.messages .message-body').filter({hasText:latest}).waitFor();
           await page.locator('.conversation [role=status]').filter({hasText:'Offline – zuletzt gespeichert:'}).waitFor();
-          assert.equal(await page.locator('.message-actions').count(),0);
+          assert.equal(await page.getByRole('button', { name: 'Optionen', exact: true }).count(),0);
           assert.equal(await page.locator('[data-action=load-older-messages]').count(),0);
           assert.equal(await page.evaluate(()=>window.nexusTest.chatReadCalls.length),0,'No offline read receipts');
           // Fresh authoritative response removes a message and changes another.

@@ -2,7 +2,7 @@ import { patchSavedMessage } from '../features/offline/chatCache';
 import { offlineChatList, offlineMessagePage, offlineStamp } from '../features/offline/chatReads';
 import { readableLoadError } from '../features/connection/readAvailability';
 import { useChatConnection } from '../features/connection/useChatConnection';
-import { Camera, CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
+import { Camera, CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
@@ -10,7 +10,7 @@ import { useMobileLayout } from '../features/mobile/useMobileLayout';
 import { ChatScanAction } from '../components/ChatScanAction';
 import { ChatStatusBadge, ChatStatusFilter, matchesChatStatus, type ChatStatusFilterValue } from '../components/ChatStatusFilter';
 import { useChatScanWorkflows } from '../features/ai/useChatScanWorkflows';
-import { MessageTaskAction } from '../components/MessageTaskAction';
+import { MessageOptions } from '../components/MessageOptions';
 import { TaskMessageContext } from '../components/TaskMessageContext';
 import { Header } from '../components/Header';
 import { SUPPORTED_CHAT_ATTACHMENT_TYPES, validateChatAttachment } from '../features/data/chatData';
@@ -1562,24 +1562,24 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                         {message.edited_at && !message.deleted_at && <small>bearbeitet</small>}
                         <time>{formatTime(message.created_at)}</time>
                         {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${fullyRead ? ' read' : ''}`} title={readTitle}>{message.read_count > 0 ? <CheckCheck size={13} /> : '✓'}</span>}
+                        {!readOnly && !message.deleted_at && <MessageOptions
+                          currentUserId={currentUserId} workspaceId={workspaceId}
+                          source={{ kind: 'group', messageId: message.message_id, body: message.body, chatName: currentGroup.name, attachmentName: message.attachments?.[0]?.file_name }}
+                          onReply={() => {
+                            if (editing) {
+                              const restoredDraft = draftScope ? readChatDraft(draftScope) : '';
+                              draftRef.current = restoredDraft;
+                              setDraft(restoredDraft);
+                            }
+                            setEditing(null);
+                            setReplyingTo(message);
+                          }}
+                          onEdit={mine && message.body.trim() ? () => { setReplyingTo(null); clearPendingFile(); setEditing(message); setDraft(message.body); } : undefined}
+                          onDelete={mine ? () => void remove(message) : undefined}
+                          replyDisabled={awaitingManualRetry} editDisabled={awaitingManualRetry} deleteDisabled={saving}
+                        />}
                       </div>
                     </div>
-                    {!readOnly && !message.deleted_at && (
-                      <div className="message-actions">
-                        <MessageTaskAction currentUserId={currentUserId} workspaceId={workspaceId} source={{ kind: 'group', messageId: message.message_id, body: message.body, chatName: currentGroup.name, attachmentName: message.attachments?.[0]?.file_name }} />
-                        <button disabled={awaitingManualRetry} onClick={() => {
-                          if (editing) {
-                            const restoredDraft = draftScope ? readChatDraft(draftScope) : '';
-                            draftRef.current = restoredDraft;
-                            setDraft(restoredDraft);
-                          }
-                          setEditing(null);
-                          setReplyingTo(message);
-                        }}><Reply size={13} /></button>
-                        {mine && message.body.trim() && <button disabled={awaitingManualRetry} onClick={() => { setReplyingTo(null); clearPendingFile(); setEditing(message); setDraft(message.body); }}><Pencil size={13} /></button>}
-                        {mine && <button onClick={() => void remove(message)} disabled={saving}><Trash2 size={13} /></button>}
-                      </div>
-                    )}
                   </div>
                 );
               })}
