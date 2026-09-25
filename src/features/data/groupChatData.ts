@@ -1,3 +1,4 @@
+import { safeTextSend } from '../drafts/safeTextSend';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { createTextClientRequestId } from '../drafts/textSendRetry';
@@ -333,12 +334,12 @@ export async function sendGroupMessage(groupId: string, body: string, replyToMes
   if (!supabase) return { data: null as string | null, error: 'Supabase ist nicht konfiguriert.' };
   const requestId = clientRequestId ?? createTextClientRequestId();
   if (!UUID_PATTERN.test(requestId)) return { data: null as string | null, error: 'Die Nachricht konnte nicht sicher gesendet werden.' };
-  const { data, error } = await supabase.rpc('send_group_message_v2', {
+  const { data, error } = await safeTextSend(() => supabase!.rpc('send_group_message_v2', {
     p_group_id: groupId,
     p_body: body,
     p_client_request_id: requestId,
     p_reply_to_message_id: replyToMessageId ?? null,
-  });
+  }));
   return { data: (data as string | null) ?? null, error: error?.message ?? null };
 }
 
@@ -509,6 +510,7 @@ export async function deleteGroupChat(groupId: string) {
 }
 
 export function subscribeToGroupRealtime(groupId: string, handlers: {
+  onStatus?: (status: string) => void;
   onMessagesChanged?: (change: MessageRealtimeChange) => void;
   onReadChanged?: () => void;
   onTypingChanged?: () => void;
@@ -520,6 +522,7 @@ export function subscribeToGroupRealtime(groupId: string, handlers: {
     const change = normalizeMessageRealtimeChange(payload);
     handlers.onMessagesChanged?.({ ...change, scopeId: change.scopeId ?? groupId });
   };
+  let subscribed = false;
   const channel = supabase.channel(`group-chat:${groupId}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, scopedChange)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, scopedChange)
@@ -527,7 +530,13 @@ export function subscribeToGroupRealtime(groupId: string, handlers: {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_typing', filter: `group_id=eq.${groupId}` }, () => handlers.onTypingChanged?.())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_conversations', filter: `id=eq.${groupId}` }, () => handlers.onGroupChanged?.())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, () => handlers.onMembersChanged?.())
-    .subscribe();
+    .subscribe(status => {
+      handlers.onStatus?.(status);
+      if (status === 'SUBSCRIBED') {
+        if (subscribed) handlers.onMessagesChanged?.({ event: 'INSERT', messageId: null, scopeId: groupId });
+        subscribed = true;
+      }
+    });
 
   if (handlers.onTypingChanged && typeof window !== 'undefined') {
     const poller = window.setInterval(() => handlers.onTypingChanged?.(), 1500);

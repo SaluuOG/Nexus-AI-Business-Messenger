@@ -6,8 +6,15 @@
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>de</string>
-	<key>CFBundleDisplayName</key>
+  <key>CFBundleDisplayName</key>
         <string>Nexus</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLSchemes</key>
+      <array><string>com.saluuog.nexus</string></array>
+    </dict>
+  </array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

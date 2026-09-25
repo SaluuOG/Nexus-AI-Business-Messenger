@@ -92,7 +92,10 @@ const state = {
     ...Array.from({ length: 8 }, (_, i) => task('unassigned-' + i, 'Teamaufgabe ' + (i + 1), { assigned_to: null, status: i === 0 ? 'blocked' : 'todo' })),
     task('second', 'Aufgabe im zweiten Team', { workspace_id: 'w2', project_id: 'p4', assigned_to: null }),
   ],
+  clockFailures: JSON.parse(sessionStorage.getItem('nexusTest.clockFailures') || '{}'), clockReads: {},
   failure: null, revoked: false, delayWorkspace: null, writes: 0, channels: [], revision: 0,
+  reactionRows: JSON.parse(sessionStorage.getItem('nexusTest.reactions') || '[]'),
+  reactionCalls: [], reactionDelay: 0, reactionFailure: false, loseReactionResponse: false,
   sources: JSON.parse(sessionStorage.getItem('nexusTest.sources') || '[]'), sourceDenied: false,
   hideRecentSource: false, loseCreateResponse: false, createDelay: 0, directMessageDelay: 0,
   resetRequests: [], passwordUpdates: [], authFailure: null, signOutCount: 0, accountDeletionCalls: [],
@@ -110,7 +113,7 @@ const state = {
   groupChats: messageHistoryFixture ? historyGroupChats : [{ group_id: 'g1', name: 'Projektgruppe', role: 'member', member_count: 2, unread_count: 0, last_message: 'Startseite vorbereiten' }],
   groupMessages: messageHistoryFixture ? historyGroupMessages : [{ message_id: 'gm1', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', body: 'Startseite für den Kunden vorbereiten!', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
   searchCalls: [], textSendCalls: [], textSendWrites: 0, loseTextSendResponse: false,
-  groupChatListLoads: 0, groupChatListDelay: 0,
+  groupChatListLoads: 0, groupChatListDelay: 0, directChatListDelay: 0,
   uploadCalls: [], failAttachmentUpload: false,
   lifecycleCalls: [], lifecycleDelay: 0,
 };
@@ -442,6 +445,13 @@ export const supabase = {
       delete() { request.operation = 'delete'; return this; },
       async then(resolve, reject) {
         try {
+          if (request.operation === 'select') {
+            state.clockReads[table] = (state.clockReads[table] || 0) + 1;
+            if (state.clockFailures[table] > 0) {
+              state.clockFailures[table]--;
+              return resolve({ data: null, error: { code: 'PGRST303', message: 'JWT issued at future' } });
+            }
+          }
           if (state.failure === table) return resolve({ data: null, error: { message: 'connection failed' } });
           let rows = table === 'customers' ? state.customers : table === 'projects' ? state.projects : table === 'project_tasks' ? state.tasks
             : table === 'workspace_members' ? memberships
@@ -485,6 +495,33 @@ export const supabase = {
     return query;
   },
   async rpcResult(name, args) {
+    if (name === 'get_message_reactions') {
+      const messages = args.p_kind === 'direct' ? state.directMessages : state.groupMessages;
+      const allowed = new Set(messages.filter(message => !message.deleted_at && (message.conversation_id ?? message.group_id) === args.p_chat_id).map(message => message.message_id));
+      const rows = new Map();
+      for (const row of state.reactionRows) {
+        if (row.kind !== args.p_kind || row.chat_id !== args.p_chat_id || !row.emoji || !args.p_message_ids.includes(row.message_id) || !allowed.has(row.message_id)) continue;
+        const key = row.message_id + row.emoji;
+        const summary = rows.get(key) ?? { message_id: row.message_id, emoji: row.emoji, count: 0, mine: false };
+        summary.count++; summary.mine ||= row.user_id === user.id; rows.set(key, summary);
+      }
+      return { data: [...rows.values()], error: null };
+    }
+    if (name === 'set_message_reaction') {
+      state.reactionCalls.push(structuredClone(args));
+      const actor = user.id;
+      if (state.reactionDelay) await new Promise(resolve => setTimeout(resolve, state.reactionDelay));
+      if (state.reactionFailure) return { data: null, error: { message: 'Simulated reaction failure' } };
+      let row = state.reactionRows.find(row => row.kind === args.p_kind && row.message_id === args.p_message_id && row.user_id === actor);
+      const event = row ? 'UPDATE' : 'INSERT';
+      if (!row) { row = { kind: args.p_kind, chat_id: args.p_chat_id, message_id: args.p_message_id, user_id: actor }; state.reactionRows.push(row); }
+      row.emoji = args.p_emoji;
+      sessionStorage.setItem('nexusTest.reactions', JSON.stringify(state.reactionRows));
+      const payload = { new: { ...row, [args.p_kind === 'direct' ? 'conversation_id' : 'group_id']: args.p_chat_id } };
+      queueMicrotask(() => state.emit(args.p_kind + '_message_reactions', event, payload));
+      if (state.loseReactionResponse) { state.loseReactionResponse = false; return { data: null, error: { message: 'Lost response' } }; }
+      return { data: null, error: null };
+    }
     if (name === 'get_my_contacts' && mobileBusinessFixture) return { data: [{ contact_user_id: 'other', full_name: 'Test Kontakt', username: 'test', connected_at: '2026-01-01T00:00:00Z' }], error: null };
     if (name === 'open_direct_conversation' && mobileBusinessFixture) {
       state.customerChatCalls.push(args.p_contact_user_id);
@@ -556,7 +593,10 @@ export const supabase = {
       state.persistNotifications(); state.emit('notification_preferences');
       return { data: null, error: null };
     }
-    if (name === 'get_direct_conversations') return { data: structuredClone(state.conversations), error: null };
+    if (name === 'get_direct_conversations') {
+      if (state.directChatListDelay) await new Promise(resolve => setTimeout(resolve, state.directChatListDelay));
+      return { data: structuredClone(state.conversations), error: null };
+    }
     if (name === 'get_direct_messages') return { data: state.hideRecentSource ? [] : structuredClone(state.directMessages.filter(message => directChatId(message) === args.p_conversation_id).map(normalizedDirectMessage)), error: null };
     if (name === 'get_direct_message_page') {
       if (state.directMessageDelay) await new Promise(r => setTimeout(r, state.directMessageDelay));

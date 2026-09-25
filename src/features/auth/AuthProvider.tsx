@@ -1,3 +1,5 @@
+import { savedOfflineAccount, rememberOfflineAccount } from '../offline/offlineAccount';
+import { syncOfflineChatAccount } from '../offline/chatCache';
 import {
   createContext,
   type ReactNode,
@@ -7,11 +9,14 @@ import {
   useState,
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { routes } from '../../app/routes';
 import { backendConfigured } from '../../lib/env';
 import { initialAuthCallback, supabase } from '../../lib/supabase';
 import { deleteCurrentAccount } from './accountDeletion';
 import { syncPushAccount } from '../notifications/push';
+import { createNativeAuthHandler, NATIVE_AUTH_REDIRECT } from './nativeAuthLink';
 
 type AuthResult = {
   error: string | null;
@@ -24,10 +29,13 @@ type SignUpResult = AuthResult & {
 type AuthContextValue = {
   configured: boolean;
   loading: boolean;
+  offlineAccountId: string | null;
+  clearOfflineChats: () => Promise<void>;
   session: Session | null;
   user: User | null;
   recoveryMode: boolean;
   recoveryError: string | null;
+  authLinkError: string | null;
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signUp: (email: string, password: string, fullName: string) => Promise<SignUpResult>;
   requestPasswordReset: (email: string) => Promise<AuthResult>;
@@ -117,6 +125,7 @@ function clearAuthCallbackUrl(recoveryRequested: boolean) {
 }
 
 function buildAuthRedirect(marker: 'callback' | 'recovery') {
+  if (Capacitor.isNativePlatform()) return `${NATIVE_AUTH_REDIRECT}?auth=${marker}`;
   const url = new URL(window.location.pathname, window.location.origin);
   url.searchParams.set('auth', marker);
   return url.toString();
@@ -150,12 +159,14 @@ function publicAuthError(message: string | undefined, fallback: string) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [offlineAccountId, setOfflineAccountId] = useState(savedOfflineAccount);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(backendConfigured);
   const [recoveryMode, setRecoveryMode] = useState(
     () => hasRecoveryMarker() || hasRememberedRecoverySession(),
   );
   const [recoveryError, setRecoveryError] = useState<string | null>(readRecoveryError);
+  const [authLinkError, setAuthLinkError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supabase) {
@@ -164,33 +175,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let mounted = true;
+    let revision = 0;
+    let hasSession = false;
+    const remembered = savedOfflineAccount();
+    if (remembered && navigator.onLine === false) void syncOfflineChatAccount(remembered);
+    const applyOfflineAccount = (id: string | null, signedOut = false) => {
+      if (id || signedOut || !savedOfflineAccount()) {
+        rememberOfflineAccount(id);
+        setOfflineAccountId(id);
+        void syncOfflineChatAccount(id);
+      }
+    };
 
     const recoveryRequested = hasRecoveryMarker();
+    let firstLoad = true;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      void syncPushAccount(data.session?.user.id ?? null);
-      setSession(data.session);
-      if (recoveryRequested && data.session) {
-        rememberRecoverySession(true);
-        setRecoveryMode(true);
-        setRecoveryError(null);
-      } else if (recoveryRequested && !data.session) {
-        rememberRecoverySession(false);
-        setRecoveryError((current) =>
-          current ??
-          (initialAuthCallback.hasPkceCode
-            ? 'Dieser Link wurde noch mit dem alten Browser-Verfahren erstellt. Bitte fordere nach dem aktuellen Nexus-Update einen neuen Link an.'
-            : 'Der Wiederherstellungslink ist ungültig oder abgelaufen.'),
-        );
-      }
-      setLoading(false);
-      clearAuthCallbackUrl(recoveryRequested);
-    });
+    const loadSession = () => {
+      const request = ++revision;
+      const useRecoveryMarker = firstLoad && recoveryRequested;
+      firstLoad = false;
+      if (!hasSession) setLoading(true);
+      void supabase!.auth.getSession().then(({ data }) => {
+        if (!mounted || request !== revision) return;
+        hasSession = Boolean(data.session);
+        applyOfflineAccount(data.session?.user.id ?? null);
+        void syncPushAccount(data.session?.user.id ?? null);
+        setSession(data.session);
+        if (useRecoveryMarker && data.session) {
+          rememberRecoverySession(true);
+          setRecoveryMode(true);
+          setRecoveryError(null);
+        } else if (useRecoveryMarker && !data.session) {
+          rememberRecoverySession(false);
+          setRecoveryError((current) =>
+            current ??
+            (initialAuthCallback.hasPkceCode
+              ? 'Dieser Link wurde noch mit dem alten Browser-Verfahren erstellt. Bitte fordere nach dem aktuellen Nexus-Update einen neuen Link an.'
+              : 'Der Wiederherstellungslink ist ungültig oder abgelaufen.'),
+          );
+        }
+        setLoading(false);
+        clearAuthCallbackUrl(useRecoveryMarker);
+      }).catch(() => { if (mounted && request === revision) setLoading(false); });
+    };
+    loadSession();
+    window.addEventListener('online', loadSession);
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!mounted) return;
+      revision++;
+      hasSession = Boolean(nextSession);
+      applyOfflineAccount(nextSession?.user.id ?? null, event === 'SIGNED_OUT');
       void syncPushAccount(nextSession?.user.id ?? null);
       setSession(nextSession);
       if (event === 'PASSWORD_RECOVERY') {
@@ -207,19 +244,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      window.removeEventListener('online', loadSession);
     };
+  }, []);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client || !Capacitor.isNativePlatform()) return;
+    let active = true;
+    const handler = createNativeAuthHandler({
+      setSession: tokens => client.auth.setSession(tokens),
+      onStart() {
+        rememberRecoverySession(false);
+        setRecoveryMode(false);
+        setRecoveryError(null);
+        setAuthLinkError(null);
+      },
+      onResult({ recovery, success }) {
+        rememberRecoverySession(recovery && success);
+        setRecoveryMode(recovery && success);
+        if (!success) {
+          if (recovery) setRecoveryError('Der Wiederherstellungslink konnte nicht eingelöst werden. Prüfe deine Verbindung und öffne ihn erneut. Falls er abgelaufen ist, fordere einen neuen Link an.');
+          else setAuthLinkError('Der Bestätigungslink konnte nicht eingelöst werden. Prüfe deine Verbindung und öffne ihn erneut. Falls er abgelaufen ist, fordere einen neuen Link an.');
+        }
+        window.location.hash = recovery ? routes.resetPassword : routes.auth;
+      },
+    });
+    let listener: Awaited<ReturnType<typeof CapacitorApp.addListener>> | undefined;
+    void (async () => {
+      listener = await CapacitorApp.addListener('appUrlOpen', event => { void handler.handle(event.url); });
+      if (!active) { await listener.remove(); return; }
+      const launch = await CapacitorApp.getLaunchUrl();
+      if (launch?.url) await handler.handle(launch.url);
+    })().catch(() => { /* The regular email/password login still works if native URL handling is unavailable. */ });
+    return () => { active = false; handler.dispose(); void listener?.remove(); };
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       configured: backendConfigured,
       loading,
+      offlineAccountId,
+      async clearOfflineChats() {
+        rememberOfflineAccount(null);
+        setOfflineAccountId(null);
+        await syncOfflineChatAccount(null);
+      },
       session,
       user: session?.user ?? null,
       recoveryMode,
       recoveryError,
+      authLinkError,
       async signIn(email, password) {
         if (!supabase) return { error: 'Supabase ist noch nicht konfiguriert.' };
+        setAuthLinkError(null);
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         return {
           error: publicAuthError(error?.message, 'Die Anmeldung ist gerade nicht möglich.'),
@@ -273,22 +351,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signOut() {
         if (!supabase) return { error: null };
+        rememberOfflineAccount(null);
+        setOfflineAccountId(null);
+        await syncOfflineChatAccount(null);
         await syncPushAccount(null);
         rememberRecoverySession(false);
         const { error } = await supabase.auth.signOut();
-        if (error) void syncPushAccount(session?.user.id ?? null);
+        if (error) { void syncOfflineChatAccount(session?.user.id ?? null); void syncPushAccount(session?.user.id ?? null); }
         return { error: publicAuthError(error?.message, 'Die Abmeldung ist gerade nicht möglich.') };
       },
       async deleteAccount(confirmation) {
         const result = await deleteCurrentAccount(confirmation);
         if (!result.error) {
+          rememberOfflineAccount(null);
+          setOfflineAccountId(null);
+          await syncOfflineChatAccount(null);
           await syncPushAccount(null);
           rememberRecoverySession(false);
         }
         return result;
       },
     }),
-    [loading, recoveryError, recoveryMode, session],
+    [authLinkError, loading, offlineAccountId, recoveryError, recoveryMode, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

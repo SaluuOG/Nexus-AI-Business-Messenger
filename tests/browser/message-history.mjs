@@ -64,6 +64,66 @@ const noHorizontalOverflow = page => page.evaluate(() => ({
 }));
 
 const scenarios = [
+  ['received-attachments', async (page, name) => {
+    // Real browser media decoding with synthetic bytes; this does not claim
+    // Supabase Storage delivery or a recording from a physical microphone.
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
+    const wav = Buffer.alloc(44 + 16000);
+    wav.write('RIFF'); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
+    wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28);
+    wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
+    wav.write('data', 36); wav.writeUInt32LE(16000, 40);
+    const document = Buffer.from('Nexus synthetic attachment\n');
+    await page.context().route('https://files.example.invalid/**', route => {
+      const url = route.request().url();
+      if (url.endsWith('/sample.png')) return route.fulfill({ contentType: 'image/png', body: png });
+      if (url.endsWith('/sample.wav')) return route.fulfill({ contentType: 'audio/wav', body: wav });
+      if (url.endsWith('/sample.txt')) return route.fulfill({ contentType: 'text/plain', body: document });
+      return route.abort();
+    });
+    await page.goto(`${baseUrl}/#/app/chats?conversation=c1`);
+    await page.locator('.messages .message-body').first().waitFor();
+    await page.getByRole('button', { name: 'Briefing', exact: true }).click();
+    await page.getByRole('heading', { name: 'Dein Tagesbriefing', exact: true }).waitFor();
+    for (const kind of ['direct', 'group']) {
+      await page.evaluate(({ kind, lengths }) => {
+        const row = {
+          message_id: `received-${kind}`, sender_id: 'other', body: 'Received attachments',
+          sender_full_name: 'Team Kontakt', created_at: new Date().toISOString(),
+          deleted_at: null, ...(kind === 'direct' ? { conversation_id: 'c1' } : { group_id: 'g1' }),
+          attachments: ['png', 'wav', 'txt'].map((ext, i) => ({
+            attachment_id: `received-${kind}-${ext}`, storage_path: `test/${kind}/sample.${ext}`,
+            file_name: `sample.${ext}`, mime_type: ['image/png', 'audio/wav', 'text/plain'][i], file_size: lengths[i],
+          })),
+        };
+        (kind === 'direct' ? window.nexusTest.directMessages : window.nexusTest.groupMessages).push(row);
+        location.hash = kind === 'direct' ? '#/app/chats?conversation=c1' : '#/app/groups?group=g1';
+        window.nexusTest.emit(kind === 'direct' ? 'direct_messages' : 'group_messages', 'INSERT', {
+          eventType: 'INSERT', new: { id: row.message_id, ...row }, old: {},
+        });
+      }, { kind, lengths: [png.length, wav.length, document.length] });
+      const received = page.locator(`[data-message-id="received-${kind}"]`);
+      await received.waitFor();
+      await page.waitForFunction(id => {
+        const row = document.querySelector(`[data-message-id="${id}"]`);
+        const image = row?.querySelector('img.chat-image'); const audio = row?.querySelector('audio');
+        return image?.naturalWidth > 0 && audio?.duration > 0;
+      }, `received-${kind}`);
+      await received.locator('audio').evaluate(audio => audio.play());
+      await page.waitForFunction(id => document.querySelector(`[data-message-id="${id}"] audio`).currentTime > 0, `received-${kind}`);
+      await received.locator('audio').evaluate(audio => audio.pause());
+      // Signed URLs are cross-origin: browsers may open inline files in a new
+      // tab instead of honoring the download attribute. Check the visible file.
+      const openedPending = page.waitForEvent('popup');
+      await received.getByRole('link', { name: /sample.txt/ }).click();
+      const opened = await openedPending;
+      await opened.waitForLoadState('domcontentloaded');
+      assert.equal((await opened.locator('body').innerText()).trim(), document.toString('utf8').trim());
+      await opened.close();
+    }
+    console.log(`${name}: direct/group received image decoding, audio playback and file opening passed (synthetic media)`);
+  }],
   ['history-and-delivery', async (page, name) => {
     const directComposer = page.locator('[data-testid="direct-message-composer"]');
     const directMessageCount = count => page.waitForFunction(
@@ -227,8 +287,11 @@ const scenarios = [
     await runSearch(page, 1);
     assert.equal(await page.locator('.message-search-result').count(), 1);
     const directResult = page.locator('.message-search-result').filter({ hasText: 'Meilenstein Direkt vertraulich' });
+    // The message context may finish before the cached chat list mounts the
+    // conversation pane. It must still scroll to and highlight the result.
+    await page.evaluate(() => { window.nexusTest.directChatListDelay = 300; });
     await directResult.locator('.message-search-open').click();
-    const anchoredDirect = page.locator('[data-message-id="dm-history-008"]');
+    const anchoredDirect = page.locator('[data-message-id="dm-history-008"][aria-current="true"]');
     await anchoredDirect.waitFor();
     assert.ok(await anchoredDirect.evaluate(element => element.classList.contains('message-anchor-highlight')),
       'The exact direct-search result must be highlighted');

@@ -1,3 +1,4 @@
+import { retryRead } from './readRetry';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   loadBriefingWorkspace, subscribeToBusinessWorkspace, unsubscribeBusinessWorkspace,
@@ -25,7 +26,8 @@ export function useBriefingWorkspace(workspaceId: string | null, currentUserId?:
     }
     setSnapshot(current => ({ ...(current.scope === scope ? current : emptySnapshot(scope, true)), loading: true }));
     try {
-      const result = await loadBriefingWorkspace(workspaceId, currentUserId);
+      if (navigator.onLine === false) throw new Error('offline');
+      const result = await retryRead(() => loadBriefingWorkspace(workspaceId, currentUserId), () => request === version.current);
       if (request !== version.current) return;
       setSnapshot({
         scope, projects: result.projects, tasks: result.tasks,
@@ -53,6 +55,7 @@ export function useBriefingWorkspace(workspaceId: string | null, currentUserId?:
       : null;
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
+    window.addEventListener('online', schedule);
     // Also recover from missed notifications while a websocket reconnects.
     const interval = window.setInterval(onVisible, 60_000);
     return () => {
@@ -62,6 +65,7 @@ export function useBriefingWorkspace(workspaceId: string | null, currentUserId?:
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
+      window.removeEventListener('online', schedule);
       void unsubscribeBusinessWorkspace(channel);
     };
   }, [workspaceId, currentUserId, refresh]);

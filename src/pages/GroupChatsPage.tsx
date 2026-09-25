@@ -1,4 +1,10 @@
-import { Camera, CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Reply, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
+import { MessageReactions, ReactionBubble, ReactionPicker } from '../components/MessageReactions';
+import { useMessageReactions } from '../features/data/useMessageReactions';
+import { patchSavedMessage } from '../features/offline/chatCache';
+import { offlineChatList, offlineMessagePage, offlineStamp } from '../features/offline/chatReads';
+import { readableLoadError } from '../features/connection/readAvailability';
+import { useChatConnection } from '../features/connection/useChatConnection';
+import { Camera, CheckCheck, Crown, FileText, LogOut, MessageCircle, Mic, Paperclip, Pencil, Plus, RefreshCw, Search, Send, ShieldCheck, Square, Trash2, UserMinus, UserPlus, UsersRound, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
@@ -6,7 +12,7 @@ import { useMobileLayout } from '../features/mobile/useMobileLayout';
 import { ChatScanAction } from '../components/ChatScanAction';
 import { ChatStatusBadge, ChatStatusFilter, matchesChatStatus, type ChatStatusFilterValue } from '../components/ChatStatusFilter';
 import { useChatScanWorkflows } from '../features/ai/useChatScanWorkflows';
-import { MessageTaskAction } from '../components/MessageTaskAction';
+import { MessageOptions } from '../components/MessageOptions';
 import { TaskMessageContext } from '../components/TaskMessageContext';
 import { Header } from '../components/Header';
 import { SUPPORTED_CHAT_ATTACHMENT_TYPES, validateChatAttachment } from '../features/data/chatData';
@@ -245,6 +251,15 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     [pendingFile, pendingIsAudio],
   );
 
+  const connection = useChatConnection(selectedId);
+  const [listCachedAt, setListCachedAt] = useState<number | null>(null);
+  const [messagesCached, setMessagesCached] = useState<{ id: string; at: number } | null>(null);
+  const cachedAt = messagesCached?.id === selectedId ? messagesCached.at : null;
+  const readOnly = Boolean(cachedAt) || !connection.online;
+  const cachedViewRef = useRef<string | null>(null);
+  cachedViewRef.current = cachedAt ? selectedId : null;
+  const [listError, setListError] = useState<string | null>(null);
+
   useEffect(() => () => {
     if (pendingAudioUrl) URL.revokeObjectURL(pendingAudioUrl);
   }, [pendingAudioUrl]);
@@ -262,13 +277,15 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       visibleGroupListRequest.current = request;
       setLoading(true);
     }
-    const result = await loadGroupChats();
+    const result = await offlineChatList('group', currentUserId, loadGroupChats);
     if (!silent && visibleGroupListRequest.current === request && (!shouldApply || shouldApply())) setLoading(false);
     if (request !== groupListRequest.current || (shouldApply && !shouldApply())) return null;
     if (result.error) {
-      if (!silent) setError(result.error);
+      setListError(result.error);
       return null;
     }
+    setListError(null);
+    setListCachedAt(result.cachedAt);
     if (!silent) setError(null);
     setGroups(result.data);
     if (!silent && linkedGroupId && !result.data.some(group => group.group_id === linkedGroupId)) setError('Die verlinkte Gruppe ist nicht mehr verfügbar.');
@@ -341,7 +358,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   const markSelectedGroupRead = async (groupId: string, forceForLatestOpen = false) => {
     const container = messagesRef.current;
     const nearBottom = !container || container.scrollHeight - container.scrollTop - container.clientHeight < 80;
-    if (document.visibilityState !== 'visible'
+    if (navigator.onLine === false || cachedViewRef.current || document.visibilityState !== 'visible'
       || selectedRef.current !== groupId
       || messageContextRef.current
       || viewHasNewerRef.current
@@ -406,8 +423,8 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     const request = ++messageRequest.current;
     if (replace) setMessagesLoading(true);
     const [messageResult, memberResult] = await Promise.all([
-      loadGroupMessagePage(groupId),
-      loadGroupMembers(groupId),
+      offlineMessagePage('group', groupId, currentUserId, () => loadGroupMessagePage(groupId)),
+      navigator.onLine === false ? Promise.resolve({ data: [] as GroupMember[], error: null }) : loadGroupMembers(groupId),
     ]);
     if (selectedRef.current !== groupId
       || request !== messageRequest.current
@@ -431,10 +448,13 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       setError(groupError);
       return;
     }
+    const wasCached = cachedViewRef.current === groupId;
+    cachedViewRef.current = messageResult.cachedAt ? groupId : null;
+    setMessagesCached(messageResult.cachedAt ? { id: groupId, at: messageResult.cachedAt } : null);
     setError(null);
     setMembers(memberResult.data);
     if (scrollToBottom) pendingScrollActionRef.current = { kind: 'bottom' };
-    if (replace) {
+    if (replace || wasCached || messageResult.cachedAt) {
       messageHistoryInitializedRef.current = true;
       setMessages(messageResult.data.messages);
       setHasOlderMessages(messageResult.data.has_more);
@@ -450,10 +470,11 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
         setOlderCursor(messageResult.data.next_cursor);
       }
     }
-    if (markRead && (!shouldApply || shouldApply())) void markSelectedGroupRead(groupId, scrollToBottom);
+    if (markRead && !messageResult.cachedAt && navigator.onLine !== false && (!shouldApply || shouldApply())) void markSelectedGroupRead(groupId, scrollToBottom);
   };
 
   const openLinkedGroupMessage = async (groupId: string, messageId: string) => {
+    if (navigator.onLine === false) { await refreshGroup(groupId, { replace: true, markRead: false }); return; }
     const request = ++messageRequest.current;
     setMessagesLoading(true);
     setContextWarning(null);
@@ -489,6 +510,8 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     setError(null);
     setContextWarning(null);
     messageHistoryInitializedRef.current = true;
+    cachedViewRef.current = null;
+    setMessagesCached(null);
     setMembers(memberResult.data);
     setHasOlderMessages(messageResult.data.has_older);
     setOlderCursor(messageResult.data.oldest_cursor);
@@ -548,6 +571,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   };
 
   const removeRealtimeMessage = (messageId: string) => {
+    if (selectedRef.current) void patchSavedMessage(currentUserId, 'group', selectedRef.current, messageId, null);
     realtimeMessageRequestRef.current.set(messageId, (realtimeMessageRequestRef.current.get(messageId) ?? 0) + 1);
     setMessages((current) => {
       if (!current.some((message) => message.message_id === messageId)) return current;
@@ -573,6 +597,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     }
     const refreshed = result.data.messages.find((message) => message.message_id === messageId);
     if (!refreshed) return;
+    void patchSavedMessage(currentUserId, 'group', groupId, messageId, refreshed);
     setMessages((current) => {
       if (!current.some((message) => message.message_id === messageId)) return current;
       const next = mergeGroupMessages(current, [refreshed]);
@@ -657,6 +682,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       && realtimeGenerationRef.current === realtimeGeneration
     );
     const channel = subscribeToGroupRealtime(selectedId, {
+      onStatus: status => { if (isCurrentRealtime()) connection.onStatus(status); },
       onMessagesChanged: (change) => {
         if (!isCurrentRealtime()) return;
         const loadedMessage = Boolean(change.messageId
@@ -795,6 +821,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       if (document.visibilityState === 'visible') scheduleRefresh();
     }, 30000);
     window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       active = false;
@@ -803,6 +830,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       groupListRefreshQueuedRef.current = false;
       groupListHistoryChangedRef.current = false;
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
       void unsubscribeGroupRealtime(channel);
     };
@@ -869,6 +897,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   }, [groups, query, workflows.states, statusFilter]);
 
   const currentGroup = groups.find((group) => group.group_id === selectedId) || null;
+  const reactions = useMessageReactions('group', currentGroup?.group_id, currentUserId, messages.filter(message => !message.deleted_at).map(message => message.message_id), !readOnly);
   const scanHistoryVersion = useMemo(
     () => JSON.stringify([scanRevision, currentGroup?.last_message_at ?? null, currentGroup?.last_message ?? null]),
     [scanRevision, currentGroup?.last_message_at, currentGroup?.last_message],
@@ -1053,7 +1082,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     setDraft(value);
     draftRef.current = value;
     if (draftScope && !editing) saveChatDraft(draftScope, value);
-    if (!selectedId || editing) return;
+    if (!selectedId || editing || readOnly) return;
     if (typingStopRef.current) clearTimeout(typingStopRef.current);
     if (!value.trim()) {
       void setGroupTyping(selectedId, false);
@@ -1197,7 +1226,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   };
 
   const retryFailedText = async () => {
-    if (!selectedId || !draftScope || !failedTextSend || saving || failedTextSend.status !== 'ready') return;
+    if (cachedAt || !selectedId || !draftScope || !failedTextSend || saving || failedTextSend.status !== 'ready') return;
     const groupId = selectedId;
     const scope = draftScope;
     const retry = retryStoreRef.current.beginRetry(draftScope, failedTextSend.payload.id);
@@ -1236,7 +1265,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
 
   const submit = async () => {
     const body = draft.trim();
-    if (!selectedId || saving || recording || (editing && !body) || (!editing && !body && !pendingFile)) return;
+    if (cachedAt || !selectedId || saving || recording || (editing && !body) || (!editing && !body && !pendingFile)) return;
     if (failedTextSend) {
       setError('Diese Nachricht wartet auf deine manuelle Wiederholung. Nutze dafür „Erneut senden“.');
       return;
@@ -1321,7 +1350,13 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   };
 
   const awaitingManualRetry = Boolean(failedTextSend);
-  const canSend = Boolean(editing ? draft.trim() : draft.trim() || pendingFile) && !saving && !recording && !awaitingManualRetry;
+  useEffect(() => {
+    const restored = () => { if (selectedId) { void refreshGroup(selectedId, { replace: true, scrollToBottom: false }); } };
+    window.addEventListener('online', restored);
+    return () => window.removeEventListener('online', restored);
+  }, [selectedId, currentUserId]);
+
+  const canSend = Boolean(editing ? draft.trim() : draft.trim() || pendingFile) && !saving && !recording && !awaitingManualRetry && !cachedAt;
 
   return (
     <div className="chat-layout real-chat-layout group-chat-layout" data-mobile-pane={mobileConversationOpen ? 'conversation' : 'list'}>
@@ -1330,11 +1365,11 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
           <Header kicker="PHASE 3.7" title="Gruppen" sub="Echte Gruppen- und Team-Chats mit vollständigem Verlauf." />
           <div className="group-title-actions">
             <button className="chat-refresh" onClick={() => void refreshGroups(selectedId)} title="Aktualisieren"><RefreshCw size={15} /></button>
-            <button className="chat-refresh group-create-toggle" onClick={() => setCreating((value) => !value)} title="Neue Gruppe"><Plus size={16} /></button>
+            <button className="chat-refresh group-create-toggle" onClick={() => setCreating((value) => !value)} title="Neue Gruppe" disabled={readOnly}><Plus size={16} /></button>
           </div>
         </div>
 
-        {creating && (
+        {creating && !readOnly && (
           <div className="group-create-panel">
             <div className="group-create-head"><b>Neue Gruppe</b><button onClick={() => setCreating(false)}><X size={14} /></button></div>
             <input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="Gruppenname" maxLength={80} />
@@ -1359,24 +1394,29 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
         )}
 
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Gruppen durchsuchen" /></div>
-        <ChatStatusFilter value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
-        {mobileListOnly && error && <div className="chat-error" role="alert">{error}</div>}
-        {!loading && groups.length > 0 && filteredGroups.length === 0 && <div className="chat-list-empty">Keine Gruppen für diese Auswahl.</div>}
+        {mobileListOnly && (listCachedAt || connection.message) && <div className="chat-error" role="status">{listCachedAt ? offlineStamp(listCachedAt) : connection.message}</div>}
+        <ChatStatusFilter offline={!connection.online} value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
+        {listError && connection.online && <div className="chat-error" role="alert">{listError}</div>}
+        {mobileListOnly && error && connection.online && <div className="chat-error" role="alert">{readableLoadError(error)}</div>}
+        {!loading && connection.online && !listError && groups.length > 0 && filteredGroups.length === 0 && <div className="chat-list-empty">Keine Gruppen für diese Auswahl.</div>}
+        {!loading && groups.length === 0 && (!connection.online || listError) && <div className="chat-list-empty"><b>Gruppen derzeit nicht verfügbar</b><span>{!connection.online ? 'Verbinde dich mit dem Internet. Die Liste wird anschließend erneut geladen.' : 'Bitte lade die Liste erneut.'}</span></div>}
         {loading && groups.length === 0 && <div className="chat-list-empty">Gruppen werden geladen…</div>}
-        {!loading && groups.length === 0 && <div className="chat-list-empty"><UsersRound size={24} /><b>Noch keine Gruppen</b><span>Erstelle deine erste Gruppe mit einem Nexus-Kontakt.</span></div>}
+        {!loading && connection.online && !listError && groups.length === 0 && <div className="chat-list-empty"><UsersRound size={24} /><b>Noch keine Gruppen</b><span>Erstelle deine erste Gruppe mit einem Nexus-Kontakt.</span></div>}
         {filteredGroups.map((group) => (
-          <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setContextWarning(null); if (!isMobile) setSelectedId(group.group_id); setChatSearch({ group: group.group_id }); }} key={group.group_id}>
+          <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setContextWarning(null); setChatSearch({ group: group.group_id }); }} key={group.group_id}>
             <div className="avatar group-avatar"><GroupAvatar group={group} size={16} /></div>
-            <span><b>{group.name}</b><small>{group.member_count} Mitglieder · {roleLabel(group.role)}</small><p>{group.last_message || 'Neue Gruppe'}</p><ChatStatusBadge state={workflows.states.get(group.group_id)} /></span>
+            <span><b>{group.name}</b><small>{group.member_count} Mitglieder{!listCachedAt && ` · ${roleLabel(group.role)}`}</small><p>{group.last_message || 'Neue Gruppe'}</p><ChatStatusBadge state={workflows.states.get(group.group_id)} /></span>
             <em>{formatTime(group.last_message_at)}{group.unread_count > 0 && <i>{group.unread_count > 99 ? '99+' : group.unread_count}</i>}</em>
           </button>
         ))}
       </section>
 
       <section className="conversation">
+        {reactions.error && <div className="chat-error reactions-error" role="alert">{reactions.error}<button type="button" onClick={reactions.refresh}>Erneut laden</button></div>}
+        {(cachedAt || connection.message) && <div className="chat-error" role="status" aria-live="polite">{cachedAt ? offlineStamp(cachedAt) + ". Gespeichert sind bis zu 100 Nachrichten je Chat. Neue Nachrichten werden online geladen." : connection.message}</div>}
         <div className="mobile-chat-backbar"><button type="button" onClick={() => { setSelectedId(null); setError(null); setContextWarning(null); setChatSearch({}); }}><ArrowLeft size={20} /> Alle Gruppen</button></div>
         <TaskMessageContext kind="group" onChatResolved={id => { setSelectedId(id); void refreshGroups(id); }} />
-        {(error || contextWarning) && <div className="chat-error">{error || contextWarning}</div>}
+        {(error || contextWarning) && connection.online && <div className="chat-error">{readableLoadError(error || contextWarning || "")}</div>}
         {!currentGroup ? (
           <div className="conversation-empty"><UsersRound size={42} /><h2>Team-Messenger</h2><p>Wähle eine Gruppe aus oder erstelle eine neue.</p></div>
         ) : (
@@ -1384,12 +1424,12 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
             <div className="chat-head">
               <div className="chat-head-person">
                 <div className="avatar group-avatar"><GroupAvatar group={currentGroup} /></div>
-                <div><b>{currentGroup.name}</b><small className={typingMembers.length ? 'typing-status' : onlineCount > 0 ? 'online-status' : ''}>{groupStatus}</small></div>
+                <div><b>{currentGroup.name}</b><small className={!readOnly && typingMembers.length ? 'typing-status' : !readOnly && onlineCount > 0 ? 'online-status' : ''}>{readOnly ? 'Offline – gespeicherter Verlauf' : groupStatus}</small></div>
               </div>
-              <button className={`project-pill group-members-toggle${showMembers ? ' active' : ''}`} onClick={() => setShowMembers((value) => !value)}><UsersRound size={13} /> Mitglieder</button>
+              <button className={`project-pill group-members-toggle${showMembers ? ' active' : ''}`} disabled={readOnly} onClick={() => setShowMembers((value) => !value)}><UsersRound size={13} /> Mitglieder</button>
             </div>
 
-            {showMembers && (
+            {showMembers && !readOnly && (
               <div className="group-members-panel">
                 <div className="group-management">
                   <div className="group-management-title">
@@ -1484,7 +1524,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                 }
               }}
             >
-              {hasOlderMessages && olderCursor && (
+              {hasOlderMessages && olderCursor && !readOnly && (
                 <button
                   className="secondary messages-history-button"
                   data-testid="group-load-older"
@@ -1495,7 +1535,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                 </button>
               )}
               {messagesLoading && messages.length === 0 && <div className="messages-status">Gruppennachrichten werden geladen…</div>}
-              {!messagesLoading && messages.length === 0 && <div className="messages-status group-empty-messages"><MessageCircle size={24} /><b>Noch keine Nachrichten</b><span>Schreib die erste Nachricht in diese Gruppe.</span></div>}
+              {!messagesLoading && messages.length === 0 && <div className="messages-status group-empty-messages"><MessageCircle size={24} /><b>{readOnly ? 'Keine gespeicherten Textnachrichten' : error ? 'Nachrichten nicht verfügbar' : 'Noch keine Nachrichten'}</b><span>{readOnly ? 'Öffne diese Gruppe einmal mit Internet, um Nachrichten offline zu speichern.' : 'Schreib die erste Nachricht in diese Gruppe.'}</span></div>}
               {messages.map((message) => {
                 const mine = message.sender_id === currentUserId;
                 const sender = message.sender_full_name || (message.sender_username ? `@${message.sender_username}` : 'Nexus Nutzer');
@@ -1516,7 +1556,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                     style={highlightedMessageId === message.message_id ? { outline: '2px solid #8f87ff', outlineOffset: 5, borderRadius: 12 } : undefined}
                   >
                     {!mine && !message.deleted_at && <small className="group-message-sender">{sender}</small>}
-                    <div className={mine ? 'bubble me' : 'bubble'}>
+                    <ReactionBubble className={mine ? 'bubble me' : 'bubble'} disabled={readOnly || !reactions.ready || reactions.pending(message.message_id) || Boolean(message.deleted_at)} onLike={() => reactions.like(message.message_id)}>
                       {message.reply_to_message_id && (
                         <div className="reply-preview"><b>{message.reply_sender_id === currentUserId ? 'Du' : message.reply_sender_name || 'Nexus Nutzer'}</b><span>{message.reply_body || 'Anhang'}</span></div>
                       )}
@@ -1525,25 +1565,28 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                       <div className="message-meta">
                         {message.edited_at && !message.deleted_at && <small>bearbeitet</small>}
                         <time>{formatTime(message.created_at)}</time>
-                        {mine && !message.deleted_at && <span className={`message-receipt${fullyRead ? ' read' : ''}`} title={readTitle}>{message.read_count > 0 ? <CheckCheck size={13} /> : '✓'}</span>}
+                        {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${fullyRead ? ' read' : ''}`} title={readTitle}>{message.read_count > 0 ? <CheckCheck size={13} /> : '✓'}</span>}
+                        {!readOnly && !message.deleted_at && <ReactionPicker rows={reactions.forMessage(message.message_id)} disabled={!reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
+                        {!readOnly && !message.deleted_at && <MessageOptions
+                          reactions={{ rows: reactions.forMessage(message.message_id), disabled: !reactions.ready, pending: reactions.pending(message.message_id), onChoose: emoji => reactions.choose(message.message_id, emoji) }}
+                          currentUserId={currentUserId} workspaceId={workspaceId}
+                          source={{ kind: 'group', messageId: message.message_id, body: message.body, chatName: currentGroup.name, attachmentName: message.attachments?.[0]?.file_name }}
+                          onReply={() => {
+                            if (editing) {
+                              const restoredDraft = draftScope ? readChatDraft(draftScope) : '';
+                              draftRef.current = restoredDraft;
+                              setDraft(restoredDraft);
+                            }
+                            setEditing(null);
+                            setReplyingTo(message);
+                          }}
+                          onEdit={mine && message.body.trim() ? () => { setReplyingTo(null); clearPendingFile(); setEditing(message); setDraft(message.body); } : undefined}
+                          onDelete={mine ? () => void remove(message) : undefined}
+                          replyDisabled={awaitingManualRetry} editDisabled={awaitingManualRetry} deleteDisabled={saving}
+                        />}
                       </div>
-                    </div>
-                    {!message.deleted_at && (
-                      <div className="message-actions">
-                        <MessageTaskAction currentUserId={currentUserId} workspaceId={workspaceId} source={{ kind: 'group', messageId: message.message_id, body: message.body, chatName: currentGroup.name, attachmentName: message.attachments?.[0]?.file_name }} />
-                        <button disabled={awaitingManualRetry} onClick={() => {
-                          if (editing) {
-                            const restoredDraft = draftScope ? readChatDraft(draftScope) : '';
-                            draftRef.current = restoredDraft;
-                            setDraft(restoredDraft);
-                          }
-                          setEditing(null);
-                          setReplyingTo(message);
-                        }}><Reply size={13} /></button>
-                        {mine && message.body.trim() && <button disabled={awaitingManualRetry} onClick={() => { setReplyingTo(null); clearPendingFile(); setEditing(message); setDraft(message.body); }}><Pencil size={13} /></button>}
-                        {mine && <button onClick={() => void remove(message)} disabled={saving}><Trash2 size={13} /></button>}
-                      </div>
-                    )}
+                      {!message.deleted_at && <MessageReactions rows={reactions.forMessage(message.message_id)} disabled={readOnly || !reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
+                    </ReactionBubble>
                   </div>
                 );
               })}
@@ -1616,21 +1659,21 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
               </div>
             )}
 
-            <ChatScanAction
+            {!readOnly && <ChatScanAction
               key={`${currentUserId}:group:${currentGroup.group_id}`}
               currentUserId={currentUserId}
               kind="group"
               chatId={currentGroup.group_id}
               chatName={currentGroup.name}
               historyVersion={scanHistoryVersion}
-            />
+            />}
 
             <div className="composer group-composer attachment-composer">
               <input ref={fileRef} className="attachment-file-input" type="file" accept={SUPPORTED_CHAT_ATTACHMENT_TYPES.join(',')} onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} disabled={awaitingManualRetry} />
-              <button className="attach-button" onClick={() => fileRef.current?.click()} disabled={saving || recording || Boolean(editing) || awaitingManualRetry} title="Datei oder Bild anhängen"><Paperclip size={18} /></button>
-              <button className={`attach-button mic-button${recording ? ' recording' : ''}`} onClick={() => void startRecording()} disabled={saving || recording || Boolean(editing) || awaitingManualRetry} title="Sprachnachricht aufnehmen"><Mic size={18} /></button>
+              <button className="attach-button" onClick={() => fileRef.current?.click()} disabled={readOnly || saving || recording || Boolean(editing) || awaitingManualRetry} title="Datei oder Bild anhängen"><Paperclip size={18} /></button>
+              <button className={`attach-button mic-button${recording ? ' recording' : ''}`} onClick={() => void startRecording()} disabled={readOnly || saving || recording || Boolean(editing) || awaitingManualRetry} title="Sprachnachricht aufnehmen"><Mic size={18} /></button>
               <input aria-label="Gruppennachricht" value={draft} disabled={saving || recording || awaitingManualRetry} onChange={(event) => draftChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder={editing ? 'Bearbeitete Nachricht…' : pendingIsAudio ? 'Text zur Sprachnachricht (optional)…' : pendingFile ? 'Nachricht zum Anhang (optional)…' : 'Nachricht an die Gruppe…'} maxLength={5000} />
-              <button onClick={() => void submit()} disabled={!canSend}><Send size={18} /></button>
+              <button aria-label="Nachricht senden" onClick={() => void submit()} disabled={!canSend}><Send size={18} /></button>
             </div>
           </>
         )}

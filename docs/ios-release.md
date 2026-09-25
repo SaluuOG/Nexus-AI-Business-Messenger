@@ -59,10 +59,20 @@ Terminal gesetzt sein; niemals private AI- oder Service-Role-Schlüssel verwende
   Connect hinterlegen. Der rechtliche Text benötigt die vollständigen Angaben
   des verantwortlichen Unternehmens bzw. Betreibers.
 
-Noch nicht enthalten: native APNs-Push-Benachrichtigungen und eine native
-Rückkehr aus E-Mail-Anmelde-/Passwortlinks. Die aktuelle E-Mail-Wiederherstellung
-verwendet den Web-Redirect; dieser Ablauf muss auf dem Test-iPhone überprüft
-werden. Die SDK-Manifeste ersetzen nicht die app-eigenen Datenschutzangaben
+Native E-Mail-Bestätigungs- und Passwortlinks verwenden
+`com.saluuog.nexus://auth/callback?auth=callback` bzw. `auth=recovery`. Vor
+einem Test muss in Supabase Auth → URL Configuration die Redirect-URL
+`com.saluuog.nexus://auth/callback?auth=callback` und
+`com.saluuog.nexus://auth/callback?auth=recovery` freigegeben werden; die öffentliche Site URL
+bleibt auf der Web-App. Bestehende, zuvor verschickte Links bleiben Web-Links.
+Im nativen Build verarbeitet `@capacitor/app` den Link auch beim Kaltstart und
+übernimmt die Supabase-Sitzung ohne Token in Web-History oder Logs. Erfolg,
+abgelaufene Links und einen Kontowechsel auf dem Test-iPhone prüfen. Die
+Web-/PWA-Version behält ihren bisherigen Redirect.
+
+Noch nicht enthalten: native APNs-Push-Benachrichtigungen. Im nativen Build
+zeigt die Push-Einstellung deshalb keinen irreführenden PWA-Installationsweg
+mehr an. Die SDK-Manifeste ersetzen nicht die app-eigenen Datenschutzangaben
 in App Store Connect oder eine öffentliche Datenschutzerklärung.
 
 Technische Referenzen:
@@ -73,3 +83,51 @@ Technische Referenzen:
 Die iOS-Hülle verwendet `capacitor://localhost`. Die Kontolöschungsfunktion und
 KI-Funktion akzeptieren diese Origin ausdrücklich; das ist keine Freigabe für
 beliebige Webseiten.
+
+## Geräteabnahme der nativen Auth-Links (Phase 4)
+
+Der erste CI-Durchlauf des [PR #6](https://github.com/SaluuOG/Nexus-AI-Business-Messenger/pull/6)
+hat am 24.09.2026 Web-/Browserprüfungen und den unsignierten nativen Build
+bestanden. Nachfolgende Änderungen müssen auf dem aktuellen PR-Commit erneut
+grün sein. Die Abnahme auf einem echten iPhone ist weiterhin offen.
+
+### Vorbereitung am Mac
+
+1. Den Branch `codex/native-auth-links` aus dem Repository auschecken. Bei
+   einer neuen Arbeitskopie:
+   ```bash
+   git clone --branch codex/native-auth-links https://github.com/SaluuOG/Nexus-AI-Business-Messenger.git
+   cd Nexus-AI-Business-Messenger
+   ```
+2. Node 24 und Xcode 26 oder neuer verwenden. `.env.example` nach `.env.local`
+   kopieren und die Projekt-URL sowie den öffentlichen Supabase-Publishable-Key
+   eintragen. Die Projekt-URL lautet `https://mwptfpzhnnkondverggi.supabase.co`.
+3. Die zwei oben genannten nativen Redirect-URLs in Supabase freigeben; die
+   bestehenden Web-Redirects und die Site URL beibehalten.
+4. `npm ci`, `npm run build:ios` und `npm run open:ios` ausführen.
+5. In Xcode unter Target `App` → Signing & Capabilities das Apple-Team wählen.
+   Das entsperrte iPhone verbinden, als Run Destination auswählen und die App
+   mit Run installieren. Etwaige Gerätefreigaben direkt auf dem iPhone bestätigen.
+
+### Testprotokoll
+
+Frische Links aus der installierten nativen App anfordern. Als Nachweis je
+Test iOS-Version, App-Buildnummer, Ergebnis und gegebenenfalls den sichtbaren
+Fehler festhalten; keine vollständigen Auth-Links oder Tokens dokumentieren.
+
+| Test | Erwartung | Stand |
+|---|---|---|
+| Registrierung mit frischer E-Mail-Bestätigung | Link öffnet Nexus und zeigt das richtige angemeldete Konto | Offen |
+| Passwort-Reset bei geöffneter App | Link öffnet die Passwortmaske für das zum Link gehörende Konto | Offen |
+| Passwort-Reset nach vollständigem Beenden | Nexus startet und zeigt dieselbe Passwortmaske | Offen |
+| Erfolgreicher Reset und neue Anmeldung | Neues Passwort funktioniert; altes Passwort funktioniert nicht mehr | Offen |
+| Ungültiger/abgelaufener Link | Fehleranzeige; keine gültige Recovery-Sitzung aus einem zuvor angemeldeten Konto | Offen |
+| Kurzzeitig offline, danach denselben Link erneut öffnen | Link kann nach dem Netzfehler erneut verarbeitet werden | Offen |
+| Bestätigung nach vorherigem Recovery-Ablauf | Keine übernommene alte Passwortmaske | Offen |
+| Link für Konto B während Konto A angemeldet ist | Nach Erfolg ist Konto B sichtbar; A-Inhalte sind nicht mehr sichtbar | Offen |
+| Doppelte Zustellung desselben Links | Keine zweite parallele Sitzungsübernahme | Offen |
+| Web/PWA-Passwort-Reset | Bisheriger Web-Ablauf funktioniert weiterhin | Offen |
+
+Automatisierte Handler-Tests decken doppelte Zustellung, fehlende Sitzungen,
+Netzfehler/Retry, Reihenfolge mehrerer Links und das Entfernen alter Listener
+ab. Sie ersetzen die Betriebssystem-, Mail-App- und Signing-Tests oben nicht.

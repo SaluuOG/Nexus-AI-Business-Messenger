@@ -1,6 +1,8 @@
+import { useNetworkStatus } from '../features/connection/useNetworkStatus';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
+import { retryRead } from '../features/data/readRetry';
 import { useAuth } from '../features/auth/AuthProvider';
 import { openDirectConversation, touchUserPresence } from '../features/data/chatData';
 import {
@@ -44,6 +46,8 @@ type WorkspaceLifecycleFeedback = {
   error: boolean;
 };
 
+const OfflineChatsPage = lazy(() => import('../pages/OfflineChatsPage').then(module => ({ default: module.OfflineChatsPage })));
+
 const AIPage = lazy(() => import('../pages/AIPage').then((module) => ({ default: module.AIPage })));
 const AuthPage = lazy(() => import('../pages/AuthPage').then((module) => ({ default: module.AuthPage })));
 const BriefingPage = lazy(() => import('../pages/BriefingPage').then((module) => ({ default: module.BriefingPage })));
@@ -62,18 +66,23 @@ function AppLoading() {
 
 export function App() {
   const auth = useAuth();
+  const online = useNetworkStatus();
+  if (!online && !auth.session && auth.offlineAccountId && !auth.recoveryMode) {
+    return <Suspense fallback={<AppLoading />}><OfflineChatsPage key={auth.offlineAccountId} account={auth.offlineAccountId} onClear={auth.clearOfflineChats} /></Suspense>;
+  }
   if (auth.configured && auth.loading) return <AppLoading />;
   return (
     <Suspense fallback={<AppLoading />}>
-      {auth.recoveryMode ? (
-        <ResetPasswordPage />
-      ) : (
-        <Routes>
-          <Route path={routes.auth} element={<AuthPage />} />
-          <Route path={routes.resetPassword} element={<ResetPasswordPage />} />
-          <Route path="*" element={<AppShell key={auth.user?.id ?? 'anonymous'} />} />
-        </Routes>
-      )}
+      <Routes>
+        {/* Keep the recovery page mounted when success clears recoveryMode. */}
+        <Route path={routes.resetPassword} element={<ResetPasswordPage />} />
+        <Route path={routes.auth} element={auth.recoveryMode ? (
+          <Navigate to={routes.resetPassword} replace />
+        ) : <AuthPage />} />
+        <Route path="*" element={auth.recoveryMode ? (
+          <Navigate to={routes.resetPassword} replace />
+        ) : <AppShell key={auth.user?.id ?? 'anonymous'} />} />
+      </Routes>
     </Suspense>
   );
 }
@@ -95,6 +104,7 @@ function AppShell() {
   const [workspaceMembers, setWorkspaceMembers] = useState<NexusWorkspaceMember[]>([]);
   const [workspaceInvitations, setWorkspaceInvitations] = useState<NexusWorkspaceInvitation[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
+  const [dataReload, setDataReload] = useState(0);
   const [dataError, setDataError] = useState<string | null>(null);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamWorkspaceId, setTeamWorkspaceId] = useState<string | null>(null);
@@ -125,7 +135,10 @@ function AppShell() {
     void (async () => {
       try {
         const [profileResult, businessResult, workspaceResult, membershipResult] = await Promise.all([
-          loadOwnProfile(userId), loadBusinessProfiles(), loadWorkspaces(), loadWorkspaceMemberships(userId),
+          retryRead(() => loadOwnProfile(userId), () => active),
+          retryRead(loadBusinessProfiles, () => active),
+          retryRead(loadWorkspaces, () => active),
+          retryRead(() => loadWorkspaceMemberships(userId), () => active),
         ]);
         if (!active) return;
         setProfile(profileResult.data); setBusinessProfiles(businessResult.data); setWorkspaces(workspaceResult.data); setMemberships(membershipResult.data);
@@ -136,7 +149,7 @@ function AppShell() {
       } finally { if (active) setDataLoading(false); }
     })();
     return () => { active = false; };
-  }, [auth.configured, auth.user?.id]);
+  }, [auth.configured, auth.user?.id, dataReload]);
 
   useEffect(() => {
     if (!auth.user?.id) return;
@@ -403,6 +416,7 @@ function AppShell() {
             currentUserId={auth.user?.id}
             workspaceLoading={dataLoading}
             workspaceError={dataError}
+            onRetryWorkspace={() => setDataReload(value => value + 1)}
           />
         }
       />
