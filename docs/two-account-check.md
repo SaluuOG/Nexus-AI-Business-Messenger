@@ -7,8 +7,10 @@ den beschriebenen Nachrichtentest mit zwei echten Konten als funktionierend
 bestätigt. Die unten aufgeführte Geräteprüfung gilt damit als nutzerseitig
 abgenommen; die damalige Beschreibung offener Punkte bleibt als Verlauf erhalten.
 Dies ist eine Nutzerbestätigung, kein neuer automatisiert ausgeführter Live-Test.
-Die danach ergänzten [Nachrichten-Anheftungen](message-pins.md) benötigen eine
-eigene Bestätigung nach dem nächsten App-Update.
+Die danach ergänzten [Nachrichten-Anheftungen](message-pins.md) hat der Nutzer
+nach dem App-Update am 01.10.2026 ebenfalls als funktionierend bestätigt.
+Die anschließend ergänzten [persönlichen Favoriten und das Archiv](chat-organization.md)
+benötigen noch eine eigene Bestätigung auf dem iPhone.
 
 ## Technischer Nachweis vom 24. September
 

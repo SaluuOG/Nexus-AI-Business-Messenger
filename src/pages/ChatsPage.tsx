@@ -1,4 +1,7 @@
 import { MessageReactions, ReactionBubble, ReactionPicker } from '../components/MessageReactions';
+import { ChatFavorite, ChatListOptions, ChatListViews } from '../components/ChatOrganization';
+import { organizeChats, subscribeChatOrganization, type ChatListView } from '../features/data/chatOrganization';
+import { useChatOrganization } from '../features/data/useChatOrganization';
 import { PinnedMessages } from '../components/PinnedMessages';
 import { useMessagePins } from '../features/data/useMessagePins';
 import { useMessageReactions } from '../features/data/useMessageReactions';
@@ -259,6 +262,7 @@ export function ChatsPage({
   const [workflowRevision, setWorkflowRevision] = useState(0);
   const [currentHistoryRevision, setCurrentHistoryRevision] = useState(0);
   const [statusFilter, setStatusFilter] = useState<ChatStatusFilterValue>('all');
+  const [listView,setListView] = useState<ChatListView>('active');
 
   const fileRef = useRef<HTMLInputElement | null>(null);
   const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -410,7 +414,7 @@ export function ChatsPage({
       if (mobileListOnlyRef.current) return null;
       const target = linkedConversationRef.current || current;
       if (target && result.data.some((conversation) => conversation.conversation_id === target)) return target;
-      return linkedConversationRef.current ? null : result.data[0]?.conversation_id ?? null;
+      return linkedConversationRef.current ? null : organizeChats(result.data,'active')[0]?.conversation_id ?? null;
     });
   };
 
@@ -443,7 +447,7 @@ export function ChatsPage({
       const target = preferred || linkedConversationId || current;
       return target && result.data.some((conversation) => conversation.conversation_id === target)
         ? target
-        : linkedConversationId ? null : result.data[0]?.conversation_id ?? null;
+        : linkedConversationId ? null : organizeChats(result.data,'active')[0]?.conversation_id ?? null;
     });
   };
 
@@ -662,6 +666,7 @@ export function ChatsPage({
       setWorkflowRevision((revision) => revision + 1);
       scheduleConversationListRefresh();
     });
+    const unsubscribeOrganization = subscribeChatOrganization('direct',currentUserId,scheduleConversationListRefresh);
     const onFocus = () => { scheduleConversationListRefresh(); };
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') return;
@@ -682,6 +687,7 @@ export function ChatsPage({
       window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
       void unsubscribeConversationRealtime(channel);
+      unsubscribeOrganization();
     };
   }, [currentUserId]);
 
@@ -831,13 +837,17 @@ export function ChatsPage({
     conversations.map((conversation) => [conversation.conversation_id, conversation.last_message_at, conversation.last_message]),
   ]);
   const workflows = useChatScanWorkflows('direct', currentUserId, workflowHistoryVersion);
+  const organization = useChatOrganization('direct',currentUserId,connection.online && !listCachedAt && !listError,async (id,field,value) => {
+    if (field==='archived' && value && selectedRef.current===id) { setSelectedId(null); setChatSearch({}); }
+    await reloadConversationList();
+  });
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return conversations.filter((conversation) => (
+    return organizeChats(conversations,listView).filter((conversation) => (
       !normalized
       || `${conversation.full_name || ''} ${conversation.username || ''} ${conversation.last_message || ''}`.toLowerCase().includes(normalized)
     ) && matchesChatStatus(workflows.states.get(conversation.conversation_id), statusFilter));
-  }, [conversations, query, workflows.states, statusFilter]);
+  }, [conversations, query, workflows.states, statusFilter,listView]);
   const currentChat = conversations.find((conversation) => conversation.conversation_id === selectedId) || null;
   const pins = useMessagePins('direct', currentChat?.conversation_id, currentUserId, !readOnly, true);
   const reactions = useMessageReactions('direct', currentChat?.conversation_id, currentUserId, messages.filter(message => !message.deleted_at).map(message => message.message_id), !readOnly);
@@ -1142,24 +1152,29 @@ export function ChatsPage({
         </div>
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Chats durchsuchen" /></div>
         {mobileListOnly && (listCachedAt || connection.message) && <div className="chat-error" role="status">{listCachedAt ? offlineStamp(listCachedAt) : connection.message}</div>}
+        <ChatListViews value={listView} onChange={setListView} archivedCount={conversations.filter(chat=>chat.archived).length} />
+        {organization.error && <div className="chat-error" role="alert">{organization.error}</div>}
         <ChatStatusFilter offline={!connection.online} value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
         {listError && connection.online && <div className="chat-error" role="alert">{listError}</div>}
         {mobileListOnly && error && connection.online && <div className="chat-error" role="alert">{readableLoadError(error)}</div>}
-        {!loading && connection.online && !listError && conversations.length > 0 && filtered.length === 0 && <div className="chat-list-empty">Keine Chats für diese Auswahl.</div>}
+        {!loading && !listError && conversations.length > 0 && filtered.length === 0 && <div className="chat-list-empty">{listView==='archive' ? 'Keine archivierten Chats für diese Auswahl.' : listView==='favorites' ? 'Keine Favoriten für diese Auswahl.' : 'Keine aktiven Chats für diese Auswahl.'}</div>}
         {!loading && conversations.length === 0 && (!connection.online || listError) && <div className="chat-list-empty"><b>Chats derzeit nicht verfügbar</b><span>{!connection.online ? 'Verbinde dich mit dem Internet. Die Liste wird anschließend erneut geladen.' : 'Bitte lade die Liste erneut.'}</span></div>}
         {loading && conversations.length === 0 && <div className="chat-list-empty">Chats werden geladen…</div>}
         {!loading && connection.online && !listError && conversations.length === 0 && <div className="chat-list-empty"><MessageCircle size={24} /><b>Noch keine Chats</b></div>}
         {filtered.map((conversation) => (
-          <button className={`chat${selectedId === conversation.conversation_id ? ' active' : ''}`} onClick={() => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setChatSearch({ conversation: conversation.conversation_id }); }} key={conversation.conversation_id}>
+          <div className="chat-list-row" key={conversation.conversation_id} data-chat-id={conversation.conversation_id}>
+          <button className={`chat${selectedId === conversation.conversation_id ? ' active' : ''}`} onClick={() => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setChatSearch({ conversation: conversation.conversation_id }); }}>
             <div className="avatar">{initials(conversation.full_name, conversation.username)}</div>
             <span>
-              <b>{nameOf(conversation)}</b>
+              <b><ChatFavorite active={conversation.favorite} />{nameOf(conversation)}</b>
               <small>{conversation.username ? `@${conversation.username}` : 'Nexus-Kontakt'}</small>
               <p>{conversation.last_message || 'Neuer Chat'}</p>
               <ChatStatusBadge state={workflows.states.get(conversation.conversation_id)} />
             </span>
             <em>{formatTime(conversation.last_message_at)}{conversation.unread_count > 0 && <i>{conversation.unread_count > 99 ? '99+' : conversation.unread_count}</i>}</em>
           </button>
+          <ChatListOptions name={nameOf(conversation)} state={conversation} disabled={!connection.online || Boolean(listCachedAt) || Boolean(listError) || organization.busy(conversation.conversation_id)} onChange={(field,value)=>organization.save(conversation.conversation_id,field,value)} />
+          </div>
         ))}
       </section>
 

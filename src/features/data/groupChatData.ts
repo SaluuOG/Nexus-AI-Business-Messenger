@@ -1,4 +1,5 @@
 import { safeTextSend } from '../drafts/safeTextSend';
+import { withChatOrganization, type ChatOrganization } from './chatOrganization';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { createTextClientRequestId } from '../drafts/textSendRetry';
@@ -13,7 +14,7 @@ const MAX_GROUP_AVATAR_BYTES = 5 * 1024 * 1024;
 const GROUP_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
 const groupTypingPollers = new WeakMap<RealtimeChannel, number>();
 
-export type GroupChat = {
+export type GroupChat = ChatOrganization & {
   group_id: string;
   name: string;
   avatar_path: string | null;
@@ -236,8 +237,8 @@ export async function createGroupChat(name: string, memberIds: string[]) {
 
 export async function loadGroupChats() {
   if (!supabase) return { data: [] as GroupChat[], error: 'Supabase ist nicht konfiguriert.' };
-  const { data, error } = await supabase.rpc('get_my_group_chats');
-  if (error) return { data: [] as GroupChat[], error: error.message };
+  const { data, error } = await withChatOrganization<GroupChat>('group', () => supabase!.rpc('get_my_group_chats'), row => row.group_id);
+  if (error) return { data: [] as GroupChat[], error };
   const normalized = ((data ?? []) as Array<Omit<GroupChat, 'avatar_url' | 'member_count' | 'unread_count'> & { member_count: number | string; unread_count: number | string }>).map((group) => ({
     ...group,
     avatar_url: null,

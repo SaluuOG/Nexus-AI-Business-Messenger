@@ -44,5 +44,6 @@ Migration: `20260930222545_message_pins.sql`.
   fehlgeschlagene Speicherung und verspätete Antworten nach Kontowechsel.
 - Bestehende Nachrichtenoptionen und Reaktionen werden separat erneut geprüft.
 
-Automatisierte Browserprüfungen verwenden Testdaten. Die Bedienung der neuen
-Anheftungen auf dem eigenen iPhone muss nach dem Update noch bestätigt werden.
+Automatisierte Browserprüfungen verwenden Testdaten. Der Nutzer hat die Bedienung
+der Anheftungen nach dem App-Update am 01.10.2026 mit „okey es funktioniert“ bestätigt.
+Dies ist die Nutzerabnahme auf seinem iPhone, kein zusätzlicher automatisierter Live-Test.

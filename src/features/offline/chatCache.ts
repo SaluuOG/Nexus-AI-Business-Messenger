@@ -63,7 +63,7 @@ export function sanitizeRows(kind: ChatKind, id: string, input: unknown): Row[] 
       const result: Row = {};
       for (const field of kind === 'direct' ? ['conversation_id','contact_user_id','full_name','username','last_message','last_message_at'] : ['group_id','name','last_message','last_message_at']) result[field] = text(row[field]);
       const memberCount = Number(row.member_count);
-      return { ...result, ...(kind === 'group' ? { name: text(row.name, 80) || 'Gruppe' } : {}), avatar_url: null, avatar_path: null, unread_count: 0, member_count: Number.isFinite(memberCount) ? memberCount : 0, role: 'member' };
+      return { ...result, ...(kind === 'group' ? { name: text(row.name, 80) || 'Gruppe' } : {}), favorite: row.favorite === true, archived: row.archived === true, avatar_url: null, avatar_path: null, unread_count: 0, member_count: Number.isFinite(memberCount) ? memberCount : 0, role: 'member' };
     }
     const result: Row = {};
     for (const field of stringFields) result[field] = text(row[field]);

@@ -48,6 +48,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Antworten auf einzelne Nachrichten mit Reply-Vorschau
 - Herz per Doppeltippen/Doppelklick und sechs Emoji-Reaktionen mit Zähler in Einzel- und Gruppenchats ([Details und Prüfung](docs/message-reactions.md))
 - Nachrichten anheften und aus einer kompakten Chatübersicht öffnen; in Gruppen verwalten nur Owner/Admins die Anheftungen ([Details und Prüfung](docs/message-pins.md))
+- persönliche Chat-Favoriten und Archiv für Einzel-/Gruppenchats; neue Nachrichten holen archivierte Chats automatisch zurück, Offline-Ansichten behalten den letzten Stand ([Details und Prüfung](docs/chat-organization.md))
 - eigene Nachrichten bearbeiten
 - eigene Nachrichten per Soft-Delete löschen
 - gelöschte Nachrichten verlieren serverseitig ihren Nachrichtentext
@@ -279,7 +280,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 
 Browserprüfungen laufen in GitHub Actions mit Playwright 1.55.1 in einem separaten Laufzeitverzeichnis. Lokal: Playwright installieren, Chromium/WebKit mit `playwright install --with-deps chromium webkit` bereitstellen und `NEXUS_PLAYWRIGHT_MODULE` auf den absoluten Pfad zu `playwright/index.mjs` setzen. Danach die Skripte in `tests/browser/` ausführen; Phase 3.7 wird mit `node tests/browser/message-history.mjs` geprüft. Screenshots landen unter `browser-results/`. `node tests/browser/preview.mjs` startet eine separate Vorschau mit synthetischen Testdaten; diese werden nicht mit der App veröffentlicht.
 
-Nutzerabnahme: Der Durchlauf mit zwei echten Konten und die Chat-Gesten wurden am 01.10.2026 vom Nutzer als funktionierend bestätigt. Die neu ergänzten Anheftungen benötigen noch eine eigene Gerätebestätigung. [Technische Nachweise und Nutzerbestätigung](docs/two-account-check.md).
+Nutzerabnahme: Der Durchlauf mit zwei echten Konten, die Chat-Gesten und anschließend die Nachrichten-Anheftungen wurden am 01.10.2026 vom Nutzer als funktionierend bestätigt. Die neu ergänzten persönlichen Chat-Favoriten und das Archiv benötigen noch eine eigene Gerätebestätigung. [Technische Nachweise und Nutzerbestätigung](docs/two-account-check.md).
 
 ## Routen
 - `#/auth`

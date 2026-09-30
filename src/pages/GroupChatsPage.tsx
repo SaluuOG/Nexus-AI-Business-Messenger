@@ -1,4 +1,7 @@
 import { MessageReactions, ReactionBubble, ReactionPicker } from '../components/MessageReactions';
+import { ChatFavorite, ChatListOptions, ChatListViews } from '../components/ChatOrganization';
+import { organizeChats, subscribeChatOrganization, type ChatListView } from '../features/data/chatOrganization';
+import { useChatOrganization } from '../features/data/useChatOrganization';
 import { PinnedMessages } from '../components/PinnedMessages';
 import { useMessagePins } from '../features/data/useMessagePins';
 import { useMessageReactions } from '../features/data/useMessageReactions';
@@ -296,7 +299,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       const target = preferred || linkedGroupId || current;
       return target && result.data.some((group) => group.group_id === target)
         ? target
-        : linkedGroupId ? null : result.data[0]?.group_id ?? null;
+        : linkedGroupId ? null : organizeChats(result.data,'active')[0]?.group_id ?? null;
     });
     return result.data;
   };
@@ -810,6 +813,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       runRefresh();
     };
     const channel = subscribeToGroupMessagesRealtime(() => scheduleRefresh(true));
+    const unsubscribeOrganization = subscribeChatOrganization('group',currentUserId,()=>scheduleRefresh());
     const onFocus = () => {
       scheduleRefresh();
       if (document.visibilityState === 'visible' && selectedRef.current) void markSelectedGroupRead(selectedRef.current, true);
@@ -835,6 +839,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
       void unsubscribeGroupRealtime(channel);
+      unsubscribeOrganization();
     };
   }, []);
 
@@ -890,13 +895,18 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
   }, []);
 
   const [statusFilter, setStatusFilter] = useState<ChatStatusFilterValue>('all');
+  const [listView,setListView] = useState<ChatListView>('active');
   const workflowHistoryVersion = JSON.stringify([groupListRevision, groups.map(group => [group.group_id, group.last_message_at, group.last_message])]);
   const workflows = useChatScanWorkflows('group', currentUserId, workflowHistoryVersion);
+  const organization = useChatOrganization('group',currentUserId,connection.online && !listCachedAt && !listError,async (id,field,value) => {
+    if (field==='archived' && value && selectedRef.current===id) { setSelectedId(null); setChatSearch({}); }
+    await refreshGroups(undefined,true);
+  });
   const filteredGroups = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return groups.filter(group => (!needle || `${group.name} ${group.last_message || ''}`.toLowerCase().includes(needle)) &&
+    return organizeChats(groups,listView).filter(group => (!needle || `${group.name} ${group.last_message || ''}`.toLowerCase().includes(needle)) &&
       matchesChatStatus(workflows.states.get(group.group_id), statusFilter));
-  }, [groups, query, workflows.states, statusFilter]);
+  }, [groups, query, workflows.states, statusFilter,listView]);
 
   const currentGroup = groups.find((group) => group.group_id === selectedId) || null;
   const reactions = useMessageReactions('group', currentGroup?.group_id, currentUserId, messages.filter(message => !message.deleted_at).map(message => message.message_id), !readOnly);
@@ -1398,19 +1408,24 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
 
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Gruppen durchsuchen" /></div>
         {mobileListOnly && (listCachedAt || connection.message) && <div className="chat-error" role="status">{listCachedAt ? offlineStamp(listCachedAt) : connection.message}</div>}
+        <ChatListViews value={listView} onChange={setListView} archivedCount={groups.filter(chat=>chat.archived).length} />
+        {organization.error && <div className="chat-error" role="alert">{organization.error}</div>}
         <ChatStatusFilter offline={!connection.online} value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
         {listError && connection.online && <div className="chat-error" role="alert">{listError}</div>}
         {mobileListOnly && error && connection.online && <div className="chat-error" role="alert">{readableLoadError(error)}</div>}
-        {!loading && connection.online && !listError && groups.length > 0 && filteredGroups.length === 0 && <div className="chat-list-empty">Keine Gruppen für diese Auswahl.</div>}
+        {!loading && !listError && groups.length > 0 && filteredGroups.length === 0 && <div className="chat-list-empty">{listView==='archive' ? 'Keine archivierten Gruppen für diese Auswahl.' : listView==='favorites' ? 'Keine Favoriten für diese Auswahl.' : 'Keine aktiven Gruppen für diese Auswahl.'}</div>}
         {!loading && groups.length === 0 && (!connection.online || listError) && <div className="chat-list-empty"><b>Gruppen derzeit nicht verfügbar</b><span>{!connection.online ? 'Verbinde dich mit dem Internet. Die Liste wird anschließend erneut geladen.' : 'Bitte lade die Liste erneut.'}</span></div>}
         {loading && groups.length === 0 && <div className="chat-list-empty">Gruppen werden geladen…</div>}
         {!loading && connection.online && !listError && groups.length === 0 && <div className="chat-list-empty"><UsersRound size={24} /><b>Noch keine Gruppen</b><span>Erstelle deine erste Gruppe mit einem Nexus-Kontakt.</span></div>}
         {filteredGroups.map((group) => (
-          <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setContextWarning(null); setChatSearch({ group: group.group_id }); }} key={group.group_id}>
+          <div className="chat-list-row" key={group.group_id} data-chat-id={group.group_id}>
+          <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setContextWarning(null); setChatSearch({ group: group.group_id }); }}>
             <div className="avatar group-avatar"><GroupAvatar group={group} size={16} /></div>
-            <span><b>{group.name}</b><small>{group.member_count} Mitglieder{!listCachedAt && ` · ${roleLabel(group.role)}`}</small><p>{group.last_message || 'Neue Gruppe'}</p><ChatStatusBadge state={workflows.states.get(group.group_id)} /></span>
+            <span><b><ChatFavorite active={group.favorite} />{group.name}</b><small>{group.member_count} Mitglieder{!listCachedAt && ` · ${roleLabel(group.role)}`}</small><p>{group.last_message || 'Neue Gruppe'}</p><ChatStatusBadge state={workflows.states.get(group.group_id)} /></span>
             <em>{formatTime(group.last_message_at)}{group.unread_count > 0 && <i>{group.unread_count > 99 ? '99+' : group.unread_count}</i>}</em>
           </button>
+          <ChatListOptions name={group.name} state={group} disabled={!connection.online || Boolean(listCachedAt) || Boolean(listError) || organization.busy(group.group_id)} onChange={(field,value)=>organization.save(group.group_id,field,value)} />
+          </div>
         ))}
       </section>
 
