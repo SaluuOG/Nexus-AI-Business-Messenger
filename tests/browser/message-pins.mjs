@@ -48,7 +48,15 @@ try {
           }
           await page.setViewportSize({width:390,height:844});
           const menu=page.getByRole('menu',{name:'Nachrichtenoptionen'});
-          const action=async label=>{await message.getByRole('button',{name:'Optionen',exact:true}).click();await menu.getByRole('menuitem',{name:label,exact:true}).click();};
+          const action=async label=>{
+            const trigger=message.getByRole('button',{name:'Optionen',exact:true});
+            // Removing the pin strip moves the message. Drain WebKit's queued
+            // scroll event before opening the menu, which dismisses on scroll.
+            await trigger.scrollIntoViewIfNeeded();
+            await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+            await trigger.click();
+            await menu.getByRole('menuitem',{name:label,exact:true}).click();
+          };
           await action('Anheftung lösen');await bar.waitFor({state:'hidden'});
           await action('Anheften');await summary.waitFor();
           assert.equal(await page.evaluate(()=>window.nexusTest.pinRows.filter(p=>p.pinned).length),1,'No duplicate pins');
