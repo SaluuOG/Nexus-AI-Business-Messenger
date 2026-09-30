@@ -1,5 +1,17 @@
 # Nachrichtenprüfung – 24. September 2026
 
+## Nachtrag – 1. Oktober 2026
+
+Der Nutzer hat die neue Chat-Gestenbedienung auf seinem iPhone sowie anschließend
+den beschriebenen Nachrichtentest mit zwei echten Konten als funktionierend
+bestätigt. Die unten aufgeführte Geräteprüfung gilt damit als nutzerseitig
+abgenommen; die damalige Beschreibung offener Punkte bleibt als Verlauf erhalten.
+Dies ist eine Nutzerbestätigung, kein neuer automatisiert ausgeführter Live-Test.
+Die danach ergänzten [Nachrichten-Anheftungen](message-pins.md) benötigen eine
+eigene Bestätigung nach dem nächsten App-Update.
+
+## Technischer Nachweis vom 24. September
+
 Diese Prüfung trennt technische Tests mit synthetischen Daten vom noch offenen
 Durchlauf mit zwei echten angemeldeten Konten und einem physischen iPhone.
 

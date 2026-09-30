@@ -96,6 +96,8 @@ const state = {
   failure: null, revoked: false, delayWorkspace: null, writes: 0, channels: [], revision: 0,
   reactionRows: JSON.parse(sessionStorage.getItem('nexusTest.reactions') || '[]'),
   reactionCalls: [], reactionDelay: 0, reactionFailure: false, loseReactionResponse: false,
+  pinRows: JSON.parse(sessionStorage.getItem('nexusTest.pins') || '[]'),
+  pinCalls: [], pinDelay: 0, pinFailure: false, pinReadFailure: false,
   sources: JSON.parse(sessionStorage.getItem('nexusTest.sources') || '[]'), sourceDenied: false,
   hideRecentSource: false, loseCreateResponse: false, createDelay: 0, directMessageDelay: 0,
   resetRequests: [], passwordUpdates: [], authFailure: null, signOutCount: 0, accountDeletionCalls: [],
@@ -495,6 +497,30 @@ export const supabase = {
     return query;
   },
   async rpcResult(name, args) {
+    if (name === 'get_message_pins') {
+      if (state.pinReadFailure || state.revoked) return { data: null, error: { message: 'No access' } };
+      const messages = args.p_kind === 'direct' ? state.directMessages : state.groupMessages;
+      const rows = state.pinRows.filter(pin => pin.kind === args.p_kind && pin.chat_id === args.p_chat_id && pin.pinned).flatMap(pin => {
+        const message = messages.find(message => message.message_id === pin.message_id && !message.deleted_at && (message.conversation_id ?? message.group_id) === args.p_chat_id);
+        return message ? [{ message_id: pin.message_id, chat_id: pin.chat_id, preview: message.body.slice(0,160), created_at: pin.created_at }] : [];
+      });
+      if (state.pinDelay) await new Promise(resolve => setTimeout(resolve,state.pinDelay));
+      return { data: structuredClone(rows), error: null };
+    }
+    if (name === 'set_message_pin') {
+      state.pinCalls.push(structuredClone(args));
+      if (state.pinDelay) await new Promise(resolve => setTimeout(resolve,state.pinDelay));
+      const role = sessionStorage.getItem('nexusTest.pinRole') || state.groupChats.find(group => group.group_id === args.p_chat_id)?.role;
+      const messages = args.p_kind === 'direct' ? state.directMessages : state.groupMessages;
+      if (state.pinFailure || state.revoked || (args.p_kind === 'group' && !['owner','admin'].includes(role)) || !messages.some(m => m.message_id === args.p_message_id && !m.deleted_at && (m.conversation_id ?? m.group_id) === args.p_chat_id)) return { data: null, error: { message: 'Denied' } };
+      let row = state.pinRows.find(pin => pin.kind === args.p_kind && pin.chat_id === args.p_chat_id && pin.message_id === args.p_message_id);
+      const event = row ? 'UPDATE' : 'INSERT';
+      if (row) row.pinned = args.p_pinned;
+      else { row = { kind: args.p_kind, chat_id: args.p_chat_id, message_id: args.p_message_id, pinned: args.p_pinned, created_at: new Date().toISOString() }; state.pinRows.push(row); }
+      sessionStorage.setItem('nexusTest.pins',JSON.stringify(state.pinRows));
+      queueMicrotask(() => state.emit(args.p_kind + '_message_pins',event,{ new: { message_id: args.p_message_id, [args.p_kind === 'direct' ? 'conversation_id' : 'group_id']: args.p_chat_id } }));
+      return { data: null, error: null };
+    }
     if (name === 'get_message_reactions') {
       const messages = args.p_kind === 'direct' ? state.directMessages : state.groupMessages;
       const allowed = new Set(messages.filter(message => !message.deleted_at && (message.conversation_id ?? message.group_id) === args.p_chat_id).map(message => message.message_id));
@@ -613,7 +639,7 @@ export const supabase = {
     if (name === 'get_my_group_chats') {
       state.groupChatListLoads++;
       if (state.groupChatListDelay) await new Promise(r => setTimeout(r, state.groupChatListDelay));
-      return { data: structuredClone(state.groupChats), error: null };
+      return { data: structuredClone(state.groupChats.map(group => ({ ...group, role: sessionStorage.getItem('nexusTest.pinRole') || group.role }))), error: null };
     }
     if (name === 'get_group_messages') return { data: state.hideRecentSource ? [] : structuredClone(state.groupMessages.filter(message => message.group_id === args.p_group_id).map(normalizedGroupMessage)), error: null };
     if (name === 'get_group_message_page') return { data: state.hideRecentSource

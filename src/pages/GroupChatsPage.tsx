@@ -1,4 +1,6 @@
 import { MessageReactions, ReactionBubble, ReactionPicker } from '../components/MessageReactions';
+import { PinnedMessages } from '../components/PinnedMessages';
+import { useMessagePins } from '../features/data/useMessagePins';
 import { useMessageReactions } from '../features/data/useMessageReactions';
 import { patchSavedMessage } from '../features/offline/chatCache';
 import { offlineChatList, offlineMessagePage, offlineStamp } from '../features/offline/chatReads';
@@ -910,6 +912,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       : `${activityName(typingMembers[0])} + ${typingMembers.length - 1} weitere schreiben…`
     : `${onlineCount} online · ${currentGroup?.member_count ?? members.length} Mitglieder`;
   const canManageGroup = currentGroup?.role === 'owner' || currentGroup?.role === 'admin';
+  const pins = useMessagePins('group', currentGroup?.group_id, currentUserId, !readOnly, canManageGroup);
   const isGroupOwner = currentGroup?.role === 'owner';
   const memberIds = useMemo(() => new Set(members.map((member) => member.user_id)), [members]);
   const addableContacts = useMemo(
@@ -1429,6 +1432,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
               <button className={`project-pill group-members-toggle${showMembers ? ' active' : ''}`} disabled={readOnly} onClick={() => setShowMembers((value) => !value)}><UsersRound size={13} /> Mitglieder</button>
             </div>
 
+            <PinnedMessages pins={pins} canManage={canManageGroup && !readOnly} onOpen={id => { if (linkedMessageId === id) void openLinkedGroupMessage(currentGroup.group_id, id); else setChatSearch({ group: currentGroup.group_id, message: id }); }} />
             {showMembers && !readOnly && (
               <div className="group-members-panel">
                 <div className="group-management">
@@ -1568,6 +1572,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                         {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${fullyRead ? ' read' : ''}`} title={readTitle}>{message.read_count > 0 ? <CheckCheck size={13} /> : '✓'}</span>}
                         {!readOnly && !message.deleted_at && <ReactionPicker rows={reactions.forMessage(message.message_id)} disabled={!reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
                         {!readOnly && !message.deleted_at && <MessageOptions
+                          pin={canManageGroup ? { active: pins.isPinned(message.message_id), disabled: !pins.ready || pins.pending(message.message_id), onToggle: () => pins.set(message.message_id, !pins.isPinned(message.message_id)) } : undefined}
                           reactions={{ rows: reactions.forMessage(message.message_id), disabled: !reactions.ready, pending: reactions.pending(message.message_id), onChoose: emoji => reactions.choose(message.message_id, emoji) }}
                           currentUserId={currentUserId} workspaceId={workspaceId}
                           source={{ kind: 'group', messageId: message.message_id, body: message.body, chatName: currentGroup.name, attachmentName: message.attachments?.[0]?.file_name }}

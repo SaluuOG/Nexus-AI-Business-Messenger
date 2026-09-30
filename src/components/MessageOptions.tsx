@@ -1,4 +1,4 @@
-import { CheckSquare2, Ellipsis, Pencil, Reply, Trash2 } from 'lucide-react';
+import { CheckSquare2, Ellipsis, Pencil, Pin, PinOff, Reply, Trash2 } from 'lucide-react';
 import { useContext, useLayoutEffect, useState } from 'react';
 import { useAnchoredMenu } from './useAnchoredMenu';
 import { createPortal } from 'react-dom';
@@ -10,6 +10,7 @@ import { MessageGestureContext, ReactionChoices, type ReactionProps } from './Me
 type Props = {
   source: MessageTaskOrigin;
   reactions?: ReactionProps;
+  pin?: { active: boolean; disabled: boolean; onToggle: () => void };
   currentUserId?: string;
   workspaceId?: string | null;
   onReply: () => void;
@@ -20,7 +21,7 @@ type Props = {
   deleteDisabled?: boolean;
 };
 
-export function MessageOptions({ reactions, source, currentUserId, workspaceId, onReply, onEdit, onDelete, replyDisabled, editDisabled, deleteDisabled }: Props) {
+export function MessageOptions({ pin, reactions, source, currentUserId, workspaceId, onReply, onEdit, onDelete, replyDisabled, editDisabled, deleteDisabled }: Props) {
   const { id, trigger, menu, initialFocus, open, setOpen, closeMenu, onMenuKeyDown } = useAnchoredMenu();
   const [taskOpen, setTaskOpen] = useState(false);
   const gestures = useContext(MessageGestureContext);
@@ -44,6 +45,7 @@ export function MessageOptions({ reactions, source, currentUserId, workspaceId, 
       {reactions && <ReactionChoices {...reactions} onChoose={emoji => select(() => reactions.onChoose(emoji))} />}
       <button type="button" role="menuitem" tabIndex={-1} disabled={!currentUserId} onClick={() => select(() => setTaskOpen(true))}><CheckSquare2 size={17} aria-hidden="true" />Als Aufgabe übernehmen</button>
       <button type="button" role="menuitem" tabIndex={-1} disabled={replyDisabled} onClick={() => select(onReply)}><Reply size={17} aria-hidden="true" />Antworten</button>
+      {pin && <button type="button" role="menuitem" tabIndex={-1} disabled={pin.disabled} onClick={() => select(pin.onToggle)}>{pin.active ? <PinOff size={17} aria-hidden="true" /> : <Pin size={17} aria-hidden="true" />}{pin.active ? 'Anheftung lösen' : 'Anheften'}</button>}
       {onEdit && <button type="button" role="menuitem" tabIndex={-1} disabled={editDisabled} onClick={() => select(onEdit)}><Pencil size={17} aria-hidden="true" />Bearbeiten</button>}
       {onDelete && <button type="button" role="menuitem" tabIndex={-1} className="message-options-delete" disabled={deleteDisabled} onClick={() => select(onDelete)}><Trash2 size={17} aria-hidden="true" />Löschen</button>}
     </div>, document.body)}
