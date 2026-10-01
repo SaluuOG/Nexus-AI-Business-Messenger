@@ -3,6 +3,7 @@ import { ChatMuted, ChatFavorite, ChatListOptions, ChatListViews } from '../comp
 import { organizeChats, subscribeChatOrganization, type ChatListView } from '../features/data/chatOrganization';
 import { useChatOrganization } from '../features/data/useChatOrganization';
 import { PinnedMessages } from '../components/PinnedMessages';
+import { ChatSharedContent } from '../components/ChatSharedContent';
 import { useMessagePins } from '../features/data/useMessagePins';
 import { useMessageReactions } from '../features/data/useMessageReactions';
 import { patchSavedMessage } from '../features/offline/chatCache';
@@ -1447,6 +1448,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
               <button className={`project-pill group-members-toggle${showMembers ? ' active' : ''}`} disabled={readOnly} onClick={() => setShowMembers((value) => !value)}><UsersRound size={13} /> Mitglieder</button>
             </div>
 
+            <ChatSharedContent key={`shared:${currentUserId}:group:${currentGroup.group_id}`} kind="group" chatId={currentGroup.group_id} name={currentGroup.name} enabled={!readOnly && !!currentUserId} onOpenMessage={id => { if (linkedMessageId === id) void openLinkedGroupMessage(currentGroup.group_id, id); else setChatSearch({ group: currentGroup.group_id, message: id }); }} />
             <PinnedMessages pins={pins} canManage={canManageGroup && !readOnly} onOpen={id => { if (linkedMessageId === id) void openLinkedGroupMessage(currentGroup.group_id, id); else setChatSearch({ group: currentGroup.group_id, message: id }); }} />
             {showMembers && !readOnly && (
               <div className="group-members-panel">

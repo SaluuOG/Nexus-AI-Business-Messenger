@@ -3,6 +3,7 @@ import { ChatMuted, ChatFavorite, ChatListOptions, ChatListViews } from '../comp
 import { organizeChats, subscribeChatOrganization, type ChatListView } from '../features/data/chatOrganization';
 import { useChatOrganization } from '../features/data/useChatOrganization';
 import { PinnedMessages } from '../components/PinnedMessages';
+import { ChatSharedContent } from '../components/ChatSharedContent';
 import { useMessagePins } from '../features/data/useMessagePins';
 import { useMessageReactions } from '../features/data/useMessageReactions';
 import { patchSavedMessage } from '../features/offline/chatCache';
@@ -1215,6 +1216,7 @@ export function ChatsPage({
               <div className="project-pill">Privater 1:1-Chat</div>
             </div>
 
+            <ChatSharedContent key={`shared:${currentUserId}:direct:${currentChat.conversation_id}`} kind="direct" chatId={currentChat.conversation_id} name={nameOf(currentChat)} enabled={!readOnly && !!currentUserId} onOpenMessage={id => { if (linkedMessageId === id) void refreshMessageContext(currentChat.conversation_id, id); else setChatSearch({ conversation: currentChat.conversation_id, message: id }); }} />
             <PinnedMessages pins={pins} canManage={!readOnly} onOpen={id => { if (linkedMessageId === id) void refreshMessageContext(currentChat.conversation_id, id); else setChatSearch({ conversation: currentChat.conversation_id, message: id }); }} />
             <div className="messages" ref={messagesElementRef} onScroll={handleMessageScroll}>
               {hasOlder && !readOnly && (

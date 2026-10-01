@@ -57,5 +57,5 @@ Nachricht holt einen archivierten Chat zurück, ohne die Stummschaltung zu beend
   Ablauf-Timer, Realtime, Speicherfehler, Kontowechsel und Menüs bei 320/390/1440 Pixeln.
   Die Browserprüfung arbeitet mit isolierten Testdaten.
 
-Die neue Stummschaltung muss nach dem App-Update noch auf dem physischen iPhone
-bestätigt werden. Der vorherige Favoriten-/Archiv-Block ist bereits bestätigt.
+Die Stummschaltung wurde vom Nutzer am 01.10.2026 auf dem physischen iPhone als
+funktionierend bestätigt. Der vorherige Favoriten-/Archiv-Block ist ebenfalls bestätigt.
