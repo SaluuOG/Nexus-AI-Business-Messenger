@@ -36,7 +36,7 @@ for(const file of changed) {
   }
   if (/^(README\.md|docs\/|\.github\/|tests\/run-changed\.mjs)/.test(file)) continue;
   if (/^tests\/[^/]+\.test\.mjs$/.test(file)) { unit.add(file); continue; }
-  if (/^tests\/browser\/(mobile-push|notifications|settings|mobile-install)\.mjs$/.test(file)) { browser.add(file); continue; }
+  if (/^tests\/browser\/(mobile-push|notifications|settings|mobile-install|message-pins)\.mjs$/.test(file)) { browser.add(file); continue; }
   if (/^(src\/features\/notifications\/|src\/components\/(PushPreferences|NotificationPreferences)\.tsx|src\/pages\/NotificationsPage\.tsx|src\/notifications\.css|supabase\/functions\/mobile-push\/|supabase\/migrations\/\d+_mobile_push_notifications\.sql|tests\/sql\/mobile-push-rls\.sql|tests\/browser\/push-service\.mjs)/.test(file)) {
     add(['tests/mobile-push.test.mjs','tests/notifications.test.mjs'],['tests/browser/mobile-push.mjs','tests/browser/notifications.mjs']);continue;
   }
