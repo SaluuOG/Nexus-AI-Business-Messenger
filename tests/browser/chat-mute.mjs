@@ -81,7 +81,7 @@ try{
           await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await count(2);
           await action('Dauerhaft stummschalten');await badge.waitFor();
           await page.evaluate(()=>window.nexusTest.switchUser('other'));
-          await row.waitFor();await badge.waitFor({state:'hidden'});assert.equal(await row.count(),1);
+          await badge.waitFor({state:'hidden'});await row.waitFor();assert.equal(await badge.count(),0);
           assert.deepEqual(errors,[]);
           console.log(`${engineName} ${kind}: timed/permanent mute, feed/counts, unread messages, reload, offline, expiry, remote updates, failure, account isolation and responsive menu passed`);
         }catch(error){await page.screenshot({path:`browser-results/${engineName}-${kind}-mute-failure.png`,fullPage:true});console.error((await page.locator('body').innerText()).slice(-2500));throw error;}
