@@ -50,10 +50,25 @@ try {
           const menu=page.getByRole('menu',{name:'Nachrichtenoptionen'});
           const action=async label=>{
             const trigger=message.getByRole('button',{name:'Optionen',exact:true});
-            // Removing the pin strip moves the message. Drain WebKit's queued
-            // scroll event before opening the menu, which dismisses on scroll.
+            // Viewport changes and removing the pin strip queue scroll/resize
+            // events. Wait for the actual geometry and events to settle before
+            // opening a menu that intentionally dismisses when either changes.
             await trigger.scrollIntoViewIfNeeded();
-            await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+            await trigger.evaluate(element=>new Promise(resolve=>{
+              let changed=performance.now(),previous='';
+              const note=()=>{changed=performance.now();};
+              const viewport=window.visualViewport;
+              document.addEventListener('scroll',note,true);window.addEventListener('resize',note);
+              viewport?.addEventListener('scroll',note);viewport?.addEventListener('resize',note);
+              const frame=()=>{
+                const b=element.getBoundingClientRect();
+                const shape=[b.x,b.y,b.width,b.height,viewport?.width,viewport?.height,viewport?.offsetTop].join(':');
+                if(shape!==previous){previous=shape;note();}
+                if(performance.now()-changed<150){requestAnimationFrame(frame);return;}
+                document.removeEventListener('scroll',note,true);window.removeEventListener('resize',note);
+                viewport?.removeEventListener('scroll',note);viewport?.removeEventListener('resize',note);resolve();
+              };requestAnimationFrame(frame);
+            }));
             await trigger.click();
             await menu.getByRole('menuitem',{name:label,exact:true}).click();
           };
