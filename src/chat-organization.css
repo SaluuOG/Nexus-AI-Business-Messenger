@@ -7,4 +7,6 @@
 .chat-list-options:hover{background:#242c3a;color:#fff}
 .chat-list-options:disabled{opacity:.4;cursor:not-allowed}
 .chat-favorite{color:#c5ac73;vertical-align:middle;margin-right:5px;flex-shrink:0}
+.chat-muted{color:#9ca7ba;display:inline-flex;vertical-align:middle;margin-right:5px}
+.chat-mute-caption{border-top:1px solid #303847;margin-top:4px;padding:10px 12px 4px;color:#9ca7ba;font-size:11px}
 .chat-list-views button:focus-visible,.chat-list-options:focus-visible{outline:2px solid #aaa0ff;outline-offset:2px}

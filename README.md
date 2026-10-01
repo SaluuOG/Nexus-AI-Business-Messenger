@@ -49,6 +49,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Herz per Doppeltippen/Doppelklick und sechs Emoji-Reaktionen mit Zähler in Einzel- und Gruppenchats ([Details und Prüfung](docs/message-reactions.md))
 - Nachrichten anheften und aus einer kompakten Chatübersicht öffnen; in Gruppen verwalten nur Owner/Admins die Anheftungen ([Details und Prüfung](docs/message-pins.md))
 - persönliche Chat-Favoriten und Archiv für Einzel-/Gruppenchats; neue Nachrichten holen archivierte Chats automatisch zurück, Offline-Ansichten behalten den letzten Stand ([Details und Prüfung](docs/chat-organization.md))
+- Einzel-/Gruppenchats persönlich für 1 Stunde, 8 Stunden oder dauerhaft stummschalten; Nachrichten und ungelesene Chat-Zähler bleiben erhalten ([Details und Prüfung](docs/chat-mute.md))
 - eigene Nachrichten bearbeiten
 - eigene Nachrichten per Soft-Delete löschen
 - gelöschte Nachrichten verlieren serverseitig ihren Nachrichtentext

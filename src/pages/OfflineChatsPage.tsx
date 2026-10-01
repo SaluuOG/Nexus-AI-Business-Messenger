@@ -3,7 +3,7 @@ import { ArrowLeft, MessageCircle, WifiOff } from 'lucide-react';
 import { readSavedChat, syncOfflineChatAccount, type ChatKind } from '../features/offline/chatCache';
 import { offlineStamp } from '../features/offline/chatReads';
 import './offlineChats.css';
-import { ChatFavorite, ChatListViews } from '../components/ChatOrganization';
+import { ChatMuted, ChatFavorite, ChatListViews } from '../components/ChatOrganization';
 import { organizeChats, type ChatListView } from '../features/data/chatOrganizationView';
 
 // Only local snapshots are accessible here; there is deliberately no Auth User,
@@ -46,7 +46,7 @@ export function OfflineChatsPage({ account, onClear }: { account: string; onClea
             <p>{row.deleted_at ? 'Nachricht gelöscht' : String(row.body || '')}</p>
             <small>{new Date(String(row.created_at)).toLocaleString('de-DE')}{row.edited_at && !row.deleted_at ? ' · bearbeitet' : ''}</small>
           </article> : <button key={String(row.conversation_id || row.group_id)} className="secondary" onClick={() => setSelected({ id: String(row.conversation_id || row.group_id), name: String(row.name || row.full_name || row.username || 'Nexus-Kontakt') })}>
-            <b><ChatFavorite active={row.favorite===true} />{String(row.name || row.full_name || row.username || 'Nexus-Kontakt')}</b><span>{String(row.last_message || '')}</span>
+            <b><ChatFavorite active={row.favorite===true} /><ChatMuted state={{muted_forever:row.muted_forever===true,muted_until:typeof row.muted_until==='string'?row.muted_until:null}} />{String(row.name || row.full_name || row.username || 'Nexus-Kontakt')}</b><span>{String(row.last_message || '')}</span>
           </button>)}
         </div>}
       <button className="secondary" disabled={clearing} onClick={() => {

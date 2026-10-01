@@ -56,6 +56,6 @@ holen ihn nicht zurück. Der Favoritenstatus bleibt beim Archivieren erhalten.
   gescheiterte Speicherung, Offline-Neustart, Kontowechsel und 320/390/1440-Pixel-Menüs.
   Diese automatisierten Browserprüfungen verwenden isolierte Testdaten.
 
-Die neue Bedienung auf dem physischen iPhone muss nach dem App-Update noch
-bestätigt werden. Der vorherige Block „Nachrichten anheften“ wurde vom Nutzer
-am 01.10.2026 bereits als funktionierend bestätigt.
+Die Bedienung von Favoriten und Archiv auf dem physischen iPhone wurde vom Nutzer
+am 01.10.2026 als funktionierend bestätigt. Persönliches Stummschalten ist im
+anschließenden Block beschrieben: [Chat stummschalten](chat-mute.md).

@@ -13,7 +13,7 @@ test('Personal chat organization validates reads, independent writes, views and 
     const row={chat_id:'chat',favorite:true,archived:false};
     await t.test('Only valid preference rows; failed metadata cannot silently undo archive filtering',async()=>{
       stub.setResponse(()=>({data:[row],error:null}));
-      assert.deepEqual((await api.loadChatOrganization('direct')).get('chat'),{favorite:true,archived:false});
+      assert.deepEqual((await api.loadChatOrganization('direct')).get('chat'),{favorite:true,archived:false,muted_until:null,muted_forever:false});
       for(const data of [null,[{...row,archived:'true'}],[{...row,chat_id:''}],[row,row]]){
         stub.setResponse(()=>({data,error:null}));await assert.rejects(api.loadChatOrganization('direct'));
       }
@@ -48,6 +48,23 @@ test('Personal chat organization validates reads, independent writes, views and 
       api.subscribeChatOrganization('group','me',()=>refresh++);
       assert.equal(refresh,1);assert.equal(stub.subscriptions.length,2);
       assert.ok(stub.subscriptions.every(s=>s.filter.filter==='user_id=eq.me'&&s.filter.table==='group_chat_preferences'&&['INSERT','UPDATE'].includes(s.filter.event)));
+    });
+    await t.test('Mute modes are explicit, failures propagate, timestamps expire and cached values are sanitized',async()=>{
+      stub.setResponse(()=>({data:null,error:null}));
+      for (const mode of ['1h','8h','forever','off']) await api.setChatMute('group','chat',mode);
+      assert.deepEqual(stub.requests.map(r=>r.args),['1h','8h','forever','off'].map(p_mode=>({p_kind:'group',p_chat_id:'chat',p_mode})));
+      stub.setResponse(()=>({data:null,error:{message:'denied'}}));await assert.rejects(api.setChatMute('direct','chat','forever'));
+      const until='2026-10-01T12:00:00.000Z',now=Date.parse(until);
+      assert.equal(api.isChatMuted({muted_until:until},now-1),true);
+      assert.equal(api.isChatMuted({muted_until:until},now),false);
+      assert.equal(api.isChatMuted({muted_forever:true},now+86400000),true);
+      assert.equal(api.isChatMuted({}),false);
+      for (const extra of [{muted_until:'invalid'},{muted_forever:'false'},{muted_forever:true,muted_until:until}]) {
+        stub.setResponse(()=>({data:[{...row,...extra}],error:null}));await assert.rejects(api.loadChatOrganization('direct'));
+      }
+      const saved=cache.sanitizeRows('direct','list',[{conversation_id:'chat',muted_until:until,muted_forever:false}])[0];
+      assert.equal(saved.muted_until,until);assert.equal(saved.muted_forever,false);
+      assert.equal(cache.sanitizeRows('group','list',[{group_id:'g',muted_until:'invalid',muted_forever:'true'}])[0].muted_until,null);
     });
   }finally{await server.close();}
 });

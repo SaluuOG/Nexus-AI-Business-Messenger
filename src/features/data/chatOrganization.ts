@@ -1,6 +1,6 @@
 import { supabase } from '../../lib/supabase';
 
-import type { OrganizationKind, ChatOrganization, OrganizationField } from './chatOrganizationView';
+import type { OrganizationKind, ChatOrganization, OrganizationField, ChatMuteMode } from './chatOrganizationView';
 export * from './chatOrganizationView';
 
 export async function withChatOrganization<T extends ChatOrganization>(kind: OrganizationKind, load: () => PromiseLike<{ data: T[] | null; error: {message: string} | null }>, id: (row: T) => string) {
@@ -8,7 +8,7 @@ export async function withChatOrganization<T extends ChatOrganization>(kind: Org
   if (list.status === 'rejected') return {data: [] as T[], error: 'Chats konnten nicht geladen werden. Bitte erneut versuchen.'};
   if (list.value.error) return {data: [] as T[], error: list.value.error.message};
   if (organization.status === 'rejected') return {data: [] as T[], error: organization.reason instanceof Error ? organization.reason.message : 'Chat-Einstellungen nicht verfügbar.'};
-  return {data: (list.value.data ?? []).map(row => ({...row, favorite: false, archived: false, ...organization.value.get(id(row))})), error: null};
+  return {data: (list.value.data ?? []).map(row => ({...row, favorite: false, archived: false, muted_until: null, muted_forever: false, ...organization.value.get(id(row))})), error: null};
 }
 
 export async function loadChatOrganization(kind: OrganizationKind) {
@@ -20,7 +20,11 @@ export async function loadChatOrganization(kind: OrganizationKind) {
     if (!row || typeof row.chat_id !== 'string' || !row.chat_id || typeof row.favorite !== 'boolean' || typeof row.archived !== 'boolean' || states.has(row.chat_id)) {
       throw new Error('Deine Chat-Einstellungen konnten nicht sicher geladen werden.');
     }
-    states.set(row.chat_id, { favorite: row.favorite, archived: row.archived });
+    if ((row.muted_until != null && (typeof row.muted_until !== 'string' || !Number.isFinite(Date.parse(row.muted_until)))) ||
+        (row.muted_forever !== undefined && typeof row.muted_forever !== 'boolean') || (row.muted_forever && row.muted_until != null)) {
+      throw new Error('Deine Stummschaltung konnte nicht sicher geladen werden.');
+    }
+    states.set(row.chat_id, { favorite: row.favorite, archived: row.archived, muted_until: row.muted_until ?? null, muted_forever: row.muted_forever ?? false });
   }
   return states;
 }
@@ -29,6 +33,13 @@ export async function setChatOrganization(kind: OrganizationKind, chatId: string
   if (!supabase || (typeof navigator !== 'undefined' && navigator.onLine === false)) throw new Error('Keine Verbindung.');
   const { error } = await supabase.rpc('set_chat_organization', { p_kind: kind, p_chat_id: chatId, p_field: field, p_value: value });
   if (error) throw new Error('Chat-Einstellung konnte nicht gespeichert werden. Bitte erneut versuchen.');
+}
+
+export async function setChatMute(kind: OrganizationKind, chatId: string, mode: ChatMuteMode) {
+  if (!supabase || (typeof navigator !== 'undefined' && navigator.onLine === false)) throw new Error('Keine Verbindung.');
+  const { error } = await supabase.rpc('set_chat_mute', { p_kind: kind, p_chat_id: chatId, p_mode: mode });
+  if (error) throw new Error('Stummschaltung konnte nicht gespeichert werden. Bitte erneut versuchen.');
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('nexus-chat-preferences-changed'));
 }
 
 export function subscribeChatOrganization(kind: OrganizationKind, userId: string | undefined, onChanged: () => void) {

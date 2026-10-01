@@ -1,5 +1,5 @@
 import { MessageReactions, ReactionBubble, ReactionPicker } from '../components/MessageReactions';
-import { ChatFavorite, ChatListOptions, ChatListViews } from '../components/ChatOrganization';
+import { ChatMuted, ChatFavorite, ChatListOptions, ChatListViews } from '../components/ChatOrganization';
 import { organizeChats, subscribeChatOrganization, type ChatListView } from '../features/data/chatOrganization';
 import { useChatOrganization } from '../features/data/useChatOrganization';
 import { PinnedMessages } from '../components/PinnedMessages';
@@ -1421,10 +1421,10 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
           <div className="chat-list-row" key={group.group_id} data-chat-id={group.group_id}>
           <button className={`chat${selectedId === group.group_id ? ' active' : ''}`} onClick={() => { setContextWarning(null); setChatSearch({ group: group.group_id }); }}>
             <div className="avatar group-avatar"><GroupAvatar group={group} size={16} /></div>
-            <span><b><ChatFavorite active={group.favorite} />{group.name}</b><small>{group.member_count} Mitglieder{!listCachedAt && ` · ${roleLabel(group.role)}`}</small><p>{group.last_message || 'Neue Gruppe'}</p><ChatStatusBadge state={workflows.states.get(group.group_id)} /></span>
+            <span><b><ChatFavorite active={group.favorite} /><ChatMuted state={group} />{group.name}</b><small>{group.member_count} Mitglieder{!listCachedAt && ` · ${roleLabel(group.role)}`}</small><p>{group.last_message || 'Neue Gruppe'}</p><ChatStatusBadge state={workflows.states.get(group.group_id)} /></span>
             <em>{formatTime(group.last_message_at)}{group.unread_count > 0 && <i>{group.unread_count > 99 ? '99+' : group.unread_count}</i>}</em>
           </button>
-          <ChatListOptions name={group.name} state={group} disabled={!connection.online || Boolean(listCachedAt) || Boolean(listError) || organization.busy(group.group_id)} onChange={(field,value)=>organization.save(group.group_id,field,value)} />
+          <ChatListOptions name={group.name} state={group} disabled={!connection.online || Boolean(listCachedAt) || Boolean(listError) || organization.busy(group.group_id)} onChange={(field,value)=>organization.save(group.group_id,field,value)} onMute={mode=>organization.mute(group.group_id,mode)} />
           </div>
         ))}
       </section>

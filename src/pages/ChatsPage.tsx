@@ -1,5 +1,5 @@
 import { MessageReactions, ReactionBubble, ReactionPicker } from '../components/MessageReactions';
-import { ChatFavorite, ChatListOptions, ChatListViews } from '../components/ChatOrganization';
+import { ChatMuted, ChatFavorite, ChatListOptions, ChatListViews } from '../components/ChatOrganization';
 import { organizeChats, subscribeChatOrganization, type ChatListView } from '../features/data/chatOrganization';
 import { useChatOrganization } from '../features/data/useChatOrganization';
 import { PinnedMessages } from '../components/PinnedMessages';
@@ -1166,14 +1166,14 @@ export function ChatsPage({
           <button className={`chat${selectedId === conversation.conversation_id ? ' active' : ''}`} onClick={() => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setChatSearch({ conversation: conversation.conversation_id }); }}>
             <div className="avatar">{initials(conversation.full_name, conversation.username)}</div>
             <span>
-              <b><ChatFavorite active={conversation.favorite} />{nameOf(conversation)}</b>
+              <b><ChatFavorite active={conversation.favorite} /><ChatMuted state={conversation} />{nameOf(conversation)}</b>
               <small>{conversation.username ? `@${conversation.username}` : 'Nexus-Kontakt'}</small>
               <p>{conversation.last_message || 'Neuer Chat'}</p>
               <ChatStatusBadge state={workflows.states.get(conversation.conversation_id)} />
             </span>
             <em>{formatTime(conversation.last_message_at)}{conversation.unread_count > 0 && <i>{conversation.unread_count > 99 ? '99+' : conversation.unread_count}</i>}</em>
           </button>
-          <ChatListOptions name={nameOf(conversation)} state={conversation} disabled={!connection.online || Boolean(listCachedAt) || Boolean(listError) || organization.busy(conversation.conversation_id)} onChange={(field,value)=>organization.save(conversation.conversation_id,field,value)} />
+          <ChatListOptions name={nameOf(conversation)} state={conversation} disabled={!connection.online || Boolean(listCachedAt) || Boolean(listError) || organization.busy(conversation.conversation_id)} onChange={(field,value)=>organization.save(conversation.conversation_id,field,value)} onMute={mode=>organization.mute(conversation.conversation_id,mode)} />
           </div>
         ))}
       </section>

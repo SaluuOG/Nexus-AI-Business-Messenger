@@ -170,6 +170,10 @@ state.switchUser = id => {
 };
 const notificationCategory = kind => ({ direct_message: 'messages', group_message: 'messages', contact_request: 'contacts', workspace_invitation: 'invitations', task_assigned: 'assignments', task_comment: 'comments', task_mention: 'comments', task_due: 'deadlines', task_overdue: 'deadlines' })[kind];
 const notificationPrefs = id => ({ messages: true, contacts: true, invitations: true, assignments: true, comments: true, deadlines: true, ...state.notificationPreferences[id] });
+const notificationMuted = n => {
+  const kind=n.kind==='direct_message'?'direct':n.kind==='group_message'?'group':null;
+  return kind && state.organizationRows.some(p=>p.user_id===n.recipient_id && p.kind===kind && p.chat_id===n.details.chat_id && (p.muted_forever || Date.parse(p.muted_until)>Date.now()));
+};
 state.persistNotifications = () => {
   sessionStorage.setItem('nexusTest.notifications', JSON.stringify(state.notifications));
   sessionStorage.setItem('nexusTest.notificationPreferences', JSON.stringify(state.notificationPreferences));
@@ -508,11 +512,11 @@ export const supabase = {
   },
   async rpcResult(name, args) {
     if (name === 'get_chat_organization') {
-      const rows=structuredClone(state.organizationRows.filter(row=>row.kind===args.p_kind && row.user_id===user.id).map(({chat_id,favorite,archived})=>({chat_id,favorite,archived})));
+      const rows=structuredClone(state.organizationRows.filter(row=>row.kind===args.p_kind && row.user_id===user.id).map(({chat_id,favorite,archived,muted_until=null,muted_forever=false})=>({chat_id,favorite,archived,muted_until,muted_forever})));
       if(state.organizationDelay)await new Promise(resolve=>setTimeout(resolve,state.organizationDelay));
       return state.organizationReadFailure ? {data:null,error:{message:'Unavailable'}} : {data:rows,error:null};
     }
-    if (name === 'set_chat_organization') {
+    if (name === 'set_chat_organization' || name === 'set_chat_mute') {
       const userId=user.id; state.organizationCalls.push({...args,userId});
       if(state.organizationWriteDelay)await new Promise(resolve=>setTimeout(resolve,state.organizationWriteDelay));
       if(state.organizationFailure)return {data:null,error:{message:'Save failed'}};
@@ -521,7 +525,11 @@ export const supabase = {
       let row=state.organizationRows.find(row=>row.kind===args.p_kind && row.chat_id===args.p_chat_id && row.user_id===userId);
       const event=row?'UPDATE':'INSERT';
       if(!row){row={kind:args.p_kind,user_id:userId,chat_id:args.p_chat_id,favorite:false,archived:false};state.organizationRows.push(row);}
-      row[args.p_field]=args.p_value;
+      if (name === 'set_chat_mute') {
+        if (!['off','1h','8h','forever'].includes(args.p_mode)) return {data:null,error:{message:'Invalid mode'}};
+        row.muted_forever=args.p_mode==='forever';
+        row.muted_until=['1h','8h'].includes(args.p_mode)?new Date(Date.now()+(args.p_mode==='1h'?1:8)*3600000).toISOString():null;
+      } else row[args.p_field]=args.p_value;
       sessionStorage.setItem('nexusTest.organization',JSON.stringify(state.organizationRows));
       queueMicrotask(()=>state.emit(args.p_kind+'_chat_preferences',event,{new:{...row}}));
       return {data:null,error:null};
@@ -625,7 +633,7 @@ export const supabase = {
       state.notificationCalls.push({ name, args, userId: user.id });
       if (state.failure === name) return { data: null, error: { message: 'offline' } };
       const preferences = notificationPrefs(user.id);
-      const visible = state.notifications.filter(n => n.recipient_id === user.id && !n.revoked && preferences[notificationCategory(n.kind)]).sort((a, b) => Number(b.id) - Number(a.id));
+      const visible = state.notifications.filter(n => n.recipient_id === user.id && !n.revoked && !notificationMuted(n) && preferences[notificationCategory(n.kind)]).sort((a, b) => Number(b.id) - Number(a.id));
       const filtered = visible.filter(n => !args.p_unread_only || !n.read_at);
       const paged = filtered.filter(n => !args.p_before || BigInt(n.id) < BigInt(args.p_before));
       const items = paged.slice(0, args.p_limit);
@@ -638,7 +646,7 @@ export const supabase = {
       if (state.failure === name) return { data: null, error: { message: 'offline' } };
       if (state.notificationReadDelay) await new Promise(r => setTimeout(r, state.notificationReadDelay));
       const preferences = notificationPrefs(user.id);
-      for (const n of state.notifications) if (n.recipient_id === user.id && !n.revoked && preferences[notificationCategory(n.kind)] && BigInt(n.id) <= BigInt(args.p_through) && (!args.p_id || n.id === args.p_id)) n.read_at = new Date().toISOString();
+      for (const n of state.notifications) if (n.recipient_id === user.id && !n.revoked && !notificationMuted(n) && preferences[notificationCategory(n.kind)] && BigInt(n.id) <= BigInt(args.p_through) && (!args.p_id || n.id === args.p_id)) n.read_at = new Date().toISOString();
       state.persistNotifications(); state.emit('notifications');
       return { data: null, error: null };
     }
