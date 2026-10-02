@@ -1,3 +1,4 @@
+import { ForwardedLabel } from '../components/MessageForwardDialog';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, MessageCircle, WifiOff } from 'lucide-react';
 import { readSavedChat, syncOfflineChatAccount, type ChatKind } from '../features/offline/chatCache';
@@ -44,6 +45,7 @@ export function OfflineChatsPage({ account, onClear }: { account: string; onClea
         <div className={selected ? 'offline-reader-messages' : 'offline-reader-list'}>
           {visibleRows.map(row => selected ? <article key={String(row.message_id)} className={row.sender_id === account ? 'offline-message mine' : 'offline-message'}>
             <b>{row.sender_id === account ? 'Du' : String(row.sender_full_name || row.sender_username || selected.name)}</b>
+            {row.is_forwarded === true && !row.deleted_at && <ForwardedLabel />}
             <p>{row.deleted_at ? 'Nachricht gelöscht' : String(row.body || '')}</p>
             <small>{new Date(String(row.created_at)).toLocaleString('de-DE')}{row.edited_at && !row.deleted_at ? ' · bearbeitet' : ''}</small>
             {!row.deleted_at && <CopyMessageOptions text={String(row.body || '')} />}

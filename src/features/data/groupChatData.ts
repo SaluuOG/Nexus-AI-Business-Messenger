@@ -54,6 +54,7 @@ export type GroupAttachment = {
 };
 
 export type GroupMessage = {
+  is_forwarded?: boolean;
   message_id: string;
   group_id: string;
   sender_id: string;
@@ -199,6 +200,7 @@ function normalizeGroupMessages(value: unknown): GroupMessage[] | null {
       });
     }
     normalized.push({
+      is_forwarded: message.is_forwarded === true && !message.deleted_at,
       message_id: message.message_id,
       group_id: message.group_id,
       sender_id: message.sender_id,

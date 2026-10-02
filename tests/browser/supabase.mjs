@@ -1,6 +1,7 @@
 // Test-only in-memory service, injected by the browser test's Vite plugin.
 // It is never imported by the production application.
 import { createCollaborationService } from './collaboration-service.mjs';
+import { createForwardingService } from './forwarding-service.mjs';
 const project = (id, title, workspace_id, deadline, status = 'active') => ({
   id, title, workspace_id, deadline, status, priority: 'medium', progress: 35,
   value_cents: 10000, currency: 'EUR', customer_id: null, description: 'Vollständige Projektbeschreibung',
@@ -131,6 +132,7 @@ if (taskMentionsFixture) state.memberships.push(
 const memberships = state.memberships;
 let user = { id: 'me', email: 'nexus-test@example.invalid', user_metadata: { full_name: 'Test Nutzer' } };
 const collaboration = createCollaborationService(state, () => user);
+const forwarding = createForwardingService(state, () => user);
 export const backendConfigured = true;
 export const supabaseConfig = { url: 'https://example.invalid', publishableKey: 'test-only' };
 export const initialAuthCallback = { isRecovery: false, hasError: false, hasPkceCode: false, marker: null };
@@ -511,6 +513,7 @@ export const supabase = {
     return query;
   },
   async rpcResult(name, args) {
+    if (name === 'get_message_forward_targets' || name === 'forward_text_message') return forwarding(name, args);
     if (name === 'get_chat_organization') {
       const rows=structuredClone(state.organizationRows.filter(row=>row.kind===args.p_kind && row.user_id===user.id).map(({chat_id,favorite,archived,muted_until=null,muted_forever=false})=>({chat_id,favorite,archived,muted_until,muted_forever})));
       if(state.organizationDelay)await new Promise(resolve=>setTimeout(resolve,state.organizationDelay));

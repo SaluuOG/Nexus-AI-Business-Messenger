@@ -1,3 +1,4 @@
+import { ForwardedLabel } from '../components/MessageForwardDialog';
 import { MessageReactions, ReactionBubble, ReactionPicker } from '../components/MessageReactions';
 import { ChatMuted, ChatFavorite, ChatListOptions, ChatListViews } from '../components/ChatOrganization';
 import { organizeChats, subscribeChatOrganization, type ChatListView } from '../features/data/chatOrganization';
@@ -1250,6 +1251,7 @@ export function ChatsPage({
                     style={highlighted ? { outline: '2px solid #8f87ff', outlineOffset: 6, borderRadius: 12 } : undefined}
                   >
                     <ReactionBubble className={mine ? 'bubble me' : 'bubble'} disabled={readOnly || !reactions.ready || reactions.pending(message.message_id) || Boolean(message.deleted_at)} onLike={() => reactions.like(message.message_id)}>
+                      {message.is_forwarded && !message.deleted_at && <ForwardedLabel />}
                       {message.reply_to_message_id && <div className="reply-preview"><b>{message.reply_sender_id === currentUserId ? 'Du' : nameOf(currentChat)}</b><span>{message.reply_body || (cachedAt ? 'Antwort auf eine Nachricht' : 'Anhang')}</span></div>}
                       {!message.deleted_at && message.attachments.length > 0 && (
                         <div className="message-attachments">

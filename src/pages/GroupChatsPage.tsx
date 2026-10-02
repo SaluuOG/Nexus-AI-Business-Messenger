@@ -1,3 +1,4 @@
+import { ForwardedLabel } from '../components/MessageForwardDialog';
 import { MessageReactions, ReactionBubble, ReactionPicker } from '../components/MessageReactions';
 import { ChatMuted, ChatFavorite, ChatListOptions, ChatListViews } from '../components/ChatOrganization';
 import { organizeChats, subscribeChatOrganization, type ChatListView } from '../features/data/chatOrganization';
@@ -1584,6 +1585,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                   >
                     {!mine && !message.deleted_at && <small className="group-message-sender">{sender}</small>}
                     <ReactionBubble className={mine ? 'bubble me' : 'bubble'} disabled={readOnly || !reactions.ready || reactions.pending(message.message_id) || Boolean(message.deleted_at)} onLike={() => reactions.like(message.message_id)}>
+                      {message.is_forwarded && !message.deleted_at && <ForwardedLabel />}
                       {message.reply_to_message_id && (
                         <div className="reply-preview"><b>{message.reply_sender_id === currentUserId ? 'Du' : message.reply_sender_name || 'Nexus Nutzer'}</b><span>{message.reply_body || 'Anhang'}</span></div>
                       )}

@@ -68,7 +68,7 @@ export function sanitizeRows(kind: ChatKind, id: string, input: unknown): Row[] 
     const result: Row = {};
     for (const field of stringFields) result[field] = text(row[field]);
     const hasAttachment = Array.isArray(row.attachments) && row.attachments.length > 0;
-    return { ...result, body: row.deleted_at ? '' : (text(row.body) || '') + (hasAttachment ? '\n[Anhang nur online verfügbar]' : ''), reply_body: null, attachments: [], sender_avatar_url: null, read_count: 0, recipient_count: 0 };
+    return { ...result, is_forwarded: row.is_forwarded === true && !row.deleted_at, body: row.deleted_at ? '' : (text(row.body) || '') + (hasAttachment ? '\n[Anhang nur online verfügbar]' : ''), reply_body: null, attachments: [], sender_avatar_url: null, read_count: 0, recipient_count: 0 };
   }).filter(row => typeof row[id === 'list' ? kind === 'direct' ? 'conversation_id' : 'group_id' : 'message_id'] === 'string');
 }
 async function read(scope: Scope, kind: ChatKind, id: string): Promise<RecordValue | null> {
