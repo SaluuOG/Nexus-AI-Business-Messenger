@@ -305,6 +305,12 @@ export function ChatsPage({
       scrollLockRef.current = null;
       return;
     }
+    // Opening an action menu takes precedence over delayed history alignment.
+    // Otherwise a queued correction can move its anchor and dismiss the menu.
+    if (container.querySelector('[aria-haspopup="menu"][aria-expanded="true"]')) {
+      scrollLockRef.current = null;
+      return;
+    }
     const target = messageElementsRef.current.get(lock.messageId);
     if (!target) return;
     const currentOffset = target.getBoundingClientRect().top - container.getBoundingClientRect().top;

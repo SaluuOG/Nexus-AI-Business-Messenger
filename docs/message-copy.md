@@ -38,6 +38,9 @@ nicht als Erfolg behandelt oder durch diesen Kompatibilitätsweg umgangen.
   Composer-Textes beim Fokuswechsel ab: Nur Scrollen von Vorfahren des Menüankers
   bei tatsächlicher Ankerbewegung schließt das Menü; das interne Scrollen eines
   anderen Eingabefeldes und vor dem Öffnen eingereihte Scroll-Ereignisse nicht.
+- Nach dem Sprung zu einer alten Nachricht beenden Einzel- und Gruppenchats die
+  verzögerte Positionskorrektur, sobald ein Nachrichtenmenü geöffnet ist. Die
+  Anheftungsprüfung hält das Menü über das gesamte Korrekturfenster offen.
 
 Die iPhone-Bestätigung dieser Funktion sowie die Geräteprüfung der vorherigen
 Medien-/Datei-/Linkübersicht sind weiterhin offen. Der Nutzer hat letztere am

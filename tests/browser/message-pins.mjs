@@ -18,15 +18,6 @@ try {
         const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true});
         await context.route('**/*',route=>route.request().url().startsWith(origin)?route.continue():route.abort());
         await context.addInitScript(({kind,chatId,anchor})=>{
-          window.pinMenuEvents=[];
-          const record=event=>{
-            const popup=document.querySelector('[role="menu"]');
-            if(!popup&&!window.pinMenuRecording)return;
-            const rect=popup?.getBoundingClientRect();
-            window.pinMenuEvents.push({time:Math.round(performance.now()),type:event.type,target:event.target instanceof Element?event.target.className:event.target?.nodeName||'viewport',active:document.activeElement?.className,anchorY:document.querySelector('[aria-expanded="true"].message-options-trigger')?.getBoundingClientRect().y,menu:rect?{x:rect.x,y:rect.y,height:rect.height}:null,scroll:document.querySelector('.messages')?.scrollTop});
-            if(window.pinMenuEvents.length>80)window.pinMenuEvents.shift();
-          };
-          for(const type of ['scroll','resize','focusin','pointerdown']){document.addEventListener(type,record,true);window.visualViewport?.addEventListener(type,record);}
           window.pinOnline=true;Object.defineProperty(navigator,'onLine',{get:()=>window.pinOnline,configurable:true});
           sessionStorage.setItem('nexusTest.messageHistoryFixture','1');
           if(!sessionStorage.getItem('nexusTest.pinInitialized')){
@@ -78,8 +69,11 @@ try {
                 viewport?.removeEventListener('scroll',note);viewport?.removeEventListener('resize',note);resolve();
               };requestAnimationFrame(frame);
             }));
-            await page.evaluate(()=>{window.pinMenuEvents=[];window.pinMenuRecording=true;});
             await trigger.click();
+            // History alignment has trailing checks at 80/240/700 ms. Opening
+            // an action menu must cancel that correction, not dismiss the menu.
+            await page.waitForTimeout(800);
+            assert.equal(await menu.isVisible(),true,'Menu survives delayed history alignment');
             await menu.getByRole('menuitem',{name:label,exact:true}).click();
           };
           await action('Anheftung lösen');await bar.waitFor({state:'hidden'});
@@ -137,7 +131,7 @@ try {
           assert.equal(await bar.count(),0,'Account switch fences late preview responses');
           assert.deepEqual(errors,[]);
           console.log(`${name} ${kind}: pins, old-message jump, roles, reload, edits/deletion, offline, errors and account fencing passed`);
-        }catch(error){console.error('Pin menu events',JSON.stringify(await page.evaluate(()=>window.pinMenuEvents)));await page.screenshot({path:`browser-results/${name}-${kind}-pins-failure.png`,fullPage:true});console.error((await page.locator('body').innerText()).slice(-2000));throw error;}
+        }catch(error){await page.screenshot({path:`browser-results/${name}-${kind}-pins-failure.png`,fullPage:true});console.error((await page.locator('body').innerText()).slice(-2000));throw error;}
         finally{await context.close();}
       }
     }finally{await browser.close();}

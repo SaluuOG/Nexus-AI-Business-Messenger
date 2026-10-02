@@ -351,6 +351,11 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
       scrollLockRef.current = null;
       return;
     }
+    // Keep a menu the user just opened stable while history checks finish.
+    if (container.querySelector('[aria-haspopup="menu"][aria-expanded="true"]')) {
+      scrollLockRef.current = null;
+      return;
+    }
     const target = messageElementsRef.current.get(lock.messageId);
     if (!target) return;
     const currentOffset = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
