@@ -50,7 +50,7 @@ for(const file of changed) {
 }
 if(full) {
   for(const name of readdirSync('tests').filter(name=>name.endsWith('.test.mjs')))unit.add('tests/'+name);
-  for(const name of ['offline-cache','offline-availability','chat-connection','chat-organization','chat-mute','chat-shared-content','native-push','read-recovery','auth-recovery','project-templates','mobile-push','task-attachments','task-collaboration','task-mentions','mobile-workflows','chat-scan','briefing','mobile-install','workspace-lifecycle','message-history','message-tasks','message-reactions','message-pins','message-copy','message-forwarding','settings','notifications'])browser.add(`tests/browser/${name}.mjs`);
+  for(const name of ['offline-cache','offline-availability','chat-connection','chat-organization','chat-mute','chat-shared-content','native-push','read-recovery','auth-recovery','project-templates','mobile-push','task-attachments','task-collaboration','task-mentions','mobile-workflows','chat-scan','briefing','mobile-install','workspace-lifecycle','message-history','message-tasks','message-reactions','message-pins','message-copy','message-forwarding','message-bookmarks','settings','notifications'])browser.add(`tests/browser/${name}.mjs`);
 }
 const selection={unit:[...unit].sort(),browser:[...browser].sort()};
 console.log(JSON.stringify({scope:full?'full':'changed',...selection}));

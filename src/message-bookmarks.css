@@ -1,0 +1,19 @@
+.bookmarks-search{padding:20px;margin-bottom:16px}
+.bookmarks-search label{display:block;margin-bottom:10px;font-weight:600}
+.bookmarks-search>div{display:flex;gap:10px;flex-wrap:wrap}
+.bookmarks-search input{flex:1;min-width:120px;padding:12px;background:#151d2a;color:inherit;border:1px solid #343d4c;border-radius:10px;font-size:16px}
+.bookmarks-tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+.bookmarks-list{display:grid;gap:16px;margin-top:20px}
+.bookmark-card{padding:20px;min-width:0;overflow-wrap:anywhere}
+.bookmark-card header{display:flex;justify-content:space-between;gap:16px;margin-bottom:12px}
+.bookmark-card header>div{min-width:0}.bookmark-card header>svg{flex-shrink:0;color:#ada2ff}
+.bookmark-card h2{font-size:18px;margin:0 0 6px}.bookmark-card small{color:var(--muted,#a4aec0)}
+.bookmark-preview{white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;line-height:1.6}
+.bookmark-attachment{font-size:14px;color:#beb7ff}
+.bookmark-card footer{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.bookmark-card footer a{display:inline-flex;align-items:center;text-decoration:none;padding:10px 14px}
+.bookmarks-page button,.bookmark-card footer a{min-height:44px;white-space:normal}
+.bookmarks-empty{text-align:center;padding:36px 22px}.bookmarks-empty svg{color:#ada2ff}.bookmarks-empty h2{font-size:20px}
+.bookmarks-more{margin-top:20px}.bookmark-status{font-size:13px;padding:8px 0;color:#c6bfff}
+@media(max-width:420px){.bookmark-card footer>*{flex:1 1 100%;justify-content:center}}
+@media(max-width:360px){.bookmark-card,.bookmarks-search{padding:16px}.bookmarks-search input{flex-basis:100%}.bookmarks-search button{flex:1;justify-content:center}}

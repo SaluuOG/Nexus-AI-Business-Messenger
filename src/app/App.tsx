@@ -56,6 +56,7 @@ const ChatsPage = lazy(() => import('../pages/ChatsPage').then((module) => ({ de
 const ContactsPage = lazy(() => import('../pages/ContactsPage').then((module) => ({ default: module.ContactsPage })));
 const GroupChatsPage = lazy(() => import('../pages/GroupChatsPage').then((module) => ({ default: module.GroupChatsPage })));
 const MessageSearchPage = lazy(() => import('../pages/MessageSearchPage').then((module) => ({ default: module.MessageSearchPage })));
+const MessageBookmarksPage = lazy(() => import('../pages/MessageBookmarksPage').then(module => ({ default: module.MessageBookmarksPage })));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })));
 const SettingsPage = lazy(() => import('../pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 const NotificationsPage = lazy(() => import('../pages/NotificationsPage').then((module) => ({ default: module.NotificationsPage })));
@@ -423,6 +424,7 @@ function AppShell() {
       <Route path={routes.chats} element={<ChatsPage key={auth.user?.id} workspaceId={selectedWorkspaceId} currentUserId={auth.user?.id} requestedConversationId={requestedConversationId} onRequestedConversationHandled={() => setRequestedConversationId(null)} />} />
       <Route path={routes.groups} element={<GroupChatsPage key={auth.user?.id} workspaceId={selectedWorkspaceId} currentUserId={auth.user?.id} />} />
       <Route path={routes.search} element={<MessageSearchPage />} />
+      <Route path={routes.bookmarks} element={<MessageBookmarksPage key={auth.user?.id} currentUserId={auth.user?.id} />} />
       <Route path={routes.contacts} element={<ContactsPage onStartChat={startContactChat} />} />
       <Route
         path={routes.business}

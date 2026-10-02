@@ -6,6 +6,7 @@ import { useChatOrganization } from '../features/data/useChatOrganization';
 import { PinnedMessages } from '../components/PinnedMessages';
 import { ChatSharedContent } from '../components/ChatSharedContent';
 import { useMessagePins } from '../features/data/useMessagePins';
+import { useMessageBookmarks } from '../features/data/useMessageBookmarks';
 import { useMessageReactions } from '../features/data/useMessageReactions';
 import { patchSavedMessage } from '../features/offline/chatCache';
 import { offlineChatList, offlineMessagePage, offlineStamp } from '../features/offline/chatReads';
@@ -859,6 +860,7 @@ export function ChatsPage({
   }, [conversations, query, workflows.states, statusFilter,listView]);
   const currentChat = conversations.find((conversation) => conversation.conversation_id === selectedId) || null;
   const pins = useMessagePins('direct', currentChat?.conversation_id, currentUserId, !readOnly, true);
+  const bookmarks = useMessageBookmarks('direct', currentChat?.conversation_id, currentUserId, messages.filter(message => !message.deleted_at).map(message => message.message_id), !readOnly);
   const reactions = useMessageReactions('direct', currentChat?.conversation_id, currentUserId, messages.filter(message => !message.deleted_at).map(message => message.message_id), !readOnly);
   const scanHistoryVersion = JSON.stringify([
     currentHistoryRevision,
@@ -1226,6 +1228,7 @@ export function ChatsPage({
 
             <ChatSharedContent key={`shared:${currentUserId}:direct:${currentChat.conversation_id}`} kind="direct" chatId={currentChat.conversation_id} name={nameOf(currentChat)} enabled={!readOnly && !!currentUserId} onOpenMessage={id => { if (linkedMessageId === id) void refreshMessageContext(currentChat.conversation_id, id); else setChatSearch({ conversation: currentChat.conversation_id, message: id }); }} />
             <PinnedMessages pins={pins} canManage={!readOnly} onOpen={id => { if (linkedMessageId === id) void refreshMessageContext(currentChat.conversation_id, id); else setChatSearch({ conversation: currentChat.conversation_id, message: id }); }} />
+            {bookmarks.error ? <div className="chat-error" role="alert">{bookmarks.error} <button type="button" onClick={bookmarks.refresh}>Erneut laden</button></div> : bookmarks.feedback && <p className="bookmark-status" role="status">{bookmarks.feedback}</p>}
             <div className="messages" ref={messagesElementRef} onScroll={handleMessageScroll}>
               {hasOlder && !readOnly && (
                 <button className="secondary messages-history-button" onClick={() => void loadOlderMessages()} disabled={loadingOlder} data-action="load-older-messages">
@@ -1265,6 +1268,7 @@ export function ChatsPage({
                         {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${message.read_at ? ' read' : ''}`}>{message.read_at ? <CheckCheck size={13} /> : '✓'}</span>}
                         {!readOnly && !message.deleted_at && <ReactionPicker rows={reactions.forMessage(message.message_id)} disabled={!reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
                         {!readOnly && !message.deleted_at && <MessageOptions
+                          bookmark={{ active: bookmarks.has(message.message_id), disabled: !bookmarks.ready || bookmarks.pending(message.message_id), onToggle: () => bookmarks.set(message.message_id, !bookmarks.has(message.message_id)) }}
                           pin={{ active: pins.isPinned(message.message_id), disabled: !pins.ready || pins.pending(message.message_id), onToggle: () => pins.set(message.message_id, !pins.isPinned(message.message_id)) }}
                           reactions={{ rows: reactions.forMessage(message.message_id), disabled: !reactions.ready, pending: reactions.pending(message.message_id), onChoose: emoji => reactions.choose(message.message_id, emoji) }}
                           currentUserId={currentUserId} workspaceId={workspaceId}

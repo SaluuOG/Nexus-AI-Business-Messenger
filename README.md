@@ -54,6 +54,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - eigene Nachrichten bearbeiten
 - Nachrichtentext über das Drei-Punkte-Menü kopieren, auch aus gespeicherten Offline-Chats ([Details und Prüfung](docs/message-copy.md))
 - Textnachrichten mit Zielauswahl, Vorschau und ausdrücklicher Bestätigung in bestehende Einzel- oder Gruppenchats weiterleiten ([Details und Prüfung](docs/message-forwarding.md))
+- private Merkliste für Einzel-/Gruppennachrichten mit Suche, Seitenwechsel und Sprung zur Originalnachricht ([Details und Prüfung](docs/message-bookmarks.md))
 - eigene Nachrichten per Soft-Delete löschen
 - gelöschte Nachrichten verlieren serverseitig ihren Nachrichtentext
 - RLS und Security-Definer-RPCs schützen Presence-, Typing- und Message-Aktionen

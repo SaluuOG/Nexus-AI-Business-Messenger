@@ -29,7 +29,7 @@ async function checkMessageOptions(page, browserName, kind) {
   assert.equal(await other.locator('.bubble').getByRole('button', { name: 'Optionen', exact: true }).count(), 1);
   await trigger.focus();
   await trigger.press('ArrowDown');
-  assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Als Aufgabe übernehmen', 'Antworten', 'Text kopieren', 'Weiterleiten', ...(!groups ? ['Anheften'] : [])]);
+  assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Als Aufgabe übernehmen', 'Antworten', 'Text kopieren', 'Nachricht merken', 'Weiterleiten', ...(!groups ? ['Anheften'] : [])]);
   await page.keyboard.press('End');
   assert.equal(await menu.getByRole('menuitem', { name: groups ? 'Weiterleiten' : 'Anheften', exact: true }).evaluate(el => el === document.activeElement), true);
   await page.keyboard.press('Escape');
@@ -47,7 +47,7 @@ async function checkMessageOptions(page, browserName, kind) {
   const own = page.locator(`[data-message-id="${ownId}"]`);
   const ownTrigger = own.getByRole('button', { name: 'Optionen', exact: true });
   await ownTrigger.click();
-  assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Als Aufgabe übernehmen', 'Antworten', 'Text kopieren', 'Weiterleiten', ...(!groups ? ['Anheften'] : []), 'Bearbeiten', 'Löschen']);
+  assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Als Aufgabe übernehmen', 'Antworten', 'Text kopieren', 'Nachricht merken', 'Weiterleiten', ...(!groups ? ['Anheften'] : []), 'Bearbeiten', 'Löschen']);
   await menu.getByRole('menuitem', { name: 'Bearbeiten', exact: true }).click();
   assert.equal(await page.locator('.composer input:not([type=file])').inputValue(), 'Eigene Nachricht mit Optionen');
   await page.locator('.composer-context button').click();
@@ -70,7 +70,11 @@ async function checkMessageOptions(page, browserName, kind) {
     assert.ok(target.width >= 44 && target.height >= 44, 'Touch target is large enough');
     assert.ok(target.x >= bubble.x && target.y >= bubble.y && target.x + target.width <= bubble.x + bubble.width && target.y + target.height <= bubble.y + bubble.height, 'Options are inside the bubble');
     await page.screenshot({ path: `browser-results/${browserName}-${kind}-message-options-${width}.png`, fullPage: true });
-    await own.locator('.message-body').click();
+    // The larger menu may legitimately cover its message. Click a verified
+    // point outside the menu to exercise dismissal, rather than through it.
+    const outside = { x: Math.max(1, box.x - 4), y: Math.max(1, box.y - 4) };
+    assert.ok(outside.x < box.x || outside.y < box.y, 'Dismissal point is outside the menu');
+    await page.mouse.click(outside.x, outside.y);
     await menu.waitFor({ state: 'hidden' });
   }
   await page.setViewportSize({ width: 1440, height: 1000 });

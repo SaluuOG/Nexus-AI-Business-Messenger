@@ -6,6 +6,7 @@ import { useChatOrganization } from '../features/data/useChatOrganization';
 import { PinnedMessages } from '../components/PinnedMessages';
 import { ChatSharedContent } from '../components/ChatSharedContent';
 import { useMessagePins } from '../features/data/useMessagePins';
+import { useMessageBookmarks } from '../features/data/useMessageBookmarks';
 import { useMessageReactions } from '../features/data/useMessageReactions';
 import { patchSavedMessage } from '../features/offline/chatCache';
 import { offlineChatList, offlineMessagePage, offlineStamp } from '../features/offline/chatReads';
@@ -931,6 +932,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
     : `${onlineCount} online · ${currentGroup?.member_count ?? members.length} Mitglieder`;
   const canManageGroup = currentGroup?.role === 'owner' || currentGroup?.role === 'admin';
   const pins = useMessagePins('group', currentGroup?.group_id, currentUserId, !readOnly, canManageGroup);
+  const bookmarks = useMessageBookmarks('group', currentGroup?.group_id, currentUserId, messages.filter(message => !message.deleted_at).map(message => message.message_id), !readOnly);
   const isGroupOwner = currentGroup?.role === 'owner';
   const memberIds = useMemo(() => new Set(members.map((member) => member.user_id)), [members]);
   const addableContacts = useMemo(
@@ -1457,6 +1459,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
 
             <ChatSharedContent key={`shared:${currentUserId}:group:${currentGroup.group_id}`} kind="group" chatId={currentGroup.group_id} name={currentGroup.name} enabled={!readOnly && !!currentUserId} onOpenMessage={id => { if (linkedMessageId === id) void openLinkedGroupMessage(currentGroup.group_id, id); else setChatSearch({ group: currentGroup.group_id, message: id }); }} />
             <PinnedMessages pins={pins} canManage={canManageGroup && !readOnly} onOpen={id => { if (linkedMessageId === id) void openLinkedGroupMessage(currentGroup.group_id, id); else setChatSearch({ group: currentGroup.group_id, message: id }); }} />
+            {bookmarks.error ? <div className="chat-error" role="alert">{bookmarks.error} <button type="button" onClick={bookmarks.refresh}>Erneut laden</button></div> : bookmarks.feedback && <p className="bookmark-status" role="status">{bookmarks.feedback}</p>}
             {showMembers && !readOnly && (
               <div className="group-members-panel">
                 <div className="group-management">
@@ -1597,6 +1600,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                         {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${fullyRead ? ' read' : ''}`} title={readTitle}>{message.read_count > 0 ? <CheckCheck size={13} /> : '✓'}</span>}
                         {!readOnly && !message.deleted_at && <ReactionPicker rows={reactions.forMessage(message.message_id)} disabled={!reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
                         {!readOnly && !message.deleted_at && <MessageOptions
+                          bookmark={{ active: bookmarks.has(message.message_id), disabled: !bookmarks.ready || bookmarks.pending(message.message_id), onToggle: () => bookmarks.set(message.message_id, !bookmarks.has(message.message_id)) }}
                           pin={canManageGroup ? { active: pins.isPinned(message.message_id), disabled: !pins.ready || pins.pending(message.message_id), onToggle: () => pins.set(message.message_id, !pins.isPinned(message.message_id)) } : undefined}
                           reactions={{ rows: reactions.forMessage(message.message_id), disabled: !reactions.ready, pending: reactions.pending(message.message_id), onChoose: emoji => reactions.choose(message.message_id, emoji) }}
                           currentUserId={currentUserId} workspaceId={workspaceId}
