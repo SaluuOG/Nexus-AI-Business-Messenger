@@ -29,7 +29,7 @@ async function checkMessageOptions(page, browserName, kind) {
   assert.equal(await other.locator('.bubble').getByRole('button', { name: 'Optionen', exact: true }).count(), 1);
   await trigger.focus();
   await trigger.press('ArrowDown');
-  assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Als Aufgabe übernehmen', 'Antworten', 'Text kopieren', 'Nachricht merken', 'Weiterleiten', ...(!groups ? ['Anheften'] : [])]);
+  assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Als Aufgabe übernehmen', 'Antworten', 'Text kopieren', 'Nachricht merken', 'Später erinnern', 'Weiterleiten', ...(!groups ? ['Anheften'] : [])]);
   await page.keyboard.press('End');
   assert.equal(await menu.getByRole('menuitem', { name: groups ? 'Weiterleiten' : 'Anheften', exact: true }).evaluate(el => el === document.activeElement), true);
   await page.keyboard.press('Escape');
@@ -47,7 +47,7 @@ async function checkMessageOptions(page, browserName, kind) {
   const own = page.locator(`[data-message-id="${ownId}"]`);
   const ownTrigger = own.getByRole('button', { name: 'Optionen', exact: true });
   await ownTrigger.click();
-  assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Als Aufgabe übernehmen', 'Antworten', 'Text kopieren', 'Nachricht merken', 'Weiterleiten', ...(!groups ? ['Anheften'] : []), 'Bearbeiten', 'Löschen']);
+  assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Als Aufgabe übernehmen', 'Antworten', 'Text kopieren', 'Nachricht merken', 'Später erinnern', 'Weiterleiten', ...(!groups ? ['Anheften'] : []), 'Bearbeiten', 'Löschen']);
   await menu.getByRole('menuitem', { name: 'Bearbeiten', exact: true }).click();
   assert.equal(await page.locator('.composer input:not([type=file])').inputValue(), 'Eigene Nachricht mit Optionen');
   await page.locator('.composer-context button').click();

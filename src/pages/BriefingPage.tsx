@@ -2,6 +2,7 @@ import { useNetworkStatus } from '../features/connection/useNetworkStatus';
 import { briefingLoadError } from '../features/data/readRetry';
 import { ArrowRight, CalendarClock, CheckCircle2, CircleAlert, FolderKanban, RefreshCw, Sparkles, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { MessageReminders } from '../components/MessageReminders';
 import { Header } from '../components/Header';
 import type { BusinessTarget } from '../app/businessNavigation';
 import type { NexusProjectTask } from '../features/data/businessData';
@@ -86,6 +87,7 @@ export function BriefingPage({ openBusiness, displayName, workspaceId, workspace
     </div>
     {!online && <div className="data-alert" role="status">Keine Internetverbindung. Das Briefing kann gerade nicht aktualisiert werden. Sobald du wieder verbunden bist, wird es erneut geladen.</div>}
     {online && error && <div className="data-alert" role="alert">{briefingLoadError(error)}</div>}
+    {currentUserId && <MessageReminders key={currentUserId} currentUserId={currentUserId} />}
     {!workspaceId ? <div className="panel briefing-empty">
       <FolderKanban size={34} /><b>{!online ? 'Workspace offline nicht verfügbar' : workspaceLoading ? 'Workspaces werden geladen…' : workspaceError ? 'Workspaces konnten nicht geladen werden' : 'Noch kein Workspace ausgewählt'}</b>
       {online && !workspaceLoading && !workspaceError && <span>Lege in den Einstellungen einen Workspace an oder wähle einen bestehenden aus.</span>}
