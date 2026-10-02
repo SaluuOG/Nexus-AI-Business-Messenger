@@ -36,6 +36,7 @@ import {
 } from '../components/ChatStatusFilter';
 import { Header } from '../components/Header';
 import { MessageOptions } from '../components/MessageOptions';
+import { CopyMessageOptions } from '../components/MessageCopy';
 import { TaskMessageContext } from '../components/TaskMessageContext';
 import { useChatScanWorkflows } from '../features/ai/useChatScanWorkflows';
 import {
@@ -1265,6 +1266,7 @@ export function ChatsPage({
                           onDelete={mine ? () => void remove(message) : undefined}
                           replyDisabled={Boolean(textRetry)} editDisabled={Boolean(textRetry)} deleteDisabled={actionId === message.message_id}
                         />}
+                        {readOnly && !message.deleted_at && <CopyMessageOptions text={message.body} />}
                       </div>
                       {!message.deleted_at && <MessageReactions rows={reactions.forMessage(message.message_id)} disabled={readOnly || !reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
                     </ReactionBubble>

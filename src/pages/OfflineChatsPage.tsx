@@ -5,6 +5,7 @@ import { offlineStamp } from '../features/offline/chatReads';
 import './offlineChats.css';
 import { ChatMuted, ChatFavorite, ChatListViews } from '../components/ChatOrganization';
 import { organizeChats, type ChatListView } from '../features/data/chatOrganizationView';
+import { CopyMessageOptions } from '../components/MessageCopy';
 
 // Only local snapshots are accessible here; there is deliberately no Auth User,
 // composer, membership authority, API client, presence or realtime subscription.
@@ -45,6 +46,7 @@ export function OfflineChatsPage({ account, onClear }: { account: string; onClea
             <b>{row.sender_id === account ? 'Du' : String(row.sender_full_name || row.sender_username || selected.name)}</b>
             <p>{row.deleted_at ? 'Nachricht gelöscht' : String(row.body || '')}</p>
             <small>{new Date(String(row.created_at)).toLocaleString('de-DE')}{row.edited_at && !row.deleted_at ? ' · bearbeitet' : ''}</small>
+            {!row.deleted_at && <CopyMessageOptions text={String(row.body || '')} />}
           </article> : <button key={String(row.conversation_id || row.group_id)} className="secondary" onClick={() => setSelected({ id: String(row.conversation_id || row.group_id), name: String(row.name || row.full_name || row.username || 'Nexus-Kontakt') })}>
             <b><ChatFavorite active={row.favorite===true} /><ChatMuted state={{muted_forever:row.muted_forever===true,muted_until:typeof row.muted_until==='string'?row.muted_until:null}} />{String(row.name || row.full_name || row.username || 'Nexus-Kontakt')}</b><span>{String(row.last_message || '')}</span>
           </button>)}

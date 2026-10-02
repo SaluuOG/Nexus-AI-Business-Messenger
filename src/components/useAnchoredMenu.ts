@@ -37,7 +37,15 @@ export function useAnchoredMenu() {
       setOpen(false);
     };
     const scrolled = (event: Event) => {
-      if (!(event.target instanceof Node) || !popup.contains(event.target)) dismiss();
+      const target = event.target;
+      // An input can scroll its own text on blur. It does not move the anchor
+      // and must not dismiss a menu that has just taken focus from the composer.
+      if (target instanceof Node && !popup.contains(target) && trigger.current && target.contains(trigger.current)) {
+        const current = trigger.current.getBoundingClientRect();
+        // A scroll event queued before opening is harmless if the anchor is
+        // still at the position used above (e.g. after scrollIntoView).
+        if (Math.abs(current.top - anchor.top) > .5 || Math.abs(current.left - anchor.left) > .5) dismiss();
+      }
     };
     document.addEventListener('pointerdown', outside);
     document.addEventListener('focusin', outside);

@@ -19,6 +19,7 @@ import { ChatScanAction } from '../components/ChatScanAction';
 import { ChatStatusBadge, ChatStatusFilter, matchesChatStatus, type ChatStatusFilterValue } from '../components/ChatStatusFilter';
 import { useChatScanWorkflows } from '../features/ai/useChatScanWorkflows';
 import { MessageOptions } from '../components/MessageOptions';
+import { CopyMessageOptions } from '../components/MessageCopy';
 import { TaskMessageContext } from '../components/TaskMessageContext';
 import { Header } from '../components/Header';
 import { SUPPORTED_CHAT_ATTACHMENT_TYPES, validateChatAttachment } from '../features/data/chatData';
@@ -1606,6 +1607,7 @@ export function GroupChatsPage({ currentUserId, workspaceId }: GroupChatsPagePro
                           onDelete={mine ? () => void remove(message) : undefined}
                           replyDisabled={awaitingManualRetry} editDisabled={awaitingManualRetry} deleteDisabled={saving}
                         />}
+                        {readOnly && !message.deleted_at && <CopyMessageOptions text={message.body} />}
                       </div>
                       {!message.deleted_at && <MessageReactions rows={reactions.forMessage(message.message_id)} disabled={readOnly || !reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
                     </ReactionBubble>

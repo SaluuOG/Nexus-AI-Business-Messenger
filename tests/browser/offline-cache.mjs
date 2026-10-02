@@ -27,6 +27,7 @@ const setOnline = (page, online) => page.evaluate(value => {
 const init = async context => {
   await context.addInitScript(() => {
     sessionStorage.setItem('nexusTest.mobileBusinessFixture', '1');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.copiedText = text; } } });
     sessionStorage.setItem('nexusTest.messageHistoryFixture', '1');
     Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => localStorage.getItem('nexusTest.offline') !== '1' });
   });
@@ -61,7 +62,12 @@ try {
           await page.goto(routeURL);
           await page.locator('.messages .message-body').filter({hasText:latest}).waitFor();
           await page.locator('.conversation [role=status]').filter({hasText:'Offline – zuletzt gespeichert:'}).waitFor();
-          assert.equal(await page.getByRole('button', { name: 'Optionen', exact: true }).count(),0);
+          const options = page.locator('.message-wrap').filter({hasText:latest}).getByRole('button',{name:'Optionen',exact:true});
+          await options.click();
+          const copyMenu = page.getByRole('menu',{name:'Nachrichtenoptionen'});
+          assert.deepEqual(await copyMenu.getByRole('menuitem').allTextContents(),['Text kopieren'],'Offline exposes only a local action');
+          await copyMenu.getByRole('menuitem',{name:'Text kopieren'}).click();
+          await page.waitForFunction(expected=>window.copiedText===expected,latest);
           assert.equal(await page.locator('[data-action=load-older-messages]').count(),0);
           assert.equal(await page.evaluate(()=>window.nexusTest.chatReadCalls.length),0,'No offline read receipts');
           // Fresh authoritative response removes a message and changes another.
@@ -86,6 +92,15 @@ try {
           await page.locator('.offline-reader-list button').filter({hasText:label}).click();
           await page.locator('.offline-message p').filter({hasText:'Online bearbeitet'}).waitFor();
           assert.equal(await page.locator('input, textarea, .composer').count(),0);
+          const savedMessage = page.locator('.offline-message').filter({hasText:'Online bearbeitet'});
+          await savedMessage.getByRole('button',{name:'Optionen',exact:true}).click();
+          const savedMenu = page.getByRole('menu',{name:'Nachrichtenoptionen'});
+          assert.deepEqual(await savedMenu.getByRole('menuitem').allTextContents(),['Text kopieren']);
+          await page.locator('.offline-reader').evaluate(el=>{el.scrollTop-=32;});
+          await savedMenu.waitFor({state:'hidden'});
+          await savedMessage.getByRole('button',{name:'Optionen',exact:true}).click();
+          await savedMenu.getByRole('menuitem',{name:'Text kopieren'}).click();
+          await page.waitForFunction(()=>window.copiedText==='Online bearbeitet');
           await page.screenshot({path:`browser-results/offline-cache-${name}-${kind}.png`});
           assert.equal(await page.evaluate(()=>window.nexusTest.chatReadCalls.length),0);
           assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);

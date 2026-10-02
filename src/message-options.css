@@ -51,6 +51,25 @@
 .message-options-menu button:focus-visible { background: #2a3344; outline: 2px solid #9d96ff; outline-offset: -2px; }
 .message-options-menu button:disabled { opacity: .45; cursor: not-allowed; }
 .message-options-menu .message-options-delete { color: #ffabb4; }
+.message-copy-feedback {
+  position: fixed;
+  z-index: 110;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 12px 18px;
+  border: 1px solid #8b83ec;
+  border-radius: 12px;
+  background: #202336;
+  color: #eef2f7;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+}
 @media (pointer: coarse), (max-width: 650px) {
   .message-options-trigger { width: 44px; height: 44px; }
 }
