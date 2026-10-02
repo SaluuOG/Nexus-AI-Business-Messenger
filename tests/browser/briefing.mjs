@@ -47,7 +47,7 @@ try {
         await page.setViewportSize({ width, height: 844 });
         await openMenu.click();
         assert.equal(await page.getByRole('button', { name: 'Hauptmenü schließen', exact: true }).getAttribute('aria-expanded'), 'true');
-        assert.equal(await mainNav.getByRole('button').count(), 8);
+        assert.deepEqual(await mainNav.getByRole('button').allTextContents(), ['Briefing', 'Chats', 'Gruppen', 'Suche', 'Merkliste', 'Kontakte', 'Business', 'AI Assistent', 'Einstellungen']);
         assert.equal(await page.evaluate(() => ['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)), false, 'Opening navigation must not focus a text field');
         const box = await mainNav.boundingBox();
         assert.ok(box.x >= 0 && box.x + box.width <= width && box.y + box.height <= 844);

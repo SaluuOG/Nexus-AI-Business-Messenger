@@ -72,6 +72,12 @@ Sicherheitsprüfung meldete keine zusätzlichen Befunde gegenüber dem vorherige
 Stand. Der native iOS-Build und die vollständigen Browserabläufe werden beim
 Push zusätzlich durch GitHub Actions geprüft.
 
+Der native iOS-Release-Build für Anwendungsstand `3372b40` bestand. Eine ältere
+Briefing-Prüfung erwartete noch acht Navigationseinträge. Sie prüft nun die neun
+konkreten Einträge einschließlich **Merkliste**; der gesamte Briefing-Ablauf mit
+mobilem Menü bestand danach lokal in Chromium. Die vollständige Browserprüfung
+wird mit dieser angepassten Erwartung erneut ausgeführt.
+
 Die Prüfung auf dem physischen iPhone steht aus und kann mit **Weiterleiten**,
 **Text kopieren** und der Medien-/Datei-/Linkübersicht zusammen erfolgen. Der
 Nutzer möchte die Änderungen mit einem gemeinsamen Terminal-/Xcode-Update laden.
