@@ -1,0 +1,20 @@
+{
+  "status": "draft-not-for-submission",
+  "locale": "de-DE",
+  "name": "Nexus – Team & Projekte",
+  "subtitle": "Chats, Aufgaben und Überblick",
+  "promotionalText": "Verbinde Team-Chats mit Projekten und Aufgaben. Behalte Fristen im Blick und merke dir wichtige Nachrichten mit persönlichen Wiedervorlagen.",
+  "description": "Nexus verbindet Team-Kommunikation mit der Organisation deiner täglichen Arbeit. Besprich Themen in Einzel- und Gruppenchats und halte Kunden, Projekte und Aufgaben in gemeinsamen Workspaces zusammen.\n\nKOMMUNIKATION IM TEAM\nTausche Textnachrichten, Bilder, Dateien und Sprachnachrichten aus. Antworte auf einzelne Nachrichten, verteile Reaktionen und finde Inhalte über die Nachrichtensuche wieder.\n\nAUS NACHRICHTEN WERDEN AUFGABEN\nÜbernimm wichtige Nachrichten in eine Projektaufgabe. Halte Zuständigkeiten, Termine, Prioritäten, Checklisten und Kommentare an einem Ort fest.\n\nDEIN TAGESBRIEFING\nSieh offene Aufgaben, anstehende Projekttermine und Handlungsbedarf im ausgewählten Workspace. Persönliche Wiedervorlagen helfen dir, später auf eine Nachricht zurückzukommen. Du siehst sie im Briefing, wenn du Nexus öffnest.\n\nWICHTIGES WIEDERFINDEN\nSpeichere Nachrichten für dich, markiere bevorzugte Chats und archiviere Gespräche. Leite ausgewählte Textnachrichten nach einer Vorschau an andere Gespräche weiter.\n\nTEXTE AUCH OHNE INTERNET LESEN\nBereits auf diesem Gerät gespeicherte Textnachrichten bleiben in begrenztem Umfang offline lesbar. Neue Nachrichten, Anhänge und Änderungen benötigen eine Internetverbindung. Der lokale Speicher ist kein vollständiges Archiv.\n\nFür die Nutzung benötigst du ein Nexus-Konto. Gemeinsame Inhalte sind entsprechend deinen Workspace- und Chatberechtigungen verfügbar.",
+  "keywords": "teamarbeit,kommunikation,planung,checkliste,kunden,termine,organisation,wiedervorlage",
+  "primaryCategory": "BUSINESS",
+  "secondaryCategory": "PRODUCTIVITY",
+  "bundleId": "com.saluuog.nexus",
+  "version": "1.0",
+  "supportUrl": null,
+  "privacyPolicyUrl": null,
+  "marketingUrl": null,
+  "copyright": null,
+  "priceDecision": null,
+  "availabilityCountries": [],
+  "ageRating": null
+}

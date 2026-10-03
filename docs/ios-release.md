@@ -1,5 +1,9 @@
 # Nexus für iOS
 
+Die aktuelle Vorbereitung mit Store-Texten, rechtlichen Entwürfen und noch offenen
+Veröffentlichungshindernissen steht im [App-Store-Paket](app-store/README.md).
+Die folgenden Build-Schritte allein stellen noch keine Einreichungsfreigabe dar.
+
 Die native iOS-Hülle liegt unter `ios/` und verwendet Capacitor 8. Die Web-App
 wird lokal in das App-Paket kopiert; private Server-Schlüssel bleiben weiterhin
 ausschließlich in Supabase Edge Functions.

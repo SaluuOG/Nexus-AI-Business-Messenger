@@ -329,3 +329,7 @@ Unter **Projekte → Aufgaben → Details & Zusammenarbeit** können Mitglieder 
 ### Native iOS-App
 
 Das Capacitor-8-Projekt unter `ios/` verpackt denselben geprüften Nexus-Client als native iOS-App. App-Icon, Splashscreen, Mikrofonhinweis, relative Asset-Pfade und ein eigener `build:ios`-Ablauf sind vorbereitet. Die KI-Auswertung verlangt vor jeder neuen Übertragung eine ausdrückliche Einwilligung. [Build- und App-Store-Schritte](docs/ios-release.md).
+
+### Vorbereitung der App-Store-Einreichung
+
+[Store-Texte, Screenshot-Plan, Prüferhinweise und rechtliche Entwürfe](docs/app-store/README.md) liegen als noch nicht freigegebenes Vorbereitungspaket vor. Es enthält die anhand des Codes ermittelten Datenschutzangaben, AGB-/Datenschutz-/Impressumsentwürfe und die konkreten Veröffentlichungshindernisse. Betreiberangaben, rechtliche Prüfung, öffentliche Seiten, Missbrauchsschutz sowie der Abschluss des Löschkonzepts stehen noch aus. Die Entwürfe werden nicht in die App eingebaut. Jede spätere Änderung wird mit konkreten Testpunkten und erwartetem Ergebnis übergeben.
