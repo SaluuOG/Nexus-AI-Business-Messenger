@@ -17,7 +17,21 @@ Manifest mit stabilem ID/Scope/Startpfad unter dem GitHub-Pages-Unterverzeichnis
 
 Service Worker: nur die öffentliche Offline-Hinweisseite wird in CacheStorage gespeichert. App-HTML, JS, API-Antworten und Nutzerdaten werden nicht durch den Worker zwischengespeichert; es gibt keine Offline-Schreibwarteschlange. Bestehende Anmeldung/Entwürfe bleiben durch die bisherigen App-Funktionen verwaltet. App-Updates werden regulär aus dem Netz geladen, ohne erzwungenes Neuladen während der Eingabe.
 
-Internet wird für Chats und Aufgaben benötigt. Eine Veröffentlichung im Apple App Store oder Google Play Store sowie System-Push bei geschlossener App sind nicht Teil dieses Umfangs.
+Internet wird für neue Nachrichten und Aufgaben benötigt. Die native iOS-App kann bereits gespeicherte Textnachrichten offline lesen (siehe unten). Eine Veröffentlichung im Apple App Store oder Google Play Store sowie System-Push bei geschlossener App sind nicht Teil dieses Umfangs.
+
+## Gespeicherte Chats ohne Internet
+
+Die native App speichert erfolgreich geladene Einzel- und Gruppenchats in IndexedDB auf dem Gerät. Nach einem Offline-Neustart bleiben die gespeicherten Textnachrichten lesbar. Der angezeigte Zeitpunkt bezeichnet den letzten gespeicherten Stand; neue Nachrichten, Änderungen und Löschungen werden nach dem Wiederverbinden vom Server geladen. Offline-Ansichten erzeugen keine Lesebestätigungen. Nachrichten werden weiterhin ausschließlich manuell gesendet.
+
+- Pro zuletzt geladener Chatseite: maximal 100 Nachrichten; maximal 40 Gesprächsverläufe und je 100 Listeneinträge. Gesamtbudget etwa 8 MB, Aufbewahrung höchstens 30 Tage. Bei wenig Gerätespeicher können weniger Daten verfügbar sein. Ältere paginierte Seiten werden nicht als vollständiges Archiv gespeichert.
+- Nur Text, Namen, IDs und Zeitangaben. Keine Anhänge, Avatare, signierten Download-URLs, Zugangstoken oder Berechtigungen. Anhänge erhalten einen Offline-Hinweis; zitierte Nachrichtentexte werden nicht redundant gespeichert. Der lokale Textspeicher ist nicht zusätzlich durch die App verschlüsselt.
+- Konten werden getrennt. Kontowechsel und Abmeldung löschen die vorherigen Offline-Daten. Verspätete Antworten eines vorherigen Kontos dürfen den Speicher nicht wieder füllen. Online-Zugriffsfehler und aus einer erfolgreich geladenen Liste entfernte Chats verwerfen betroffene gespeicherte Verläufe.
+- Falls die Sitzung offline nicht erneuert werden kann, öffnet sich eine gesonderte Leseansicht für das zuletzt angemeldete Konto. Der gespeicherte Konto-Identifier ist keine Anmeldung und wird nie für Serverberechtigungen verwendet. Diese Ansicht hat keine Schreib-, Mitglieder- oder Serverfunktionen. Dort kann der lokale Chatspeicher gelöscht werden. Online übernimmt wieder die reguläre Sitzungsprüfung.
+- Gespeicherte Daten sind ein begrenzter letzter Stand, kein Backup. Änderungen oder entzogene Zugriffe, die das Gerät noch nicht online erhalten hat, können offline nicht erkannt werden. Nach bestätigter Serveränderung wird der lokale Stand aktualisiert bzw. entfernt.
+
+Der Service Worker bleibt unverändert: Ein kalter Offline-Start der Web/PWA-Version lädt weiterhin die öffentliche Hinweisseite. Der Offline-Neustart der nativen App funktioniert mit ihren lokal gebündelten App-Dateien.
+
+Gezielte Prüfung: `tests/browser/offline-cache.mjs` deckt Einzel-/Gruppenchats, frischen Offline-Start, abgelaufene Sitzung, Wiederverbindung, bearbeitete/gelöschte Nachrichten, Kontowechsel, Abmeldung, Datenbegrenzung, Entzug des Zugriffs und verspätete Antworten ab. Ein Test auf dem physischen iPhone bleibt nach Installation des neuen Builds nötig.
 
 ## Prüfung
 

@@ -1,0 +1,21 @@
+.message-forwarded-label{display:flex;align-items:center;gap:5px;margin-bottom:6px;color:var(--muted,#a4aec0);font-size:12px;font-style:italic}
+.message-forward-dialog{box-sizing:border-box;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 32px);margin:auto;padding:22px;border:1px solid #343d4c;border-radius:20px;background:#111720;color:#edf0f6;overflow:auto;overscroll-behavior:contain}
+.message-forward-dialog::backdrop{background:rgb(0 0 0 / .68)}
+.message-forward-dialog header{display:flex;align-items:flex-start;gap:12px;justify-content:space-between}
+.message-forward-dialog h2{font-size:22px;margin:0 0 12px;overflow-wrap:anywhere}
+.message-forward-dialog header button{flex-shrink:0;display:grid;place-items:center;min-height:40px;min-width:40px;border:1px solid #343d4c;border-radius:10px;background:#1a2230;color:inherit}
+.message-forward-dialog p{line-height:1.5;overflow-wrap:anywhere}
+.forward-search{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #414b5c;border-radius:10px}
+.forward-search input{width:100%;min-width:0;background:transparent;color:inherit;border:0;font-size:16px;outline-offset:4px}
+.forward-search .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.forward-targets{display:grid;gap:8px;max-height:40dvh;overflow:auto;margin:14px 0}
+.forward-targets button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:58px;padding:10px 14px;border:1px solid #343d4c;border-radius:12px;background:#192130;color:inherit;text-align:left;overflow-wrap:anywhere}
+.forward-targets button[aria-pressed=true]{border-color:#9388ff;background:#292344}
+.forward-targets small{color:#a4aec0}
+.forward-preview{padding:16px;border:1px solid #414b5c;border-radius:14px;background:#192130;max-height:45dvh;overflow:auto}
+.forward-preview p{white-space:pre-wrap;margin:8px 0 0}
+.message-forward-dialog footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin-top:20px}
+.message-forward-dialog footer button{min-height:44px;padding:10px 14px;white-space:normal}
+.message-forward-dialog button:disabled{opacity:.5;cursor:not-allowed}
+.forward-success{text-align:center}
+@media(max-width:360px){.message-forward-dialog{padding:16px}.message-forward-dialog h2{font-size:20px}.message-forward-dialog footer button{flex:1}}

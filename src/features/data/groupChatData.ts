@@ -1,3 +1,5 @@
+import { safeTextSend } from '../drafts/safeTextSend';
+import { withChatOrganization, type ChatOrganization } from './chatOrganization';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { createTextClientRequestId } from '../drafts/textSendRetry';
@@ -12,7 +14,7 @@ const MAX_GROUP_AVATAR_BYTES = 5 * 1024 * 1024;
 const GROUP_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
 const groupTypingPollers = new WeakMap<RealtimeChannel, number>();
 
-export type GroupChat = {
+export type GroupChat = ChatOrganization & {
   group_id: string;
   name: string;
   avatar_path: string | null;
@@ -52,6 +54,7 @@ export type GroupAttachment = {
 };
 
 export type GroupMessage = {
+  is_forwarded?: boolean;
   message_id: string;
   group_id: string;
   sender_id: string;
@@ -197,6 +200,7 @@ function normalizeGroupMessages(value: unknown): GroupMessage[] | null {
       });
     }
     normalized.push({
+      is_forwarded: message.is_forwarded === true && !message.deleted_at,
       message_id: message.message_id,
       group_id: message.group_id,
       sender_id: message.sender_id,
@@ -235,8 +239,8 @@ export async function createGroupChat(name: string, memberIds: string[]) {
 
 export async function loadGroupChats() {
   if (!supabase) return { data: [] as GroupChat[], error: 'Supabase ist nicht konfiguriert.' };
-  const { data, error } = await supabase.rpc('get_my_group_chats');
-  if (error) return { data: [] as GroupChat[], error: error.message };
+  const { data, error } = await withChatOrganization<GroupChat>('group', () => supabase!.rpc('get_my_group_chats'), row => row.group_id);
+  if (error) return { data: [] as GroupChat[], error };
   const normalized = ((data ?? []) as Array<Omit<GroupChat, 'avatar_url' | 'member_count' | 'unread_count'> & { member_count: number | string; unread_count: number | string }>).map((group) => ({
     ...group,
     avatar_url: null,
@@ -333,12 +337,12 @@ export async function sendGroupMessage(groupId: string, body: string, replyToMes
   if (!supabase) return { data: null as string | null, error: 'Supabase ist nicht konfiguriert.' };
   const requestId = clientRequestId ?? createTextClientRequestId();
   if (!UUID_PATTERN.test(requestId)) return { data: null as string | null, error: 'Die Nachricht konnte nicht sicher gesendet werden.' };
-  const { data, error } = await supabase.rpc('send_group_message_v2', {
+  const { data, error } = await safeTextSend(() => supabase!.rpc('send_group_message_v2', {
     p_group_id: groupId,
     p_body: body,
     p_client_request_id: requestId,
     p_reply_to_message_id: replyToMessageId ?? null,
-  });
+  }));
   return { data: (data as string | null) ?? null, error: error?.message ?? null };
 }
 
@@ -509,6 +513,7 @@ export async function deleteGroupChat(groupId: string) {
 }
 
 export function subscribeToGroupRealtime(groupId: string, handlers: {
+  onStatus?: (status: string) => void;
   onMessagesChanged?: (change: MessageRealtimeChange) => void;
   onReadChanged?: () => void;
   onTypingChanged?: () => void;
@@ -520,6 +525,7 @@ export function subscribeToGroupRealtime(groupId: string, handlers: {
     const change = normalizeMessageRealtimeChange(payload);
     handlers.onMessagesChanged?.({ ...change, scopeId: change.scopeId ?? groupId });
   };
+  let subscribed = false;
   const channel = supabase.channel(`group-chat:${groupId}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, scopedChange)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` }, scopedChange)
@@ -527,7 +533,13 @@ export function subscribeToGroupRealtime(groupId: string, handlers: {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_typing', filter: `group_id=eq.${groupId}` }, () => handlers.onTypingChanged?.())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_conversations', filter: `id=eq.${groupId}` }, () => handlers.onGroupChanged?.())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, () => handlers.onMembersChanged?.())
-    .subscribe();
+    .subscribe(status => {
+      handlers.onStatus?.(status);
+      if (status === 'SUBSCRIBED') {
+        if (subscribed) handlers.onMessagesChanged?.({ event: 'INSERT', messageId: null, scopeId: groupId });
+        subscribed = true;
+      }
+    });
 
   if (handlers.onTypingChanged && typeof window !== 'undefined') {
     const poller = window.setInterval(() => handlers.onTypingChanged?.(), 1500);

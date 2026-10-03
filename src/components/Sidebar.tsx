@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Bell,
+  Bookmark,
   Bot,
   BriefcaseBusiness,
   ContactRound,
@@ -37,6 +38,7 @@ const navigation = [
   [routes.chats, MessageCircle, 'Chats'],
   [routes.groups, UsersRound, 'Gruppen'],
   [routes.search, Search, 'Suche'],
+  [routes.bookmarks, Bookmark, 'Merkliste'],
   [routes.contacts, ContactRound, 'Kontakte'],
   [routes.business, BriefcaseBusiness, 'Business'],
   [routes.ai, Bot, 'AI Assistent'],

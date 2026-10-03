@@ -5,6 +5,7 @@ export const routes = {
   chats: '/app/chats',
   groups: '/app/groups',
   search: '/app/search',
+  bookmarks: '/app/bookmarks',
   contacts: '/app/contacts',
   business: '/app/business',
   ai: '/app/ai',

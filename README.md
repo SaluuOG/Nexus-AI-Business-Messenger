@@ -46,7 +46,16 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 - Realtime-Synchronisierung für neue, bearbeitete und gelöschte Nachrichten
 - Realtime-Lesestatus mit Doppelhaken für gelesene eigene Nachrichten
 - Antworten auf einzelne Nachrichten mit Reply-Vorschau
+- Herz per Doppeltippen/Doppelklick und sechs Emoji-Reaktionen mit Zähler in Einzel- und Gruppenchats ([Details und Prüfung](docs/message-reactions.md))
+- Nachrichten anheften und aus einer kompakten Chatübersicht öffnen; in Gruppen verwalten nur Owner/Admins die Anheftungen ([Details und Prüfung](docs/message-pins.md))
+- persönliche Chat-Favoriten und Archiv für Einzel-/Gruppenchats; neue Nachrichten holen archivierte Chats automatisch zurück, Offline-Ansichten behalten den letzten Stand ([Details und Prüfung](docs/chat-organization.md))
+- Einzel-/Gruppenchats persönlich für 1 Stunde, 8 Stunden oder dauerhaft stummschalten; Nachrichten und ungelesene Chat-Zähler bleiben erhalten ([Details und Prüfung](docs/chat-mute.md))
+- Medien-, Datei- und Linkübersicht pro Einzel-/Gruppenchat mit Bildvorschau, Suche, älterem Verlauf und Sprung zur Originalnachricht ([Details und Prüfung](docs/chat-shared-content.md))
 - eigene Nachrichten bearbeiten
+- Nachrichtentext über das Drei-Punkte-Menü kopieren, auch aus gespeicherten Offline-Chats ([Details und Prüfung](docs/message-copy.md))
+- Textnachrichten mit Zielauswahl, Vorschau und ausdrücklicher Bestätigung in bestehende Einzel- oder Gruppenchats weiterleiten ([Details und Prüfung](docs/message-forwarding.md))
+- persönliche Wiedervorlagen mit Ortszeit-Terminwahl, fälligen/offenen Einträgen im Tagesbriefing, Verschieben und Erledigen ([Details und Prüfung](docs/message-reminders.md))
+- private Merkliste für Einzel-/Gruppennachrichten mit Suche, Seitenwechsel und Sprung zur Originalnachricht ([Details und Prüfung](docs/message-bookmarks.md))
 - eigene Nachrichten per Soft-Delete löschen
 - gelöschte Nachrichten verlieren serverseitig ihren Nachrichtentext
 - RLS und Security-Definer-RPCs schützen Presence-, Typing- und Message-Aktionen
@@ -277,7 +286,7 @@ Nexus ist ein AI- und Business-Messenger-Projekt.
 
 Browserprüfungen laufen in GitHub Actions mit Playwright 1.55.1 in einem separaten Laufzeitverzeichnis. Lokal: Playwright installieren, Chromium/WebKit mit `playwright install --with-deps chromium webkit` bereitstellen und `NEXUS_PLAYWRIGHT_MODULE` auf den absoluten Pfad zu `playwright/index.mjs` setzen. Danach die Skripte in `tests/browser/` ausführen; Phase 3.7 wird mit `node tests/browser/message-history.mjs` geprüft. Screenshots landen unter `browser-results/`. `node tests/browser/preview.mjs` startet eine separate Vorschau mit synthetischen Testdaten; diese werden nicht mit der App veröffentlicht.
 
-Offene Nutzerabnahme: abschließender manueller Durchlauf mit zwei echten Konten. Browserprüfungen mit Testdaten ersetzen diese Abnahme nicht.
+Nutzerabnahme: Der Durchlauf mit zwei echten Konten, die Chat-Gesten, Nachrichten-Anheftungen, persönlichen Chat-Favoriten, das Archiv und das Stummschalten wurden am 01.10.2026 vom Nutzer als funktionierend bestätigt. Die neue Medien-/Datei-/Linkübersicht benötigt noch eine eigene Gerätebestätigung. [Technische Nachweise und Nutzerbestätigung](docs/two-account-check.md).
 
 ## Routen
 - `#/auth`
@@ -320,3 +329,7 @@ Unter **Projekte → Aufgaben → Details & Zusammenarbeit** können Mitglieder 
 ### Native iOS-App
 
 Das Capacitor-8-Projekt unter `ios/` verpackt denselben geprüften Nexus-Client als native iOS-App. App-Icon, Splashscreen, Mikrofonhinweis, relative Asset-Pfade und ein eigener `build:ios`-Ablauf sind vorbereitet. Die KI-Auswertung verlangt vor jeder neuen Übertragung eine ausdrückliche Einwilligung. [Build- und App-Store-Schritte](docs/ios-release.md).
+
+### Vorbereitung der App-Store-Einreichung
+
+[Store-Texte, Screenshot-Plan, Prüferhinweise und rechtliche Entwürfe](docs/app-store/README.md) liegen als noch nicht freigegebenes Vorbereitungspaket vor. Es enthält die anhand des Codes ermittelten Datenschutzangaben, AGB-/Datenschutz-/Impressumsentwürfe und die konkreten Veröffentlichungshindernisse. Betreiberangaben, rechtliche Prüfung, öffentliche Seiten, Missbrauchsschutz sowie der Abschluss des Löschkonzepts stehen noch aus. Die Entwürfe werden nicht in die App eingebaut. Jede spätere Änderung wird mit konkreten Testpunkten und erwartetem Ergebnis übergeben.

@@ -47,7 +47,7 @@ try {
         await page.setViewportSize({ width, height: 844 });
         await openMenu.click();
         assert.equal(await page.getByRole('button', { name: 'Hauptmenü schließen', exact: true }).getAttribute('aria-expanded'), 'true');
-        assert.equal(await mainNav.getByRole('button').count(), 8);
+        assert.deepEqual(await mainNav.getByRole('button').allTextContents(), ['Briefing', 'Chats', 'Gruppen', 'Suche', 'Merkliste', 'Kontakte', 'Business', 'AI Assistent', 'Einstellungen']);
         assert.equal(await page.evaluate(() => ['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)), false, 'Opening navigation must not focus a text field');
         const box = await mainNav.boundingBox();
         assert.ok(box.x >= 0 && box.x + box.width <= width && box.y + box.height <= 844);
@@ -109,7 +109,7 @@ try {
       });
       await attention.getByText('Keine blockierten oder nicht zugewiesenen Aufgaben.', { exact: true }).waitFor();
       await page.evaluate(() => { window.nexusTest.failure = 'project_tasks'; window.nexusTest.emit(); });
-      await page.getByRole('alert').filter({ hasText: 'Aufgaben konnten nicht geladen' }).waitFor();
+      await page.getByRole('alert').filter({ hasText: 'Die Übersicht konnte nicht vollständig geladen werden.' }).waitFor();
       assert.equal(await page.getByText('Keine blockierten oder nicht zugewiesenen Aufgaben.', { exact: true }).count(), 0);
       assert.equal(await page.locator('.briefing-stat b').first().innerText(), '—');
       await page.evaluate(() => { window.nexusTest.failure = null; window.nexusTest.emit(); });
@@ -150,7 +150,7 @@ try {
       await page.getByRole('button', { name: 'Briefing', exact: true }).click();
       await page.getByRole('heading', { name: /Heute erledigen/ }).waitFor();
       await page.evaluate(() => { window.nexusTest.revoked = true; window.nexusTest.emit('workspace_members', 'DELETE'); });
-      await page.getByRole('alert').filter({ hasText: 'keinen Zugriff mehr' }).waitFor();
+      await page.getByRole('alert').filter({ hasText: 'Die Übersicht konnte nicht vollständig geladen werden.' }).waitFor();
       assert.equal(await page.getByRole('heading', { name: /Heute erledigen/ }).count(), 0);
       assert.deepEqual(errors, []);
       console.log(name + ': briefing, counters, mobile layout, detail navigation, reload, status, calendar rollover, realtime, errors, workspace isolation and guest access passed');

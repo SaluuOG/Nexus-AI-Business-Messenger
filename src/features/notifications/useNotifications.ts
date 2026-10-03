@@ -45,6 +45,10 @@ export function useNotifications(userId: string | undefined, route: string) {
     const channel = supabase?.channel('notifications:' + userId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: 'recipient_id=eq.' + userId }, schedule)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notification_preferences', filter: 'user_id=eq.' + userId }, schedule)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_chat_preferences', filter: 'user_id=eq.' + userId }, schedule)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'direct_chat_preferences', filter: 'user_id=eq.' + userId }, schedule)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_chat_preferences', filter: 'user_id=eq.' + userId }, schedule)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_chat_preferences', filter: 'user_id=eq.' + userId }, schedule)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_tasks' }, schedule)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'group_members' }, schedule)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'workspace_members' }, schedule)
@@ -55,9 +59,11 @@ export function useNotifications(userId: string | undefined, route: string) {
     document.addEventListener('visibilitychange', visible);
     window.addEventListener('focus', visible);
     window.addEventListener('online', visible);
+    window.addEventListener('nexus-chat-preferences-changed', schedule);
     return () => {
       active = false; clearTimeout(timer); window.clearInterval(interval);
       document.removeEventListener('visibilitychange', visible); window.removeEventListener('focus', visible); window.removeEventListener('online', visible);
+      window.removeEventListener('nexus-chat-preferences-changed', schedule);
       if (channel) void supabase?.removeChannel(channel);
     };
   }, [userId, refresh]);

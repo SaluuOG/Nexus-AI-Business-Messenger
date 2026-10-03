@@ -1,3 +1,17 @@
+import { ForwardedLabel } from '../components/MessageForwardDialog';
+import { MessageReactions, ReactionBubble, ReactionPicker } from '../components/MessageReactions';
+import { ChatMuted, ChatFavorite, ChatListOptions, ChatListViews } from '../components/ChatOrganization';
+import { organizeChats, subscribeChatOrganization, type ChatListView } from '../features/data/chatOrganization';
+import { useChatOrganization } from '../features/data/useChatOrganization';
+import { PinnedMessages } from '../components/PinnedMessages';
+import { ChatSharedContent } from '../components/ChatSharedContent';
+import { useMessagePins } from '../features/data/useMessagePins';
+import { useMessageBookmarks } from '../features/data/useMessageBookmarks';
+import { useMessageReactions } from '../features/data/useMessageReactions';
+import { patchSavedMessage } from '../features/offline/chatCache';
+import { offlineChatList, offlineMessagePage, offlineStamp } from '../features/offline/chatReads';
+import { readableLoadError } from '../features/connection/readAvailability';
+import { useChatConnection } from '../features/connection/useChatConnection';
 import {
   ArrowLeft,
   CheckCheck,
@@ -5,9 +19,7 @@ import {
   MessageCircle,
   Mic,
   Paperclip,
-  Pencil,
   RefreshCw,
-  Reply,
   Search,
   Send,
   Square,
@@ -25,7 +37,8 @@ import {
   type ChatStatusFilterValue,
 } from '../components/ChatStatusFilter';
 import { Header } from '../components/Header';
-import { MessageTaskAction } from '../components/MessageTaskAction';
+import { MessageOptions } from '../components/MessageOptions';
+import { CopyMessageOptions } from '../components/MessageCopy';
 import { TaskMessageContext } from '../components/TaskMessageContext';
 import { useChatScanWorkflows } from '../features/ai/useChatScanWorkflows';
 import {
@@ -253,6 +266,7 @@ export function ChatsPage({
   const [workflowRevision, setWorkflowRevision] = useState(0);
   const [currentHistoryRevision, setCurrentHistoryRevision] = useState(0);
   const [statusFilter, setStatusFilter] = useState<ChatStatusFilterValue>('all');
+  const [listView,setListView] = useState<ChatListView>('active');
 
   const fileRef = useRef<HTMLInputElement | null>(null);
   const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -293,6 +307,12 @@ export function ChatsPage({
       scrollLockRef.current = null;
       return;
     }
+    // Opening an action menu takes precedence over delayed history alignment.
+    // Otherwise a queued correction can move its anchor and dismiss the menu.
+    if (container.querySelector('[aria-haspopup="menu"][aria-expanded="true"]')) {
+      scrollLockRef.current = null;
+      return;
+    }
     const target = messageElementsRef.current.get(lock.messageId);
     if (!target) return;
     const currentOffset = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
@@ -309,6 +329,8 @@ export function ChatsPage({
     scrollTimersRef.current = [80, 240, 700].map((delay) => setTimeout(restoreScrollLock, delay));
   };
 
+  // The chat list can arrive after a deep-linked message context, especially
+  // while its offline snapshot is being saved. Retry once the pane mounts.
   useLayoutEffect(() => {
     const instruction = pendingScrollRef.current;
     const container = messagesElementRef.current;
@@ -344,10 +366,10 @@ export function ChatsPage({
     };
     restoreScrollLock();
     scheduleScrollLockChecks();
-  }, [messages]);
+  }, [messages, conversations]);
 
   const markReadIfAllowed = async (conversationId: string, forceForLatestOpen = false) => {
-    if (document.visibilityState !== 'visible') return;
+    if (navigator.onLine === false || cachedViewRef.current || document.visibilityState !== 'visible') return;
     if (selectedRef.current !== conversationId || hasNewerRef.current || contextMessageRef.current) return;
     if (!forceForLatestOpen && !nearBottom()) return;
     const now = Date.now();
@@ -391,16 +413,18 @@ export function ChatsPage({
 
   const reloadConversationList = async () => {
     const request = ++conversationListRequestRef.current;
-    const result = await loadDirectConversations();
+    const result = await offlineChatList('direct', currentUserId, loadDirectConversations);
     if (request !== conversationListRequestRef.current) return;
     setLoading(false);
-    if (result.error) return;
+    if (result.error) { setListError(result.error); return; }
+    setListError(null);
+    setListCachedAt(result.cachedAt);
     setConversations(result.data);
     setSelectedId((current) => {
       if (mobileListOnlyRef.current) return null;
       const target = linkedConversationRef.current || current;
       if (target && result.data.some((conversation) => conversation.conversation_id === target)) return target;
-      return linkedConversationRef.current ? null : result.data[0]?.conversation_id ?? null;
+      return linkedConversationRef.current ? null : organizeChats(result.data,'active')[0]?.conversation_id ?? null;
     });
   };
 
@@ -415,13 +439,15 @@ export function ChatsPage({
   const refreshConversations = async (preferred?: string | null) => {
     const request = ++conversationListRequestRef.current;
     setLoading(true);
-    const result = await loadDirectConversations();
+    const result = await offlineChatList('direct', currentUserId, loadDirectConversations);
     if (request !== conversationListRequestRef.current) return;
     setLoading(false);
     if (result.error) {
-      setError(result.error);
+      setListError(result.error);
       return;
     }
+    setListError(null);
+    setListCachedAt(result.cachedAt);
     setConversations(result.data);
     if (linkedConversationId && !result.data.some((conversation) => conversation.conversation_id === linkedConversationId)) {
       setError('Der verlinkte Chat ist nicht mehr verfügbar.');
@@ -431,7 +457,7 @@ export function ChatsPage({
       const target = preferred || linkedConversationId || current;
       return target && result.data.some((conversation) => conversation.conversation_id === target)
         ? target
-        : linkedConversationId ? null : result.data[0]?.conversation_id ?? null;
+        : linkedConversationId ? null : organizeChats(result.data,'active')[0]?.conversation_id ?? null;
     });
   };
 
@@ -441,7 +467,7 @@ export function ChatsPage({
   ) => {
     const request = ++messageRequestRef.current;
     setMessagesLoading(true);
-    const result = await loadDirectMessagePage(conversationId);
+    const result = await offlineMessagePage('direct', conversationId, currentUserId, () => loadDirectMessagePage(conversationId));
     if (selectedRef.current !== conversationId || request !== messageRequestRef.current) return false;
     setMessagesLoading(false);
     if (result.error) {
@@ -449,6 +475,9 @@ export function ChatsPage({
       if (options.replace !== false) setMessages([]);
       return false;
     }
+    const wasCached = cachedViewRef.current === conversationId;
+    cachedViewRef.current = result.cachedAt ? conversationId : null;
+    setMessagesCached(result.cachedAt ? { id: conversationId, at: result.cachedAt } : null);
     setError(null);
     setContextRetryMessageId(null);
     if (options.stickToBottom) pendingScrollRef.current = { kind: 'bottom' };
@@ -457,19 +486,20 @@ export function ChatsPage({
     setHasNewer(false);
     setContextMessageId(null);
     setHighlightedMessageId(null);
-    if (options.replace !== false || messageCountRef.current === 0) {
+    if (wasCached || options.replace !== false || messageCountRef.current === 0) {
       setHasOlder(result.data.has_more);
       setOldestCursor(result.data.next_cursor);
     }
     if (options.stickToBottom || options.replace !== false) setHasUnseenLatest(false);
-    setMessages((current) => options.replace === false
+    setMessages((current) => !wasCached && !result.cachedAt && options.replace === false
       ? mergeMessages(current, result.data.messages)
       : result.data.messages);
-    if (options.markRead) void markReadIfAllowed(conversationId, true);
+    if (options.markRead && !result.cachedAt && navigator.onLine !== false) void markReadIfAllowed(conversationId, true);
     return true;
   };
 
   const refreshMessageContext = async (conversationId: string, messageId: string) => {
+    if (navigator.onLine === false) { await refreshLatestMessages(conversationId, { replace: true }); return false; }
     const request = ++messageRequestRef.current;
     contextMessageRef.current = messageId;
     setMessagesLoading(true);
@@ -492,6 +522,8 @@ export function ChatsPage({
       }
       return false;
     }
+    cachedViewRef.current = null;
+    setMessagesCached(null);
     setError(null);
     setContextWarning(null);
     setContextRetryMessageId(null);
@@ -532,6 +564,7 @@ export function ChatsPage({
   };
 
   const removeRealtimeMessage = (conversationId: string, messageId: string) => {
+    if (conversationId) void patchSavedMessage(currentUserId, 'direct', conversationId, messageId, null);
     realtimeMessageRequestRef.current.set(messageId, (realtimeMessageRequestRef.current.get(messageId) ?? 0) + 1);
     setMessages((current) => {
       if (!current.some((message) => message.message_id === messageId)) return current;
@@ -557,6 +590,7 @@ export function ChatsPage({
     }
     const refreshed = result.data.messages.find((message) => message.message_id === messageId);
     if (!refreshed) return;
+    void patchSavedMessage(currentUserId, 'direct', conversationId, messageId, refreshed);
     setMessages((current) => {
       if (!current.some((message) => message.message_id === messageId)) return current;
       const next = mergeMessages(current, [refreshed]);
@@ -602,6 +636,15 @@ export function ChatsPage({
     setOldestCursor(result.data.next_cursor);
   };
 
+  const connection = useChatConnection(selectedId);
+  const [listCachedAt, setListCachedAt] = useState<number | null>(null);
+  const [messagesCached, setMessagesCached] = useState<{ id: string; at: number } | null>(null);
+  const cachedAt = messagesCached?.id === selectedId ? messagesCached.at : null;
+  const readOnly = Boolean(cachedAt) || !connection.online;
+  const cachedViewRef = useRef<string | null>(null);
+  cachedViewRef.current = cachedAt ? selectedId : null;
+  const [listError, setListError] = useState<string | null>(null);
+
   useEffect(() => {
     if (previousUserRef.current && previousUserRef.current !== currentUserId) {
       retryStoreRef.current.clearUser(previousUserRef.current);
@@ -633,6 +676,7 @@ export function ChatsPage({
       setWorkflowRevision((revision) => revision + 1);
       scheduleConversationListRefresh();
     });
+    const unsubscribeOrganization = subscribeChatOrganization('direct',currentUserId,scheduleConversationListRefresh);
     const onFocus = () => { scheduleConversationListRefresh(); };
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') return;
@@ -641,6 +685,7 @@ export function ChatsPage({
     };
     const interval = setInterval(() => { if (document.visibilityState === 'visible') scheduleConversationListRefresh(); }, 30000);
     window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       clearInterval(interval);
@@ -649,8 +694,10 @@ export function ChatsPage({
         conversationRefreshTimerRef.current = null;
       }
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
       void unsubscribeConversationRealtime(channel);
+      unsubscribeOrganization();
     };
   }, [currentUserId]);
 
@@ -722,6 +769,7 @@ export function ChatsPage({
     });
 
     const channel = subscribeToConversationRealtime(selectedId, {
+      onStatus: status => { if (isCurrentRealtime()) connection.onStatus(status); },
       onMessagesChanged: (change) => {
         if (!isCurrentRealtime()) return;
         const loadedMessage = Boolean(change.messageId
@@ -799,14 +847,21 @@ export function ChatsPage({
     conversations.map((conversation) => [conversation.conversation_id, conversation.last_message_at, conversation.last_message]),
   ]);
   const workflows = useChatScanWorkflows('direct', currentUserId, workflowHistoryVersion);
+  const organization = useChatOrganization('direct',currentUserId,connection.online && !listCachedAt && !listError,async (id,field,value) => {
+    if (field==='archived' && value && selectedRef.current===id) { setSelectedId(null); setChatSearch({}); }
+    await reloadConversationList();
+  });
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return conversations.filter((conversation) => (
+    return organizeChats(conversations,listView).filter((conversation) => (
       !normalized
       || `${conversation.full_name || ''} ${conversation.username || ''} ${conversation.last_message || ''}`.toLowerCase().includes(normalized)
     ) && matchesChatStatus(workflows.states.get(conversation.conversation_id), statusFilter));
-  }, [conversations, query, workflows.states, statusFilter]);
+  }, [conversations, query, workflows.states, statusFilter,listView]);
   const currentChat = conversations.find((conversation) => conversation.conversation_id === selectedId) || null;
+  const pins = useMessagePins('direct', currentChat?.conversation_id, currentUserId, !readOnly, true);
+  const bookmarks = useMessageBookmarks('direct', currentChat?.conversation_id, currentUserId, messages.filter(message => !message.deleted_at).map(message => message.message_id), !readOnly);
+  const reactions = useMessageReactions('direct', currentChat?.conversation_id, currentUserId, messages.filter(message => !message.deleted_at).map(message => message.message_id), !readOnly);
   const scanHistoryVersion = JSON.stringify([
     currentHistoryRevision,
     currentChat?.conversation_id,
@@ -822,6 +877,7 @@ export function ChatsPage({
       if (scope) saveChatDraft(scope, value);
     }
     if (typingStopRef.current) clearTimeout(typingStopRef.current);
+    if (readOnly) return;
     if (!value.trim()) {
       void setConversationTyping(selectedId, false);
       lastTypingRef.current = 0;
@@ -944,7 +1000,7 @@ export function ChatsPage({
 
   const submit = async () => {
     const body = draft.trim();
-    if (!selectedId || sending || recording || textRetry || (!editing && !body && !pendingFile) || (editing && !body)) return;
+    if (cachedAt || !selectedId || sending || recording || textRetry || (!editing && !body && !pendingFile) || (editing && !body)) return;
     const conversationId = selectedId;
     const scope = draftScope(conversationId);
     const replyToMessageId = replyingTo?.message_id ?? null;
@@ -1005,7 +1061,7 @@ export function ChatsPage({
   };
 
   const retryFailedText = async () => {
-    if (!selectedId || !textRetry || sending) return;
+    if (cachedAt || !selectedId || !textRetry || sending) return;
     const scope = draftScope(selectedId);
     if (!scope) return;
     const retry = retryStoreRef.current.beginRetry(scope, textRetry.payload.id);
@@ -1087,10 +1143,16 @@ export function ChatsPage({
     }
   };
 
+  useEffect(() => {
+    const restored = () => { if (selectedId) { void refreshLatestMessages(selectedId, { replace: true, stickToBottom: false }); } };
+    window.addEventListener('online', restored);
+    return () => window.removeEventListener('online', restored);
+  }, [selectedId, currentUserId]);
+
   const canSend = Boolean(editing ? draft.trim() : draft.trim() || pendingFile)
     && !sending
     && !recording
-    && !textRetry;
+    && !textRetry && !cachedAt;
 
   return (
     <div className="chat-layout real-chat-layout" data-mobile-pane={mobileConversationOpen ? 'conversation' : 'list'}>
@@ -1100,32 +1162,42 @@ export function ChatsPage({
           <button className="chat-refresh" onClick={() => void refreshConversations(selectedId)} title="Chats aktualisieren"><RefreshCw size={15} /></button>
         </div>
         <div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Chats durchsuchen" /></div>
-        <ChatStatusFilter value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
-        {mobileListOnly && error && <div className="chat-error" role="alert">{error}</div>}
-        {!loading && conversations.length > 0 && filtered.length === 0 && <div className="chat-list-empty">Keine Chats für diese Auswahl.</div>}
+        {mobileListOnly && (listCachedAt || connection.message) && <div className="chat-error" role="status">{listCachedAt ? offlineStamp(listCachedAt) : connection.message}</div>}
+        <ChatListViews value={listView} onChange={setListView} archivedCount={conversations.filter(chat=>chat.archived).length} />
+        {organization.error && <div className="chat-error" role="alert">{organization.error}</div>}
+        <ChatStatusFilter offline={!connection.online} value={statusFilter} onChange={setStatusFilter} ready={workflows.ready} error={workflows.error} onRetry={workflows.refresh} />
+        {listError && connection.online && <div className="chat-error" role="alert">{listError}</div>}
+        {mobileListOnly && error && connection.online && <div className="chat-error" role="alert">{readableLoadError(error)}</div>}
+        {!loading && !listError && conversations.length > 0 && filtered.length === 0 && <div className="chat-list-empty">{listView==='archive' ? 'Keine archivierten Chats für diese Auswahl.' : listView==='favorites' ? 'Keine Favoriten für diese Auswahl.' : 'Keine aktiven Chats für diese Auswahl.'}</div>}
+        {!loading && conversations.length === 0 && (!connection.online || listError) && <div className="chat-list-empty"><b>Chats derzeit nicht verfügbar</b><span>{!connection.online ? 'Verbinde dich mit dem Internet. Die Liste wird anschließend erneut geladen.' : 'Bitte lade die Liste erneut.'}</span></div>}
         {loading && conversations.length === 0 && <div className="chat-list-empty">Chats werden geladen…</div>}
-        {!loading && conversations.length === 0 && <div className="chat-list-empty"><MessageCircle size={24} /><b>Noch keine Chats</b></div>}
+        {!loading && connection.online && !listError && conversations.length === 0 && <div className="chat-list-empty"><MessageCircle size={24} /><b>Noch keine Chats</b></div>}
         {filtered.map((conversation) => (
-          <button className={`chat${selectedId === conversation.conversation_id ? ' active' : ''}`} onClick={() => { setError(null); setContextWarning(null); setContextRetryMessageId(null); if (!isMobile) setSelectedId(conversation.conversation_id); setChatSearch({ conversation: conversation.conversation_id }); }} key={conversation.conversation_id}>
+          <div className="chat-list-row" key={conversation.conversation_id} data-chat-id={conversation.conversation_id}>
+          <button className={`chat${selectedId === conversation.conversation_id ? ' active' : ''}`} onClick={() => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setChatSearch({ conversation: conversation.conversation_id }); }}>
             <div className="avatar">{initials(conversation.full_name, conversation.username)}</div>
             <span>
-              <b>{nameOf(conversation)}</b>
+              <b><ChatFavorite active={conversation.favorite} /><ChatMuted state={conversation} />{nameOf(conversation)}</b>
               <small>{conversation.username ? `@${conversation.username}` : 'Nexus-Kontakt'}</small>
               <p>{conversation.last_message || 'Neuer Chat'}</p>
               <ChatStatusBadge state={workflows.states.get(conversation.conversation_id)} />
             </span>
             <em>{formatTime(conversation.last_message_at)}{conversation.unread_count > 0 && <i>{conversation.unread_count > 99 ? '99+' : conversation.unread_count}</i>}</em>
           </button>
+          <ChatListOptions name={nameOf(conversation)} state={conversation} disabled={!connection.online || Boolean(listCachedAt) || Boolean(listError) || organization.busy(conversation.conversation_id)} onChange={(field,value)=>organization.save(conversation.conversation_id,field,value)} onMute={mode=>organization.mute(conversation.conversation_id,mode)} />
+          </div>
         ))}
       </section>
 
       <section className="conversation">
+        {reactions.error && <div className="chat-error reactions-error" role="alert">{reactions.error}<button type="button" onClick={reactions.refresh}>Erneut laden</button></div>}
+        {(cachedAt || connection.message) && <div className="chat-error" role="status" aria-live="polite">{cachedAt ? offlineStamp(cachedAt) + ". Gespeichert sind bis zu 100 Nachrichten je Chat. Neue Nachrichten werden online geladen." : connection.message}</div>}
         <div className="mobile-chat-backbar"><button type="button" onClick={() => { setSelectedId(null); setError(null); setContextWarning(null); setContextRetryMessageId(null); setChatSearch({}); }}><ArrowLeft size={20} /> Alle Chats</button></div>
         <TaskMessageContext kind="direct" onChatResolved={(id) => { setError(null); setContextWarning(null); setContextRetryMessageId(null); setSelectedId(id); void refreshConversations(id); }} />
         {contextWarning && <div className="chat-error chat-context-warning" role="status">{contextWarning}</div>}
-        {error && (
+        {error && connection.online && (
           <div className={`chat-error${contextRetryMessageId ? ' chat-context-retry' : ''}`} role="alert">
-            <span>{error}</span>
+            <span>{readableLoadError(error)}</span>
             {contextRetryMessageId && selectedId && (
               <button
                 className="secondary"
@@ -1148,21 +1220,24 @@ export function ChatsPage({
                 <div className="avatar">{initials(currentChat.full_name, currentChat.username)}</div>
                 <div>
                   <b>{nameOf(currentChat)}</b>
-                  <small className={contactTyping ? 'typing-status' : presence?.online ? 'online-status' : ''}>{contactTyping ? 'schreibt gerade…' : formatPresence(presence)}</small>
+                  <small className={!readOnly && contactTyping ? 'typing-status' : !readOnly && presence?.online ? 'online-status' : ''}>{readOnly ? 'Offline – gespeicherter Verlauf' : contactTyping ? 'schreibt gerade…' : formatPresence(presence)}</small>
                 </div>
               </div>
               <div className="project-pill">Privater 1:1-Chat</div>
             </div>
 
+            <ChatSharedContent key={`shared:${currentUserId}:direct:${currentChat.conversation_id}`} kind="direct" chatId={currentChat.conversation_id} name={nameOf(currentChat)} enabled={!readOnly && !!currentUserId} onOpenMessage={id => { if (linkedMessageId === id) void refreshMessageContext(currentChat.conversation_id, id); else setChatSearch({ conversation: currentChat.conversation_id, message: id }); }} />
+            <PinnedMessages pins={pins} canManage={!readOnly} onOpen={id => { if (linkedMessageId === id) void refreshMessageContext(currentChat.conversation_id, id); else setChatSearch({ conversation: currentChat.conversation_id, message: id }); }} />
+            {bookmarks.error ? <div className="chat-error" role="alert">{bookmarks.error} <button type="button" onClick={bookmarks.refresh}>Erneut laden</button></div> : bookmarks.feedback && <p className="bookmark-status" role="status">{bookmarks.feedback}</p>}
             <div className="messages" ref={messagesElementRef} onScroll={handleMessageScroll}>
-              {hasOlder && (
+              {hasOlder && !readOnly && (
                 <button className="secondary messages-history-button" onClick={() => void loadOlderMessages()} disabled={loadingOlder} data-action="load-older-messages">
                   <RefreshCw size={14} className={loadingOlder ? 'spinning' : ''} />
                   {loadingOlder ? 'Ältere Nachrichten werden geladen…' : 'Ältere Nachrichten laden'}
                 </button>
               )}
               {messagesLoading && messages.length === 0 && <div className="messages-status">Nachrichten werden geladen…</div>}
-              {!messagesLoading && messages.length === 0 && <div className="messages-status">Noch keine Nachrichten.</div>}
+              {!messagesLoading && messages.length === 0 && <div className="messages-status">{readOnly ? 'Für diesen Chat sind keine Textnachrichten offline gespeichert. Öffne ihn einmal mit Internet.' : error ? 'Nachrichten konnten nicht geladen werden.' : 'Noch keine Nachrichten.'}</div>}
               {messages.map((message) => {
                 const mine = message.sender_id === currentUserId;
                 const highlighted = highlightedMessageId === message.message_id;
@@ -1178,8 +1253,9 @@ export function ChatsPage({
                     className={`message-wrap${mine ? ' mine' : ''}${highlighted ? ' message-anchor-highlight' : ''}`}
                     style={highlighted ? { outline: '2px solid #8f87ff', outlineOffset: 6, borderRadius: 12 } : undefined}
                   >
-                    <div className={mine ? 'bubble me' : 'bubble'}>
-                      {message.reply_to_message_id && <div className="reply-preview"><b>{message.reply_sender_id === currentUserId ? 'Du' : nameOf(currentChat)}</b><span>{message.reply_body || 'Anhang'}</span></div>}
+                    <ReactionBubble className={mine ? 'bubble me' : 'bubble'} disabled={readOnly || !reactions.ready || reactions.pending(message.message_id) || Boolean(message.deleted_at)} onLike={() => reactions.like(message.message_id)}>
+                      {message.is_forwarded && !message.deleted_at && <ForwardedLabel />}
+                      {message.reply_to_message_id && <div className="reply-preview"><b>{message.reply_sender_id === currentUserId ? 'Du' : nameOf(currentChat)}</b><span>{message.reply_body || (cachedAt ? 'Antwort auf eine Nachricht' : 'Anhang')}</span></div>}
                       {!message.deleted_at && message.attachments.length > 0 && (
                         <div className="message-attachments">
                           {message.attachments.map((attachment) => <AttachmentView key={attachment.attachment_id} attachment={attachment} onContentSettled={restoreScrollLock} />)}
@@ -1189,17 +1265,23 @@ export function ChatsPage({
                       <div className="message-meta">
                         {message.edited_at && !message.deleted_at && <small>bearbeitet</small>}
                         <time>{formatTime(message.created_at)}</time>
-                        {mine && !message.deleted_at && <span className={`message-receipt${message.read_at ? ' read' : ''}`}>{message.read_at ? <CheckCheck size={13} /> : '✓'}</span>}
+                        {!readOnly && mine && !message.deleted_at && <span className={`message-receipt${message.read_at ? ' read' : ''}`}>{message.read_at ? <CheckCheck size={13} /> : '✓'}</span>}
+                        {!readOnly && !message.deleted_at && <ReactionPicker rows={reactions.forMessage(message.message_id)} disabled={!reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
+                        {!readOnly && !message.deleted_at && <MessageOptions
+                          bookmark={{ active: bookmarks.has(message.message_id), disabled: !bookmarks.ready || bookmarks.pending(message.message_id), onToggle: () => bookmarks.set(message.message_id, !bookmarks.has(message.message_id)) }}
+                          pin={{ active: pins.isPinned(message.message_id), disabled: !pins.ready || pins.pending(message.message_id), onToggle: () => pins.set(message.message_id, !pins.isPinned(message.message_id)) }}
+                          reactions={{ rows: reactions.forMessage(message.message_id), disabled: !reactions.ready, pending: reactions.pending(message.message_id), onChoose: emoji => reactions.choose(message.message_id, emoji) }}
+                          currentUserId={currentUserId} workspaceId={workspaceId}
+                          source={{ kind: 'direct', messageId: message.message_id, body: message.body, chatName: nameOf(currentChat), attachmentName: message.attachments[0]?.file_name }}
+                          onReply={() => { setEditing(null); restoreSavedDraft(currentChat.conversation_id); setReplyingTo(message); }}
+                          onEdit={mine && message.body.trim() ? () => { setReplyingTo(null); clearPending(); setEditing(message); setDraft(message.body); } : undefined}
+                          onDelete={mine ? () => void remove(message) : undefined}
+                          replyDisabled={Boolean(textRetry)} editDisabled={Boolean(textRetry)} deleteDisabled={actionId === message.message_id}
+                        />}
+                        {readOnly && !message.deleted_at && <CopyMessageOptions text={message.body} />}
                       </div>
-                    </div>
-                    {!message.deleted_at && (
-                      <div className="message-actions">
-                        <MessageTaskAction currentUserId={currentUserId} workspaceId={workspaceId} source={{ kind: 'direct', messageId: message.message_id, body: message.body, chatName: nameOf(currentChat), attachmentName: message.attachments[0]?.file_name }} />
-                        <button onClick={() => { setEditing(null); restoreSavedDraft(currentChat.conversation_id); setReplyingTo(message); }} disabled={Boolean(textRetry)} title="Antworten"><Reply size={13} /></button>
-                        {mine && message.body.trim() && <button onClick={() => { setReplyingTo(null); clearPending(); setEditing(message); setDraft(message.body); }} disabled={Boolean(textRetry)} title="Bearbeiten"><Pencil size={13} /></button>}
-                        {mine && <button onClick={() => void remove(message)} disabled={actionId === message.message_id} title="Löschen"><Trash2 size={13} /></button>}
-                      </div>
-                    )}
+                      {!message.deleted_at && <MessageReactions rows={reactions.forMessage(message.message_id)} disabled={readOnly || !reactions.ready} pending={reactions.pending(message.message_id)} onChoose={emoji => reactions.choose(message.message_id, emoji)} />}
+                    </ReactionBubble>
                   </div>
                 );
               })}
@@ -1227,11 +1309,11 @@ export function ChatsPage({
                 <button className="primary" data-action="retry-text-send" onClick={() => void retryFailedText()} disabled={textRetry.status === 'retrying' || sending}><RefreshCw size={14} />{textRetry.status === 'retrying' ? 'Wird erneut gesendet…' : 'Erneut senden'}</button>
               </div>
             )}
-            <ChatScanAction key={`${currentUserId}:direct:${currentChat.conversation_id}`} currentUserId={currentUserId} kind="direct" chatId={currentChat.conversation_id} chatName={nameOf(currentChat)} historyVersion={scanHistoryVersion} />
+            {!readOnly && <ChatScanAction key={`${currentUserId}:direct:${currentChat.conversation_id}`} currentUserId={currentUserId} kind="direct" chatId={currentChat.conversation_id} chatName={nameOf(currentChat)} historyVersion={scanHistoryVersion} />}
             <div className="composer attachment-composer">
               <input ref={fileRef} className="attachment-file-input" type="file" accept={SUPPORTED_CHAT_ATTACHMENT_TYPES.filter((type) => !type.startsWith('audio/')).join(',')} onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} disabled={Boolean(textRetry)} />
-              <button className="attach-button" onClick={() => fileRef.current?.click()} disabled={sending || Boolean(editing) || recording || Boolean(textRetry)} title="Datei anhängen"><Paperclip size={18} /></button>
-              <button className={`attach-button mic-button${recording ? ' recording' : ''}`} onClick={() => void startRecording()} disabled={sending || Boolean(editing) || recording || Boolean(textRetry)} title="Sprachnachricht aufnehmen"><Mic size={18} /></button>
+              <button className="attach-button" onClick={() => fileRef.current?.click()} disabled={readOnly || sending || Boolean(editing) || recording || Boolean(textRetry)} title="Datei anhängen"><Paperclip size={18} /></button>
+              <button className={`attach-button mic-button${recording ? ' recording' : ''}`} onClick={() => void startRecording()} disabled={readOnly || sending || Boolean(editing) || recording || Boolean(textRetry)} title="Sprachnachricht aufnehmen"><Mic size={18} /></button>
               <input
                 data-testid="direct-message-composer"
                 value={draft}

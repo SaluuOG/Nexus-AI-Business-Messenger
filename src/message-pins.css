@@ -1,0 +1,15 @@
+.message-pins { flex: 0 0 auto; margin: 0 12px 8px; border: 1px solid #343d51; border-radius: 12px; background: #161b28; color: #d9d5ff; }
+.message-pins summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+.message-pins summary::after { content: '⌄'; margin-left: auto; }
+.message-pins[open] summary::after { content: '⌃'; }
+.message-pins summary:focus-visible, .message-pins button:focus-visible { outline: 2px solid #bcb4ff; outline-offset: -2px; }
+.message-pins ul { list-style: none; padding: 0 6px 6px; margin: 0; max-height: min(180px, 25dvh); overflow-y: auto; overscroll-behavior: contain; }
+.message-pins li { display: flex; align-items: center; gap: 4px; border-top: 1px solid #303747; }
+.message-pins button { background: transparent; border: 0; color: inherit; font: inherit; cursor: pointer; min-height: 44px; }
+.message-pins .pin-open { flex: 1; min-width: 0; padding: 8px; text-align: left; }
+.pin-open span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; font-size: 13px; }
+.pin-open small { display: block; margin-top: 3px; color: #a5adbe; font-size: 11px; }
+.message-pins .pin-remove { flex: 0 0 44px; display: grid; place-items: center; }
+.message-pins button:disabled { opacity: .45; cursor: default; }
+.pins-error { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pins-error button { flex-shrink: 0; padding: 8px; min-height: 44px; background: transparent; border: 0; color: inherit; text-decoration: underline; cursor: pointer; }

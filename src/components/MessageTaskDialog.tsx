@@ -11,15 +11,7 @@ import { taskMemberName, taskPermissions, taskPriorityLabels } from '../features
 
 type Props = { source: MessageTaskOrigin; currentUserId?: string; workspaceId?: string | null };
 
-export function MessageTaskAction(props: Props) {
-  const [open, setOpen] = useState(false);
-  return <>
-    <button className="message-task-action" title="Als Aufgabe übernehmen" aria-label="Als Aufgabe übernehmen" disabled={!props.currentUserId} onClick={() => setOpen(true)}><CheckSquare2 size={14} /><span>Als Aufgabe übernehmen</span></button>
-    {open && props.currentUserId && <MessageTaskDialog {...props} currentUserId={props.currentUserId} onClose={() => setOpen(false)} />}
-  </>;
-}
-
-function MessageTaskDialog({ source, currentUserId, workspaceId: preferredWorkspaceId, onClose }: Props & { currentUserId: string; onClose: () => void }) {
+export function MessageTaskDialog({ source, currentUserId, workspaceId: preferredWorkspaceId, onClose }: Props & { currentUserId: string; onClose: () => void }) {
   const navigate = useNavigate();
   const fieldId = useId();
   const dialog = useRef<HTMLDialogElement>(null);

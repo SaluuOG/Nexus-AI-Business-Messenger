@@ -138,6 +138,7 @@ export function AuthPage() {
           <div className="auth-logo"><Sparkles /></div>
           <span className="auth-kicker">NEXUS ACCOUNT</span>
           <h1>Du bist angemeldet</h1>
+          {auth.authLinkError && <div className="auth-alert error" role="alert">{auth.authLinkError}</div>}
           <p>
             {pendingInvite
               ? 'Eine Workspace-Einladung wartet auf dich.'
@@ -245,7 +246,7 @@ export function AuthPage() {
             </button>
           )}
 
-          {error && <div className="auth-alert error" role="alert">{error}</div>}
+          {(error || auth.authLinkError) && <div className="auth-alert error" role="alert">{error || auth.authLinkError}</div>}
           {message && <div className="auth-alert success" role="status">{message}</div>}
 
           <button className="auth-primary" disabled={busy} type="submit">

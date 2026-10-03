@@ -15,7 +15,7 @@ const server = await createServer({
 await server.listen();
 await mkdir('browser-results', { recursive: true });
 try {
-  for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
+  for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]].filter(([name]) => !process.env.NEXUS_BROWSER || process.env.NEXUS_BROWSER === name)) {
     const browser = await engine.launch();
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: 'Europe/Berlin' });
     await context.route('**/*', route => route.request().url().startsWith('http://127.0.0.1:4179') ? route.continue() : route.abort());
@@ -242,7 +242,7 @@ try {
         window.nexusTest.conversations.push({ conversation_id: 'c2', contact_user_id: 'second', full_name: 'Zweiter Kontakt', username: 'second', unread_count: 0, last_message: 'Neuer Chat' });
       });
       await page.locator('.chat-refresh').click();
-      await page.getByRole('button', { name: /Zweiter Kontakt/ }).waitFor();
+      await page.locator('button.chat').filter({ hasText: 'Zweiter Kontakt' }).waitFor();
       await page.evaluate(() => { location.hash = '#/app/chats?conversation=c2'; });
       await page.locator('.chat-head').getByText('Zweiter Kontakt', { exact: true }).waitFor();
       await waitState('Offen');
@@ -292,6 +292,9 @@ try {
 
       // State transport failure disables actions rather than assuming open.
       await page.evaluate(() => { window.nexusTest.failure = 'get_my_chat_scan_state'; window.dispatchEvent(new Event('offline')); window.dispatchEvent(new Event('focus')); });
+      await toolbar.waitFor({ state: 'hidden' });
+      assert.equal(await trigger.count(), 0, 'Offline saved chats must expose no scan actions');
+      await page.evaluate(() => { window.dispatchEvent(new Event('online')); window.dispatchEvent(new Event('focus')); });
       await toolbar.getByRole('button', { name: 'Chatstatus erneut laden', exact: true }).waitFor();
       assert.equal(await trigger.isEnabled(), false);
       await page.evaluate(() => { window.nexusTest.failure = null; });

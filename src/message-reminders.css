@@ -1,0 +1,32 @@
+.message-reminders{margin:24px 0;padding:24px;min-width:0}
+.message-reminders>header,.reminder-card>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.message-reminders h2{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:20px;margin:0}
+.message-reminders h2 span{font-size:13px;color:#b6aaff;background:#28213f;border-radius:8px;padding:5px 8px}
+.message-reminders>header p,.reminder-empty{color:var(--muted,#a4aec0);line-height:1.5}
+.message-reminders>header>button{flex-shrink:0}
+.reminder-filters,.reminder-presets{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.reminder-filters [aria-pressed=true]{border-color:#9388ff;background:#292344}
+.reminder-list{display:grid;gap:12px;margin:16px 0}
+.reminder-card{border:1px solid #343d4c;border-radius:14px;padding:18px;background:#121923;min-width:0}
+.reminder-card>header{flex-wrap:wrap}
+.reminder-card>header span,.reminder-card small{font-size:13px;color:var(--muted,#a4aec0)}
+.reminder-card>header .is-due{color:#e3ba78}
+.reminder-card p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}
+.reminder-card strong{overflow-wrap:anywhere}
+.reminder-card footer{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.message-reminders button,.message-reminders a,.message-reminder-dialog button{min-height:44px;white-space:normal}
+.reminder-card a{text-decoration:none;display:inline-flex;align-items:center;justify-content:center;padding:10px 14px}
+.message-reminder-dialog{box-sizing:border-box;width:min(520px,calc(100vw - 24px));max-height:calc(100dvh - 32px);margin:auto;padding:24px;border:1px solid #343d4c;border-radius:20px;background:#111720;color:#edf0f6;overflow:auto;overscroll-behavior:contain}
+.message-reminder-dialog::backdrop{background:rgb(0 0 0 / .68)}
+.message-reminder-dialog header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.message-reminder-dialog h2{font-size:22px;margin:0;overflow-wrap:anywhere}
+.message-reminder-dialog header button{flex-shrink:0;display:grid;place-items:center;min-width:44px;border:1px solid #343d4c;border-radius:10px;background:#1a2230;color:inherit}
+.message-reminder-dialog p{line-height:1.5;overflow-wrap:anywhere}
+.message-reminder-dialog label{display:grid;gap:8px;min-width:0}
+.message-reminder-dialog input{box-sizing:border-box;width:100%;min-width:0;max-width:100%;min-height:48px;padding:10px;border:1px solid #414b5c;border-radius:10px;background:#192130;color:inherit;font-size:16px;color-scheme:dark}
+.reminder-source{border-left:3px solid #9284ff;padding-left:12px}
+.reminder-source small{display:block;margin-top:6px;color:#a4aec0}
+.reminder-timezone{font-size:13px;color:#a4aec0}
+.message-reminder-dialog footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin-top:20px}
+.message-reminder-dialog button:disabled,.message-reminders button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:420px){.message-reminders{padding:16px}.reminder-card{padding:14px}.reminder-card footer>*{width:100%}.message-reminder-dialog{padding:16px}.reminder-presets>*{flex:1}.message-reminder-dialog footer>*{flex:1}}

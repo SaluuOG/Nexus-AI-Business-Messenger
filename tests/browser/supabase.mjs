@@ -1,6 +1,9 @@
 // Test-only in-memory service, injected by the browser test's Vite plugin.
 // It is never imported by the production application.
 import { createCollaborationService } from './collaboration-service.mjs';
+import { createForwardingService } from './forwarding-service.mjs';
+import { createRemindersService } from './reminders-service.mjs';
+import { createBookmarksService } from './bookmarks-service.mjs';
 const project = (id, title, workspace_id, deadline, status = 'active') => ({
   id, title, workspace_id, deadline, status, priority: 'medium', progress: 35,
   value_cents: 10000, currency: 'EUR', customer_id: null, description: 'Vollständige Projektbeschreibung',
@@ -92,7 +95,14 @@ const state = {
     ...Array.from({ length: 8 }, (_, i) => task('unassigned-' + i, 'Teamaufgabe ' + (i + 1), { assigned_to: null, status: i === 0 ? 'blocked' : 'todo' })),
     task('second', 'Aufgabe im zweiten Team', { workspace_id: 'w2', project_id: 'p4', assigned_to: null }),
   ],
+  clockFailures: JSON.parse(sessionStorage.getItem('nexusTest.clockFailures') || '{}'), clockReads: {},
   failure: null, revoked: false, delayWorkspace: null, writes: 0, channels: [], revision: 0,
+  reactionRows: JSON.parse(sessionStorage.getItem('nexusTest.reactions') || '[]'),
+  reactionCalls: [], reactionDelay: 0, reactionFailure: false, loseReactionResponse: false,
+  pinRows: JSON.parse(sessionStorage.getItem('nexusTest.pins') || '[]'),
+  pinCalls: [], pinDelay: 0, pinFailure: false, pinReadFailure: false,
+  organizationRows: JSON.parse(sessionStorage.getItem('nexusTest.organization') || '[]'),
+  organizationCalls: [], organizationDelay: 0, organizationWriteDelay: 0, organizationFailure: false, organizationReadFailure: false,
   sources: JSON.parse(sessionStorage.getItem('nexusTest.sources') || '[]'), sourceDenied: false,
   hideRecentSource: false, loseCreateResponse: false, createDelay: 0, directMessageDelay: 0,
   resetRequests: [], passwordUpdates: [], authFailure: null, signOutCount: 0, accountDeletionCalls: [],
@@ -110,7 +120,7 @@ const state = {
   groupChats: messageHistoryFixture ? historyGroupChats : [{ group_id: 'g1', name: 'Projektgruppe', role: 'member', member_count: 2, unread_count: 0, last_message: 'Startseite vorbereiten' }],
   groupMessages: messageHistoryFixture ? historyGroupMessages : [{ message_id: 'gm1', group_id: 'g1', sender_id: 'other', sender_full_name: 'Team Kontakt', body: 'Startseite für den Kunden vorbereiten!', created_at: '2025-09-14T08:00:00Z', deleted_at: null, attachments: [] }],
   searchCalls: [], textSendCalls: [], textSendWrites: 0, loseTextSendResponse: false,
-  groupChatListLoads: 0, groupChatListDelay: 0,
+  groupChatListLoads: 0, groupChatListDelay: 0, directChatListDelay: 0,
   uploadCalls: [], failAttachmentUpload: false,
   lifecycleCalls: [], lifecycleDelay: 0,
 };
@@ -124,11 +134,22 @@ if (taskMentionsFixture) state.memberships.push(
 const memberships = state.memberships;
 let user = { id: 'me', email: 'nexus-test@example.invalid', user_metadata: { full_name: 'Test Nutzer' } };
 const collaboration = createCollaborationService(state, () => user);
+const forwarding = createForwardingService(state, () => user);
+const reminders = createRemindersService(state, () => user);
+const bookmarks = createBookmarksService(state, () => user);
 export const backendConfigured = true;
 export const supabaseConfig = { url: 'https://example.invalid', publishableKey: 'test-only' };
 export const initialAuthCallback = { isRecovery: false, hasError: false, hasPkceCode: false, marker: null };
 
 state.emit = (table = 'project_tasks', event = 'UPDATE', payload = null) => {
+  if (event==='INSERT' && ['direct_messages','group_messages'].includes(table) && payload?.new) {
+    const kind=table==='direct_messages'?'direct':'group',chatId=payload.new[kind==='direct'?'conversation_id':'group_id'];
+    for(const row of state.organizationRows.filter(row=>row.kind===kind && row.chat_id===chatId && row.archived)){
+      row.archived=false;
+      state.emit(kind+'_chat_preferences','UPDATE',{new:{...row,[kind==='direct'?'conversation_id':'group_id']:chatId}});
+    }
+    sessionStorage.setItem('nexusTest.organization',JSON.stringify(state.organizationRows));
+  }
   let delivered = 0;
   for (const channel of state.channels.filter(c => c.active)) {
     for (const entry of channel.entries) {
@@ -155,6 +176,10 @@ state.switchUser = id => {
 };
 const notificationCategory = kind => ({ direct_message: 'messages', group_message: 'messages', contact_request: 'contacts', workspace_invitation: 'invitations', task_assigned: 'assignments', task_comment: 'comments', task_mention: 'comments', task_due: 'deadlines', task_overdue: 'deadlines' })[kind];
 const notificationPrefs = id => ({ messages: true, contacts: true, invitations: true, assignments: true, comments: true, deadlines: true, ...state.notificationPreferences[id] });
+const notificationMuted = n => {
+  const kind=n.kind==='direct_message'?'direct':n.kind==='group_message'?'group':null;
+  return kind && state.organizationRows.some(p=>p.user_id===n.recipient_id && p.kind===kind && p.chat_id===n.details.chat_id && (p.muted_forever || Date.parse(p.muted_until)>Date.now()));
+};
 state.persistNotifications = () => {
   sessionStorage.setItem('nexusTest.notifications', JSON.stringify(state.notifications));
   sessionStorage.setItem('nexusTest.notificationPreferences', JSON.stringify(state.notificationPreferences));
@@ -442,6 +467,13 @@ export const supabase = {
       delete() { request.operation = 'delete'; return this; },
       async then(resolve, reject) {
         try {
+          if (request.operation === 'select') {
+            state.clockReads[table] = (state.clockReads[table] || 0) + 1;
+            if (state.clockFailures[table] > 0) {
+              state.clockFailures[table]--;
+              return resolve({ data: null, error: { code: 'PGRST303', message: 'JWT issued at future' } });
+            }
+          }
           if (state.failure === table) return resolve({ data: null, error: { message: 'connection failed' } });
           let rows = table === 'customers' ? state.customers : table === 'projects' ? state.projects : table === 'project_tasks' ? state.tasks
             : table === 'workspace_members' ? memberships
@@ -485,6 +517,83 @@ export const supabase = {
     return query;
   },
   async rpcResult(name, args) {
+    if (name === 'get_message_forward_targets' || name === 'forward_text_message') return forwarding(name, args);
+    if (['get_message_reminder','get_message_reminders','change_message_reminder'].includes(name)) return reminders(name,args);
+    if (['set_message_bookmark','get_message_bookmark_status','get_message_bookmarks'].includes(name)) return bookmarks(name,args);
+    if (name === 'get_chat_organization') {
+      const rows=structuredClone(state.organizationRows.filter(row=>row.kind===args.p_kind && row.user_id===user.id).map(({chat_id,favorite,archived,muted_until=null,muted_forever=false})=>({chat_id,favorite,archived,muted_until,muted_forever})));
+      if(state.organizationDelay)await new Promise(resolve=>setTimeout(resolve,state.organizationDelay));
+      return state.organizationReadFailure ? {data:null,error:{message:'Unavailable'}} : {data:rows,error:null};
+    }
+    if (name === 'set_chat_organization' || name === 'set_chat_mute') {
+      const userId=user.id; state.organizationCalls.push({...args,userId});
+      if(state.organizationWriteDelay)await new Promise(resolve=>setTimeout(resolve,state.organizationWriteDelay));
+      if(state.organizationFailure)return {data:null,error:{message:'Save failed'}};
+      const chats=args.p_kind==='direct'?state.conversations:state.groupChats;
+      if(!chats.some(chat=>(chat.conversation_id||chat.group_id)===args.p_chat_id))return {data:null,error:{message:'Denied'}};
+      let row=state.organizationRows.find(row=>row.kind===args.p_kind && row.chat_id===args.p_chat_id && row.user_id===userId);
+      const event=row?'UPDATE':'INSERT';
+      if(!row){row={kind:args.p_kind,user_id:userId,chat_id:args.p_chat_id,favorite:false,archived:false};state.organizationRows.push(row);}
+      if (name === 'set_chat_mute') {
+        if (!['off','1h','8h','forever'].includes(args.p_mode)) return {data:null,error:{message:'Invalid mode'}};
+        row.muted_forever=args.p_mode==='forever';
+        row.muted_until=['1h','8h'].includes(args.p_mode)?new Date(Date.now()+(args.p_mode==='1h'?1:8)*3600000).toISOString():null;
+      } else row[args.p_field]=args.p_value;
+      sessionStorage.setItem('nexusTest.organization',JSON.stringify(state.organizationRows));
+      queueMicrotask(()=>state.emit(args.p_kind+'_chat_preferences',event,{new:{...row}}));
+      return {data:null,error:null};
+    }
+    if (name === 'get_message_pins') {
+      if (state.pinReadFailure || state.revoked) return { data: null, error: { message: 'No access' } };
+      const messages = args.p_kind === 'direct' ? state.directMessages : state.groupMessages;
+      const rows = state.pinRows.filter(pin => pin.kind === args.p_kind && pin.chat_id === args.p_chat_id && pin.pinned).flatMap(pin => {
+        const message = messages.find(message => message.message_id === pin.message_id && !message.deleted_at && (message.conversation_id ?? message.group_id) === args.p_chat_id);
+        return message ? [{ message_id: pin.message_id, chat_id: pin.chat_id, preview: message.body.slice(0,160), created_at: pin.created_at }] : [];
+      });
+      if (state.pinDelay) await new Promise(resolve => setTimeout(resolve,state.pinDelay));
+      return { data: structuredClone(rows), error: null };
+    }
+    if (name === 'set_message_pin') {
+      state.pinCalls.push(structuredClone(args));
+      if (state.pinDelay) await new Promise(resolve => setTimeout(resolve,state.pinDelay));
+      const role = sessionStorage.getItem('nexusTest.pinRole') || state.groupChats.find(group => group.group_id === args.p_chat_id)?.role;
+      const messages = args.p_kind === 'direct' ? state.directMessages : state.groupMessages;
+      if (state.pinFailure || state.revoked || (args.p_kind === 'group' && !['owner','admin'].includes(role)) || !messages.some(m => m.message_id === args.p_message_id && !m.deleted_at && (m.conversation_id ?? m.group_id) === args.p_chat_id)) return { data: null, error: { message: 'Denied' } };
+      let row = state.pinRows.find(pin => pin.kind === args.p_kind && pin.chat_id === args.p_chat_id && pin.message_id === args.p_message_id);
+      const event = row ? 'UPDATE' : 'INSERT';
+      if (row) row.pinned = args.p_pinned;
+      else { row = { kind: args.p_kind, chat_id: args.p_chat_id, message_id: args.p_message_id, pinned: args.p_pinned, created_at: new Date().toISOString() }; state.pinRows.push(row); }
+      sessionStorage.setItem('nexusTest.pins',JSON.stringify(state.pinRows));
+      queueMicrotask(() => state.emit(args.p_kind + '_message_pins',event,{ new: { message_id: args.p_message_id, [args.p_kind === 'direct' ? 'conversation_id' : 'group_id']: args.p_chat_id } }));
+      return { data: null, error: null };
+    }
+    if (name === 'get_message_reactions') {
+      const messages = args.p_kind === 'direct' ? state.directMessages : state.groupMessages;
+      const allowed = new Set(messages.filter(message => !message.deleted_at && (message.conversation_id ?? message.group_id) === args.p_chat_id).map(message => message.message_id));
+      const rows = new Map();
+      for (const row of state.reactionRows) {
+        if (row.kind !== args.p_kind || row.chat_id !== args.p_chat_id || !row.emoji || !args.p_message_ids.includes(row.message_id) || !allowed.has(row.message_id)) continue;
+        const key = row.message_id + row.emoji;
+        const summary = rows.get(key) ?? { message_id: row.message_id, emoji: row.emoji, count: 0, mine: false };
+        summary.count++; summary.mine ||= row.user_id === user.id; rows.set(key, summary);
+      }
+      return { data: [...rows.values()], error: null };
+    }
+    if (name === 'set_message_reaction') {
+      state.reactionCalls.push(structuredClone(args));
+      const actor = user.id;
+      if (state.reactionDelay) await new Promise(resolve => setTimeout(resolve, state.reactionDelay));
+      if (state.reactionFailure) return { data: null, error: { message: 'Simulated reaction failure' } };
+      let row = state.reactionRows.find(row => row.kind === args.p_kind && row.message_id === args.p_message_id && row.user_id === actor);
+      const event = row ? 'UPDATE' : 'INSERT';
+      if (!row) { row = { kind: args.p_kind, chat_id: args.p_chat_id, message_id: args.p_message_id, user_id: actor }; state.reactionRows.push(row); }
+      row.emoji = args.p_emoji;
+      sessionStorage.setItem('nexusTest.reactions', JSON.stringify(state.reactionRows));
+      const payload = { new: { ...row, [args.p_kind === 'direct' ? 'conversation_id' : 'group_id']: args.p_chat_id } };
+      queueMicrotask(() => state.emit(args.p_kind + '_message_reactions', event, payload));
+      if (state.loseReactionResponse) { state.loseReactionResponse = false; return { data: null, error: { message: 'Lost response' } }; }
+      return { data: null, error: null };
+    }
     if (name === 'get_my_contacts' && mobileBusinessFixture) return { data: [{ contact_user_id: 'other', full_name: 'Test Kontakt', username: 'test', connected_at: '2026-01-01T00:00:00Z' }], error: null };
     if (name === 'open_direct_conversation' && mobileBusinessFixture) {
       state.customerChatCalls.push(args.p_contact_user_id);
@@ -533,7 +642,7 @@ export const supabase = {
       state.notificationCalls.push({ name, args, userId: user.id });
       if (state.failure === name) return { data: null, error: { message: 'offline' } };
       const preferences = notificationPrefs(user.id);
-      const visible = state.notifications.filter(n => n.recipient_id === user.id && !n.revoked && preferences[notificationCategory(n.kind)]).sort((a, b) => Number(b.id) - Number(a.id));
+      const visible = state.notifications.filter(n => n.recipient_id === user.id && !n.revoked && !notificationMuted(n) && preferences[notificationCategory(n.kind)]).sort((a, b) => Number(b.id) - Number(a.id));
       const filtered = visible.filter(n => !args.p_unread_only || !n.read_at);
       const paged = filtered.filter(n => !args.p_before || BigInt(n.id) < BigInt(args.p_before));
       const items = paged.slice(0, args.p_limit);
@@ -546,7 +655,7 @@ export const supabase = {
       if (state.failure === name) return { data: null, error: { message: 'offline' } };
       if (state.notificationReadDelay) await new Promise(r => setTimeout(r, state.notificationReadDelay));
       const preferences = notificationPrefs(user.id);
-      for (const n of state.notifications) if (n.recipient_id === user.id && !n.revoked && preferences[notificationCategory(n.kind)] && BigInt(n.id) <= BigInt(args.p_through) && (!args.p_id || n.id === args.p_id)) n.read_at = new Date().toISOString();
+      for (const n of state.notifications) if (n.recipient_id === user.id && !n.revoked && !notificationMuted(n) && preferences[notificationCategory(n.kind)] && BigInt(n.id) <= BigInt(args.p_through) && (!args.p_id || n.id === args.p_id)) n.read_at = new Date().toISOString();
       state.persistNotifications(); state.emit('notifications');
       return { data: null, error: null };
     }
@@ -556,7 +665,10 @@ export const supabase = {
       state.persistNotifications(); state.emit('notification_preferences');
       return { data: null, error: null };
     }
-    if (name === 'get_direct_conversations') return { data: structuredClone(state.conversations), error: null };
+    if (name === 'get_direct_conversations') {
+      if (state.directChatListDelay) await new Promise(resolve => setTimeout(resolve, state.directChatListDelay));
+      return { data: structuredClone(state.conversations), error: null };
+    }
     if (name === 'get_direct_messages') return { data: state.hideRecentSource ? [] : structuredClone(state.directMessages.filter(message => directChatId(message) === args.p_conversation_id).map(normalizedDirectMessage)), error: null };
     if (name === 'get_direct_message_page') {
       if (state.directMessageDelay) await new Promise(r => setTimeout(r, state.directMessageDelay));
@@ -573,7 +685,7 @@ export const supabase = {
     if (name === 'get_my_group_chats') {
       state.groupChatListLoads++;
       if (state.groupChatListDelay) await new Promise(r => setTimeout(r, state.groupChatListDelay));
-      return { data: structuredClone(state.groupChats), error: null };
+      return { data: structuredClone(state.groupChats.map(group => ({ ...group, role: sessionStorage.getItem('nexusTest.pinRole') || group.role }))), error: null };
     }
     if (name === 'get_group_messages') return { data: state.hideRecentSource ? [] : structuredClone(state.groupMessages.filter(message => message.group_id === args.p_group_id).map(normalizedGroupMessage)), error: null };
     if (name === 'get_group_message_page') return { data: state.hideRecentSource

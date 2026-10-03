@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase';
+import { Capacitor } from '@capacitor/core';
 
 export type ReminderOptions = { deadlines: boolean; reminder_before: boolean; reminder_due: boolean; reminder_time: string; reminder_timezone: string };
 export type PushOptions = { messages: boolean; assignments: boolean; comments: boolean; previews: boolean } & ReminderOptions;
@@ -11,7 +12,8 @@ let account: string | null | undefined;
 let accountReady: Promise<void> = Promise.resolve();
 let generation = 0;
 
-export function pushSupport(): 'supported' | 'install' | 'unavailable' {
+export function pushSupport(): 'supported' | 'install' | 'unavailable' | 'native-pending' {
+  if (Capacitor.isNativePlatform()) return 'native-pending';
   const standalone = matchMedia('(display-mode: standalone)').matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (ios && !standalone) return 'install';
